@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 export const NAV = [
   { href: "/", label: "대시보드" },
   { href: "/lectures", label: "일정" },
+  { href: "/documents", label: "서류함" },
   { href: "/share-settings", label: "공유" },
   { href: "/integrations", label: "연동" },
 ] as const;

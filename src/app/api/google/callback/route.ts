@@ -33,11 +33,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const redirectUri = new URL("/api/google/callback", request.url).toString();
-    const { refreshToken, email } = await exchangeCode(code, redirectUri);
+    const { refreshToken, email, scopes } = await exchangeCode(code, redirectUri);
     const { error } = await supabase.from("google_connections").upsert({
       user_id: userId,
       google_email: email,
       refresh_token_enc: encryptSecret(refreshToken),
+      scopes,
       last_push_result: null,
     });
     if (error) return back("save_failed");

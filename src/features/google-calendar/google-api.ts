@@ -5,7 +5,10 @@ import type { GoogleEvent } from "./event";
  * 구글 OAuth / Calendar API 최소 클라이언트 (fetch 만 사용).
  * 권한: calendar.app.created = "이 앱이 만든 캘린더"만 읽고 쓸 수 있음 (기존 개인 캘린더는 건드리지 못함)
  */
-export const GOOGLE_SCOPES = ["openid", "email", "https://www.googleapis.com/auth/calendar.app.created"];
+export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
+/** 드라이브: 이 앱이 만든(올린) 파일만 접근 */
+export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+export const GOOGLE_SCOPES = ["openid", "email", CALENDAR_SCOPE, DRIVE_SCOPE];
 export const ERP_CALENDAR_NAME = "강의 일정(ERP)";
 
 const API = "https://www.googleapis.com/calendar/v3";
@@ -69,16 +72,23 @@ export async function exchangeCode(code: string, redirectUri: string) {
     /* 이메일은 표시용이라 없어도 됨 */
   }
   const granted = (t.scope ?? "").split(" ");
-  if (!granted.includes(GOOGLE_SCOPES[2])) {
-    throw new Error("캘린더 권한이 허용되지 않았습니다. 연결 화면에서 캘린더 권한에 체크해주세요.");
+  if (!granted.includes(CALENDAR_SCOPE) && !granted.includes(DRIVE_SCOPE)) {
+    throw new Error("캘린더·드라이브 권한이 허용되지 않았습니다. 연결 화면에서 권한에 체크해주세요.");
   }
-  return { refreshToken: t.refresh_token, email };
+  return { refreshToken: t.refresh_token, email, scopes: granted.join(" ") };
 }
 
-export async function accessToken(refreshToken: string) {
-  const t = await tokenRequest({ refresh_token: refreshToken, grant_type: "refresh_token" });
-  return t.access_token;
+/** scopes 를 주면 그 권한만 가진 토큰을 받는다 (브라우저에 줄 때는 드라이브 권한만) */
+export async function accessToken(refreshToken: string, scopes?: string[]) {
+  const t = await tokenRequest({
+    refresh_token: refreshToken,
+    grant_type: "refresh_token",
+    ...(scopes ? { scope: scopes.join(" ") } : {}),
+  });
+  return { token: t.access_token, expiresIn: Number(t.expires_in) || 3600 };
 }
+
+export const hasScope = (scopes: string | null | undefined, scope: string) => (scopes ?? "").split(" ").includes(scope);
 
 export async function revokeToken(token: string) {
   await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {

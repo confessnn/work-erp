@@ -1,12 +1,12 @@
 import { GooglePanel } from "@/features/google-calendar/components/google-panel";
-import { isGoogleConfigured } from "@/features/google-calendar/google-api";
+import { DRIVE_SCOPE, hasScope, isGoogleConfigured } from "@/features/google-calendar/google-api";
 import { requireUser } from "@/lib/supabase/server";
 
 const MSG: Record<string, { text: string; ok?: boolean }> = {
-  connected: { text: "구글 캘린더에 연결했습니다. 기존 일정도 '강의 일정(ERP)' 캘린더에 올렸습니다.", ok: true },
+  connected: { text: "구글에 연결했습니다. 캘린더 일정을 '강의 일정(ERP)'에 반영했고, 서류함(드라이브)도 쓸 수 있습니다.", ok: true },
   denied: { text: "구글 연결을 취소했습니다." },
   state_mismatch: { text: "보안 확인에 실패했습니다. 다시 시도해주세요." },
-  scope_missing: { text: "캘린더 권한이 허용되지 않았습니다. 연결 화면에서 캘린더 항목에 체크해주세요." },
+  scope_missing: { text: "권한이 허용되지 않았습니다. 구글 권한 화면에서 캘린더·드라이브 항목에 체크해주세요." },
   token_failed: { text: "구글 인증에 실패했습니다. 다시 시도해주세요." },
   save_failed: { text: "연결 정보를 저장하지 못했습니다. 다시 시도해주세요." },
   not_configured: { text: "아직 구글 연동 설정이 서버에 없습니다. 아래 안내를 확인해주세요." },
@@ -17,7 +17,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
   const { supabase } = await requireUser();
   const { data: conn } = await supabase
     .from("google_connections")
-    .select("google_email, show_amounts, last_push_at, last_push_result")
+    .select("google_email, show_amounts, last_push_at, last_push_result, scopes")
     .maybeSingle();
   const msg = typeof sp.google === "string" ? MSG[sp.google] : undefined;
   const configured = isGoogleConfigured();
@@ -36,6 +36,16 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
           </p>
         </div>
 
+        {conn && !hasScope(conn.scopes, DRIVE_SCOPE) && (
+          <div className="rounded-lg border border-warn/40 p-3 text-sm">
+            <p className="font-medium">서류함(구글 드라이브) 권한 추가가 필요합니다</p>
+            <p className="mt-1 text-muted">
+              아래 버튼으로 한 번 다시 연결하고, 구글 권한 화면에서 <b>캘린더</b>와 <b>드라이브</b> 항목 모두 체크해주세요. 기존 일정은
+              그대로 유지됩니다.
+            </p>
+            <a href="/api/google/connect" className="btn-primary mt-2">구글 다시 연결 (드라이브 권한 추가)</a>
+          </div>
+        )}
         {conn ? (
           <GooglePanel conn={conn} />
         ) : configured ? (
