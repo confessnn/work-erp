@@ -28,7 +28,10 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">일정</h1>
-        <Link href="/lectures/new" className="btn-primary">+ 일정 추가</Link>
+        <div className="flex gap-2">
+          <Link href="/lectures/import" className="chip self-center">캘린더에서 불러오기</Link>
+          <Link href="/lectures/new" className="btn-primary">+ 일정 추가</Link>
+        </div>
       </div>
 
       <PeriodNav base="/lectures" period={period} extra={{ status }} />

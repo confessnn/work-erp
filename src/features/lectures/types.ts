@@ -21,6 +21,7 @@ export type Lecture = {
   paid_date: string | null;
   paid_amount: number | null;
   memo: string | null;
+  external_uid: string | null; // 캘린더에서 불러온 일정이면 원본 ID
   created_at: string;
   updated_at: string;
 };

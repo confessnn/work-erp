@@ -22,6 +22,7 @@ const base: Lecture = {
   paid_date: null,
   paid_amount: null,
   memo: null,
+  external_uid: null,
   created_at: "",
   updated_at: "",
 };
