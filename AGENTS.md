@@ -44,6 +44,9 @@ supabase/migrations/    DB 변경 이력 (SQL)
 - 날짜 '오늘'은 한국 시간 기준(`lib/format.ts`의 `todayInSeoul`).
 - DB 접근은 로그인 사용자 권한(publishable key + RLS)으로만. service_role 키를 코드나 저장소에 넣지 않는다.
 - 비밀값(.env.local)은 커밋하지 않는다. 공개 키만 `.env.example`에 둔다.
+- 서버 비밀값(Vercel 환경변수): `CRON_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_TOKEN_KEY`. 목록은 `.env.example` 참고.
+- 강의를 쓰는 Server Action(생성·수정·삭제·수령 변경)은 끝에 `schedulePush(supabase)`를 호출해 구글 캘린더에 반영한다.
+- 가족 공유(`features/share`)로 나가는 데이터에는 금액을 절대 넣지 않는다. 공유 데이터는 DB 함수 `get_shared_schedule`의 반환 컬럼으로만 정해진다.
 
 ## Git 협업
 - `main`에 직접 push하지 않는다. 작업 브랜치 → PR → 합치기.

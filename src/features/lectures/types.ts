@@ -22,6 +22,8 @@ export type Lecture = {
   paid_amount: number | null;
   memo: string | null;
   external_uid: string | null; // 캘린더에서 불러온 일정이면 원본 ID
+  google_event_id?: string | null; // 구글로 내보낸 일정 ID
+  google_synced_at?: string | null;
   created_at: string;
   updated_at: string;
 };
