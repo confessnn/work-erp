@@ -6,7 +6,9 @@ import { decryptSecret } from "./crypto";
 import { googleEventIdFor, lectureToGoogleEvent } from "./event";
 import {
   accessToken,
+  CALENDAR_SCOPE,
   calendarExists,
+  hasScope,
   createErpCalendar,
   deleteEvent,
   GoogleApiError,
@@ -41,7 +43,9 @@ export async function pushToGoogle(supabase: SupabaseClient, opts: { force?: boo
   };
 
   try {
-    const token = await accessToken(decryptSecret(conn.refresh_token_enc));
+    // 예전에 캘린더 권한 없이 연결했다면 건너뜀 (scopes 기록 전 연결은 캘린더 권한이 있었음)
+    if (conn.scopes && !hasScope(conn.scopes, CALENDAR_SCOPE)) return null;
+    const { token } = await accessToken(decryptSecret(conn.refresh_token_enc));
 
     // 전용 캘린더 확인 (없거나 사용자가 구글에서 지웠으면 새로 만들고 전부 다시 올림)
     let calendarId: string | null = conn.calendar_id;
