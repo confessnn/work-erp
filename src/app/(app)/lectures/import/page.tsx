@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { deleteSource } from "@/features/calendar-import/actions";
+import { AutoSettings } from "@/features/calendar-import/components/auto-settings";
 import { ImportList } from "@/features/calendar-import/components/import-list";
 import { SourceForm } from "@/features/calendar-import/components/source-form";
 import { fetchCandidates, listSources } from "@/features/calendar-import/queries";
@@ -45,9 +46,7 @@ export default async function ImportPage({ searchParams }: PageProps<"/lectures/
                 >
                   {s.name}
                 </Link>
-                <span className="text-muted">
-                  {s.last_synced_at ? `마지막 확인 ${new Date(s.last_synced_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}` : ""}
-                </span>
+                {s.auto_import && <span className="badge badge-paid">매일 자동</span>}
                 <form action={deleteSource.bind(null, s.id)} className="ml-auto">
                   <button type="submit" className="text-danger hover:underline">연결 해제</button>
                 </form>
@@ -66,6 +65,12 @@ export default async function ImportPage({ searchParams }: PageProps<"/lectures/
 
       {source && (
         <>
+          <section className="card space-y-3">
+            <h2 className="section-title">자동 불러오기 — {source.name}</h2>
+            <AutoSettings key={source.id} source={source} />
+          </section>
+
+          <h2 className="section-title pt-2">직접 골라서 불러오기</h2>
           <form className="flex flex-wrap gap-2" action="/lectures/import">
             <input type="hidden" name="source" value={source.id} />
             <input name="q" defaultValue={q} placeholder="제목·장소로 걸러보기 (예: 강의)" className="input flex-1" />
