@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
-import { calculateWithholding, grossFrom, hoursBetween, type IncomeType } from "@/features/lectures/tax";
+import { todayInSeoul } from "@/lib/format";
+import type { IncomeType } from "@/features/lectures/tax";
 import { normalizeIcsUrl, type CalendarEvent } from "./ics";
+import { collectAutoImportRows, eventToRow, type ImportSettings } from "./sync";
 
-export type SourceState = { error?: string };
+export type SourceState = { error?: string; message?: string };
 
 export async function addSource(_prev: SourceState, fd: FormData): Promise<SourceState> {
   const { supabase } = await requireUser();
@@ -25,16 +27,76 @@ export async function deleteSource(id: string) {
   revalidatePath("/lectures/import");
 }
 
+function readSettings(fd: FormData): ImportSettings {
+  return {
+    keyword: String(fd.get("keyword") ?? "").trim() || null,
+    hourly_rate: Math.max(0, Math.round(Number(fd.get("hourly_rate") ?? 0) || 0)),
+    income_type: (fd.get("income_type") === "other" ? "other" : "business") as IncomeType,
+    apply_tax_exemption: fd.get("apply_tax_exemption") === "on",
+    org_from_location: fd.get("org_from_location") === "on",
+  };
+}
+
+/** 자동 불러오기 설정 저장 */
+export async function saveAutoSettings(id: string, _prev: SourceState, fd: FormData): Promise<SourceState> {
+  const { supabase } = await requireUser();
+  const settings = readSettings(fd);
+  const auto = fd.get("auto_import") === "on";
+  const { error } = await supabase
+    .from("calendar_sources")
+    .update({ ...settings, auto_import: auto })
+    .eq("id", id);
+  if (error) return { error: `저장 실패: ${error.message}` };
+  revalidatePath("/lectures/import");
+  return { message: auto ? "저장했습니다. 매일 아침 자동으로 불러옵니다." : "저장했습니다. 자동 불러오기는 꺼져 있습니다." };
+}
+
+/** '지금 불러오기': 자동 불러오기와 같은 규칙으로 즉시 실행 */
+export async function syncNow(id: string): Promise<SourceState> {
+  const { supabase, userId } = await requireUser();
+  const { data: s } = await supabase.from("calendar_sources").select("*").eq("id", id).single();
+  if (!s) return { error: "캘린더를 찾지 못했습니다." };
+
+  const [{ data: l }, { data: k }] = await Promise.all([
+    supabase.from("lectures").select("external_uid").not("external_uid", "is", null),
+    supabase.from("import_skips").select("external_uid"),
+  ]);
+  const known = new Set([...(l ?? []), ...(k ?? [])].map((r) => r.external_uid as string));
+
+  let rows;
+  try {
+    rows = await collectAutoImportRows(s.ics_url, s as ImportSettings, known, todayInSeoul());
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "불러오기 실패";
+    await supabase.from("calendar_sources").update({ last_synced_at: new Date().toISOString(), last_sync_result: `실패: ${msg}` }).eq("id", id);
+    revalidatePath("/lectures/import");
+    return { error: msg };
+  }
+
+  if (rows.length) {
+    const { error } = await supabase.from("lectures").insert(rows.map((r) => ({ ...r, user_id: userId })));
+    if (error) return { error: `저장 실패: ${error.message}` };
+  }
+  await supabase
+    .from("calendar_sources")
+    .update({ last_synced_at: new Date().toISOString(), last_sync_result: `수동: ${rows.length}건 새로 추가` })
+    .eq("id", id);
+  revalidatePath("/", "layout");
+  return { message: rows.length ? `${rows.length}개 일정을 새로 불러왔습니다.` : "새로 불러올 일정이 없습니다." };
+}
+
 /**
- * 선택한 캘린더 일정을 강의로 저장.
+ * 목록에서 골라서 불러오기.
  * 폼: event(JSON, 여러 개) / hourly_rate / income_type / apply_tax_exemption / organization_from_location
  */
 export async function importEvents(fd: FormData) {
   const { supabase, userId } = await requireUser();
-  const hourlyRate = Math.max(0, Math.round(Number(fd.get("hourly_rate") ?? 0) || 0));
-  const incomeType: IncomeType = fd.get("income_type") === "other" ? "other" : "business";
-  const applyExemption = fd.get("apply_tax_exemption") === "on";
-  const orgFromLocation = fd.get("organization_from_location") === "on";
+  const settings = {
+    hourly_rate: Math.max(0, Math.round(Number(fd.get("hourly_rate") ?? 0) || 0)),
+    income_type: (fd.get("income_type") === "other" ? "other" : "business") as IncomeType,
+    apply_tax_exemption: fd.get("apply_tax_exemption") === "on",
+    org_from_location: fd.get("organization_from_location") === "on",
+  };
 
   const events = fd
     .getAll("event")
@@ -49,28 +111,7 @@ export async function importEvents(fd: FormData) {
 
   if (events.length === 0) redirect("/lectures/import?msg=none");
 
-  const rows = events.map((e) => {
-    const hours = hoursBetween(e.start, e.end);
-    const gross = grossFrom(hours, hourlyRate);
-    const tax = calculateWithholding(gross, incomeType, applyExemption);
-    return {
-      user_id: userId,
-      external_uid: e.uid,
-      title: String(e.title).slice(0, 200),
-      organization: orgFromLocation && e.location ? String(e.location).slice(0, 200) : null,
-      lecture_date: e.date,
-      start_time: e.start,
-      end_time: e.end,
-      hours,
-      hourly_rate: hourlyRate,
-      gross_amount: gross,
-      income_type: incomeType,
-      apply_tax_exemption: applyExemption,
-      income_tax: tax.incomeTax,
-      local_tax: tax.localTax,
-      expected_net: tax.net,
-    };
-  });
+  const rows = events.map((e) => ({ ...eventToRow({ ...e, title: String(e.title) }, settings), user_id: userId }));
 
   // 이미 불러온 일정(external_uid 중복)은 건너뛴다
   const { data: existing } = await supabase
@@ -83,6 +124,8 @@ export async function importEvents(fd: FormData) {
   if (fresh.length) {
     const { error } = await supabase.from("lectures").insert(fresh);
     if (error) redirect(`/lectures/import?msg=error`);
+    // 직접 골라 다시 불러온 일정은 '삭제했던 일정' 기록에서 뺀다
+    await supabase.from("import_skips").delete().in("external_uid", fresh.map((r) => r.external_uid));
   }
   revalidatePath("/", "layout");
   redirect(`/lectures/import?msg=ok&n=${fresh.length}`);
