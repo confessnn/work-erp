@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 export const NAV = [
   { href: "/", label: "대시보드" },
   { href: "/lectures", label: "일정" },
+  { href: "/share-settings", label: "공유" },
 ] as const;
 
 export function AppNav() {
