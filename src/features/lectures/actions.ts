@@ -7,7 +7,7 @@ import { todayInSeoul } from "@/lib/format";
 import { schedulePush } from "@/features/google-calendar/push";
 import { calculateWithholding, grossFrom, hoursBetween, type IncomeType } from "./tax";
 
-export type FormState = { error?: string };
+export type FormState = { error?: string; duplicate?: boolean };
 
 const str = (fd: FormData, k: string) => {
   const v = fd.get(k);
@@ -73,6 +73,22 @@ export async function createLecture(_prev: FormState, fd: FormData): Promise<For
   const { supabase, userId } = await requireUser();
   const parsed = toRow(fd);
   if ("error" in parsed) return { error: parsed.error };
+
+  // 같은 날짜·시작 시각에 이미 일정이 있으면 한 번 확인 (구글에서 불러온 같은 강의를 또 입력하는 경우 방지)
+  if (parsed.row.start_time && fd.get("allow_duplicate") !== "on") {
+    const { data: same } = await supabase
+      .from("lectures")
+      .select("title")
+      .eq("lecture_date", parsed.row.lecture_date)
+      .eq("start_time", parsed.row.start_time)
+      .limit(1);
+    if (same?.length) {
+      return {
+        error: `같은 날짜·시각에 이미 '${same[0].title}' 일정이 있습니다. 같은 강의라면 그 일정을 수정해주세요.`,
+        duplicate: true,
+      };
+    }
+  }
   const { error } = await supabase.from("lectures").insert({ ...parsed.row, user_id: userId });
   if (error) return { error: `저장 실패: ${error.message}` };
   schedulePush(supabase);

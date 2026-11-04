@@ -111,3 +111,13 @@ export function schedulePush(supabase: SupabaseClient) {
     await pushToGoogle(supabase);
   });
 }
+
+/**
+ * 구글에서 지울 일정이 남아 있으면 반영 예약 (예: 매일 자동 불러오기가 ERP 일정을 구글 원본과 연결한 경우).
+ * 남은 게 없으면 구글을 부르지 않는다.
+ */
+export async function flushPendingGoogleDeletes(supabase: SupabaseClient) {
+  if (!isGoogleConfigured()) return;
+  const { count } = await supabase.from("google_pending_deletes").select("*", { count: "exact", head: true });
+  if (count) schedulePush(supabase);
+}

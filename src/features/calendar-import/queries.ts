@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
 import type { IncomeType } from "@/features/lectures/tax";
 import { parseIcs, type CalendarEvent } from "./ics";
-import { addDays, downloadIcs } from "./sync";
+import { addDays, downloadIcs, findDuplicate, type ExistingLecture } from "./sync";
 
 export type CalendarSource = {
   id: string;
@@ -30,7 +30,8 @@ export async function listSources(): Promise<CalendarSource[]> {
   return (data ?? []) as CalendarSource[];
 }
 
-export type Candidate = CalendarEvent & { imported: boolean };
+/** imported: 이미 불러옴 / inErp: 같은 날짜·시각의 ERP 일정이 있음 (불러오면 새로 만들지 않고 연결) */
+export type Candidate = CalendarEvent & { imported: boolean; inErp: boolean };
 
 /** 캘린더 주소에서 일정을 받아와, 이미 불러온 것은 imported=true 로 표시 (수동 불러오기 화면용) */
 export async function fetchCandidates(
@@ -52,10 +53,15 @@ export async function fetchCandidates(
 
   const { data } = await supabase
     .from("lectures")
-    .select("external_uid")
-    .not("external_uid", "is", null)
+    .select("id, lecture_date, start_time, title, external_uid")
     .gte("lecture_date", from);
-  const done = new Set((data ?? []).map((r) => r.external_uid as string));
+  const existing = (data ?? []) as ExistingLecture[];
+  const done = new Set(existing.map((r) => r.external_uid).filter(Boolean));
 
-  return { events: events.map((e) => ({ ...e, imported: done.has(e.uid) })) };
+  return {
+    events: events.map((e) => {
+      const imported = done.has(e.uid);
+      return { ...e, imported, inErp: !imported && findDuplicate(e, existing) !== null };
+    }),
+  };
 }

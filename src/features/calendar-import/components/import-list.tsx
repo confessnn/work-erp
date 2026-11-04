@@ -94,6 +94,11 @@ export function ImportList({ events }: { events: Candidate[] }) {
                 {e.location && <div className="truncate text-sm text-muted">{e.location}</div>}
               </div>
               {e.imported && <span className="badge badge-paid">불러옴</span>}
+              {e.inErp && (
+                <span className="badge badge-unpaid" title="같은 날짜·시각의 일정이 ERP에 있습니다. 불러오면 새로 만들지 않고 연결만 합니다.">
+                  ERP에 있음
+                </span>
+              )}
             </label>
           </li>
         ))}

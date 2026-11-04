@@ -23,7 +23,11 @@ export default async function ImportPage({ searchParams }: PageProps<"/lectures/
   );
 
   const msg =
-    sp.msg === "ok" ? `${Number(sp.n) || 0}개 일정을 저장했습니다.` : typeof sp.msg === "string" ? MSG[sp.msg] : null;
+    sp.msg === "ok"
+      ? `${Number(sp.n) || 0}개 일정을 저장했습니다.${Number(sp.linked) ? ` ${Number(sp.linked)}개는 같은 시각의 ERP 일정이 있어 새로 만들지 않고 연결했습니다.` : ""}`
+      : typeof sp.msg === "string"
+        ? MSG[sp.msg]
+        : null;
 
   return (
     <>
