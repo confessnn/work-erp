@@ -3,11 +3,14 @@ import { parsePeriod, PeriodNav } from "@/components/period-nav";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
 import { LectureTable } from "@/features/lectures/components/lecture-table";
 import { listLectures, listUpcoming } from "@/features/lectures/queries";
+import { flushPendingGoogleDeletes } from "@/features/google-calendar/push";
+import { requireUser } from "@/lib/supabase/server";
 import { hoursLabel, nowInSeoul, won } from "@/lib/format";
 
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const period = parsePeriod(await searchParams, nowInSeoul());
-  const [lectures, upcoming] = await Promise.all([listLectures(period), listUpcoming()]);
+  const [lectures, upcoming, { supabase }] = await Promise.all([listLectures(period), listUpcoming(), requireUser()]);
+  await flushPendingGoogleDeletes(supabase);
   const s = summarize(lectures);
   const diff = s.receivedTotal - s.receivedExpected;
 

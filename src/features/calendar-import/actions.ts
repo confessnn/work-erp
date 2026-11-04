@@ -6,7 +6,9 @@ import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
 import type { IncomeType } from "@/features/lectures/tax";
 import { normalizeIcsUrl, type CalendarEvent } from "./ics";
-import { collectAutoImportRows, eventToRow, type ImportSettings } from "./sync";
+import { collectAutoImport, eventToRow, planImport, type ExistingLecture, type ImportSettings } from "./sync";
+import { schedulePush } from "@/features/google-calendar/push";
+import { addDays } from "./sync";
 
 export type SourceState = { error?: string; message?: string };
 
@@ -57,15 +59,11 @@ export async function syncNow(id: string): Promise<SourceState> {
   const { data: s } = await supabase.from("calendar_sources").select("*").eq("id", id).single();
   if (!s) return { error: "캘린더를 찾지 못했습니다." };
 
-  const [{ data: l }, { data: k }] = await Promise.all([
-    supabase.from("lectures").select("external_uid").not("external_uid", "is", null),
-    supabase.from("import_skips").select("external_uid"),
-  ]);
-  const known = new Set([...(l ?? []), ...(k ?? [])].map((r) => r.external_uid as string));
+  const { known, existing } = await loadDedupeContext(supabase);
 
-  let rows;
+  let rows, links;
   try {
-    rows = await collectAutoImportRows(s.ics_url, s as ImportSettings, known, todayInSeoul());
+    ({ rows, links } = await collectAutoImport(s.ics_url, s as ImportSettings, known, existing, todayInSeoul()));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "불러오기 실패";
     await supabase.from("calendar_sources").update({ last_synced_at: new Date().toISOString(), last_sync_result: `실패: ${msg}` }).eq("id", id);
@@ -73,16 +71,55 @@ export async function syncNow(id: string): Promise<SourceState> {
     return { error: msg };
   }
 
+  const linked = await linkLectures(supabase, links);
   if (rows.length) {
     const { error } = await supabase.from("lectures").insert(rows.map((r) => ({ ...r, user_id: userId })));
     if (error) return { error: `저장 실패: ${error.message}` };
   }
   await supabase
     .from("calendar_sources")
-    .update({ last_synced_at: new Date().toISOString(), last_sync_result: `수동: ${rows.length}건 새로 추가` })
+    .update({
+      last_synced_at: new Date().toISOString(),
+      last_sync_result: `수동: ${rows.length}건 새로 추가${linked ? ` · ${linked}건 기존 일정과 연결` : ""}`,
+    })
     .eq("id", id);
+  if (linked) schedulePush(supabase); // ERP 캘린더의 사본 정리
   revalidatePath("/", "layout");
-  return { message: rows.length ? `${rows.length}개 일정을 새로 불러왔습니다.` : "새로 불러올 일정이 없습니다." };
+  const parts = [rows.length && `${rows.length}개 새로 불러옴`, linked && `${linked}개는 ERP에 이미 있어 연결만 함`].filter(Boolean);
+  return { message: parts.length ? `${parts.join(", ")}.` : "새로 불러올 일정이 없습니다." };
+}
+
+type Db = Awaited<ReturnType<typeof requireUser>>["supabase"];
+
+/** 중복 판단에 필요한 것: 이미 불러온/삭제한 구글 일정 ID, 최근 1개월 이후 ERP 일정 */
+async function loadDedupeContext(supabase: Db) {
+  const [{ data: l }, { data: k }, { data: ex }] = await Promise.all([
+    supabase.from("lectures").select("external_uid").not("external_uid", "is", null),
+    supabase.from("import_skips").select("external_uid"),
+    supabase
+      .from("lectures")
+      .select("id, lecture_date, start_time, title, external_uid")
+      .gte("lecture_date", addDays(todayInSeoul(), -31)),
+  ]);
+  return {
+    known: new Set([...(l ?? []), ...(k ?? [])].map((r) => r.external_uid as string)),
+    existing: (ex ?? []) as ExistingLecture[],
+  };
+}
+
+/** ERP 일정을 구글 원본과 연결 (DB 트리거가 ERP 캘린더 사본을 지울 대상으로 넣는다) */
+async function linkLectures(supabase: Db, links: { lecture_id: string; external_uid: string }[]) {
+  let n = 0;
+  for (const x of links) {
+    const { data } = await supabase
+      .from("lectures")
+      .update({ external_uid: x.external_uid })
+      .eq("id", x.lecture_id)
+      .is("external_uid", null)
+      .select("id");
+    n += data?.length ?? 0;
+  }
+  return n;
 }
 
 /**
@@ -111,22 +148,25 @@ export async function importEvents(fd: FormData) {
 
   if (events.length === 0) redirect("/lectures/import?msg=none");
 
-  const rows = events.map((e) => ({ ...eventToRow({ ...e, title: String(e.title) }, settings), user_id: userId }));
-
-  // 이미 불러온 일정(external_uid 중복)은 건너뛴다
-  const { data: existing } = await supabase
-    .from("lectures")
-    .select("external_uid")
-    .in("external_uid", rows.map((r) => r.external_uid));
-  const skip = new Set((existing ?? []).map((r) => r.external_uid));
-  const fresh = rows.filter((r) => !skip.has(r.external_uid));
+  // 직접 고른 것이므로 '삭제했던 일정'은 다시 허용, 이미 있는 일정·같은 시각의 ERP 일정은 중복 방지
+  const { existing } = await loadDedupeContext(supabase);
+  const { data: imported } = await supabase.from("lectures").select("external_uid").not("external_uid", "is", null);
+  const known = new Set((imported ?? []).map((r) => r.external_uid as string));
+  const plan = planImport(
+    events.map((e) => ({ ...e, title: String(e.title) })),
+    null,
+    known,
+    existing,
+  );
+  const fresh = plan.newEvents.map((e) => ({ ...eventToRow(e, settings), user_id: userId }));
+  const linked = await linkLectures(supabase, plan.links);
 
   if (fresh.length) {
     const { error } = await supabase.from("lectures").insert(fresh);
     if (error) redirect(`/lectures/import?msg=error`);
-    // 직접 골라 다시 불러온 일정은 '삭제했던 일정' 기록에서 뺀다
     await supabase.from("import_skips").delete().in("external_uid", fresh.map((r) => r.external_uid));
   }
+  if (linked) schedulePush(supabase);
   revalidatePath("/", "layout");
-  redirect(`/lectures/import?msg=ok&n=${fresh.length}`);
+  redirect(`/lectures/import?msg=ok&n=${fresh.length}&linked=${linked}`);
 }

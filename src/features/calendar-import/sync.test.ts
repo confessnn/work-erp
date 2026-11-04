@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "./ics";
-import { eventToRow, matchesKeyword, selectNewEvents } from "./sync";
+import { eventToRow, findDuplicate, isOwnErpEvent, matchesKeyword, planImport, type ExistingLecture } from "./sync";
 
 const ev = (over: Partial<CalendarEvent>): CalendarEvent => ({
   uid: "u1",
@@ -22,10 +22,65 @@ describe("matchesKeyword", () => {
   });
 });
 
-describe("selectNewEvents", () => {
-  it("이미 있거나 삭제한 일정 제외", () => {
-    const list = [ev({ uid: "a" }), ev({ uid: "b" }), ev({ uid: "c", title: "가족 모임", location: null })];
-    expect(selectNewEvents(list, "특강", new Set(["a"])).map((e) => e.uid)).toEqual(["b"]);
+const erp = (over: Partial<ExistingLecture>): ExistingLecture => ({
+  id: "L1",
+  lecture_date: "2026-11-10",
+  start_time: "14:00:00",
+  title: "원가 특강",
+  external_uid: null,
+  ...over,
+});
+
+describe("findDuplicate", () => {
+  it("같은 날짜 + 같은 시작 시각이면 제목이 달라도 같은 강의", () => {
+    expect(findDuplicate(ev({ title: "OO대 원가계산" }), [erp({})])?.id).toBe("L1");
+  });
+  it("시작 시각이 다르면 다른 강의", () => {
+    expect(findDuplicate(ev({ start: "15:00" }), [erp({})])).toBeNull();
+  });
+  it("종일 일정은 같은 날짜 + 같은 제목일 때만", () => {
+    const allDay = ev({ start: null, end: null, allDay: true, title: "워크숍 " });
+    expect(findDuplicate(allDay, [erp({ start_time: null, title: "워크숍" })])?.id).toBe("L1");
+    expect(findDuplicate(allDay, [erp({ start_time: null, title: "다른 일" })])).toBeNull();
+    expect(findDuplicate(allDay, [erp({})])).toBeNull();
+  });
+});
+
+describe("isOwnErpEvent", () => {
+  it("ERP가 내보낸 일정 구분", () => {
+    expect(isOwnErpEvent("erp3f2504e04f8911d39a0c0305e82c3301@google.com")).toBe(true);
+    expect(isOwnErpEvent("lec-1@work-erp")).toBe(true);
+    expect(isOwnErpEvent("abc123@google.com")).toBe(false);
+    expect(isOwnErpEvent("error-report@google.com")).toBe(false);
+  });
+});
+
+describe("planImport", () => {
+  it("이미 불러온·삭제한 일정과 키워드 불일치 제외", () => {
+    const list = [ev({ uid: "a" }), ev({ uid: "b", start: "09:00" }), ev({ uid: "c", title: "가족 모임", location: null, start: "18:00" })];
+    const plan = planImport(list, "특강", new Set(["a"]), []);
+    expect(plan.newEvents.map((e) => e.uid)).toEqual(["b"]);
+  });
+
+  it("ERP에 같은 강의가 있으면 새로 만들지 않고 연결", () => {
+    const plan = planImport([ev({ uid: "g1" })], null, new Set(), [erp({})]);
+    expect(plan.newEvents).toEqual([]);
+    expect(plan.links).toEqual([{ lecture_id: "L1", external_uid: "g1" }]);
+  });
+
+  it("이미 다른 구글 일정과 연결된 ERP 일정이면 건너뜀", () => {
+    const plan = planImport([ev({ uid: "g2" })], null, new Set(), [erp({ external_uid: "g1" })]);
+    expect(plan).toEqual({ newEvents: [], links: [] });
+  });
+
+  it("ERP가 내보낸 일정은 다시 불러오지 않음", () => {
+    const plan = planImport([ev({ uid: "erp3f2504e04f8911d39a0c0305e82c3301@google.com" })], null, new Set(), []);
+    expect(plan.newEvents).toEqual([]);
+  });
+
+  it("같은 캘린더에 똑같은 일정이 두 개여도 하나만", () => {
+    const plan = planImport([ev({ uid: "x1" }), ev({ uid: "x2" })], null, new Set(), []);
+    expect(plan.newEvents.map((e) => e.uid)).toEqual(["x1"]);
   });
 });
 

@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { collectAutoImportRows, type ImportSettings } from "@/features/calendar-import/sync";
+import { collectAutoImport, type ExistingLecture, type ImportSettings } from "@/features/calendar-import/sync";
 import { todayInSeoul } from "@/lib/format";
 
 export const maxDuration = 60;
@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
   const today = todayInSeoul();
   const knownByUser = new Map<string, Set<string>>();
-  const results: { source: string; added?: number; error?: string }[] = [];
+  const results: { source: string; added?: number; linked?: number; error?: string }[] = [];
 
   for (const job of (jobs ?? []) as Job[]) {
     try {
@@ -36,7 +36,15 @@ export async function GET(request: Request) {
         known = new Set((data ?? []) as string[]);
         knownByUser.set(job.user_id, known);
       }
-      const rows = await collectAutoImportRows(job.ics_url, job, known, today);
+      const { data: existing, error: e0 } = await db.rpc("cron_existing_lectures", { p_secret: secret, p_user: job.user_id });
+      if (e0) throw new Error(e0.message);
+      const { rows, links } = await collectAutoImport(job.ics_url, job, known, (existing ?? []) as ExistingLecture[], today);
+      // ERP에 이미 있는 강의 → 구글 원본과 연결 (ERP 캘린더 사본은 지울 대상으로)
+      if (links.length) {
+        const { error: e1 } = await db.rpc("cron_link_lectures", { p_secret: secret, p_user: job.user_id, p_links: links });
+        if (e1) throw new Error(e1.message);
+        links.forEach((x) => known.add(x.external_uid));
+      }
       const { data: added, error: e } = await db.rpc("cron_save_import", {
         p_secret: secret,
         p_source: job.source_id,
@@ -45,7 +53,7 @@ export async function GET(request: Request) {
       });
       if (e) throw new Error(e.message);
       rows.forEach((r) => known.add(r.external_uid));
-      results.push({ source: job.source_id, added: Number(added) || 0 });
+      results.push({ source: job.source_id, added: Number(added) || 0, linked: links.length });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "알 수 없는 오류";
       await db.rpc("cron_save_import", { p_secret: secret, p_source: job.source_id, p_rows: [], p_result: `자동 실패: ${msg}` });
