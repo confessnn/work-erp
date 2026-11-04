@@ -33,7 +33,7 @@ export async function listSubmissions(lectureId: string): Promise<SubmissionRow[
   const { supabase } = await requireUser();
   const { data } = await supabase
     .from("document_submissions")
-    .select("id, lecture_id, doc_types, document_ids, file_names, zip_name, method, share_url, shared, created_at")
+    .select("id, lecture_id, doc_types, document_ids, file_names, zip_name, method, share_url, shared, attached_to_lecture, created_at")
     .eq("lecture_id", lectureId)
     .order("created_at", { ascending: false });
   return (data ?? []) as SubmissionRow[];
@@ -69,10 +69,25 @@ export async function listSharedBundles() {
     .order("created_at", { ascending: false });
   return (data ?? []) as unknown as {
     id: string;
-    lecture_id: string;
+    lecture_id: string | null;
     zip_name: string;
     share_url: string | null;
     created_at: string;
     lectures: { title: string; lecture_date: string } | null;
   }[];
+}
+
+export type LectureOption = { id: string; title: string; organization: string | null; lecture_date: string };
+
+/** '일정에 공유'에서 고를 일정: 지난 2개월 ~ 앞으로 전부 (가까운 날짜 순) */
+export async function listLectureOptions(): Promise<LectureOption[]> {
+  const { supabase } = await requireUser();
+  const since = new Date(Date.now() - 60 * 86_400_000).toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+  const { data } = await supabase
+    .from("lectures")
+    .select("id, title, organization, lecture_date")
+    .gte("lecture_date", since)
+    .order("lecture_date", { ascending: true })
+    .limit(200);
+  return (data ?? []) as LectureOption[];
 }

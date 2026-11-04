@@ -6,6 +6,8 @@ import { decryptSecret } from "@/features/google-calendar/crypto";
 import { accessToken, DRIVE_SCOPE, hasScope } from "@/features/google-calendar/google-api";
 import { ensureFolders, getFile, shareWithLink, stopSharing, trashFile } from "./drive";
 import { isDocType } from "./types";
+import { schedulePush } from "@/features/google-calendar/push";
+import { todayInSeoul } from "@/lib/format";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -130,20 +132,34 @@ export async function deleteDocument(id: string): Promise<Result> {
   }
 }
 
-/** 제출 기록 (압축 다운로드 / 드라이브 링크 공통) */
+const memoLine = (url: string) => `제출 서류(${todayInSeoul()}): ${url}`;
+
+/**
+ * 제출 기록 (압축파일 / 드라이브 링크 공통). 서류함에서 하면 lectureId 없이도 된다.
+ * attachToLecture: 공유 링크를 그 일정의 메모에 붙인다 → 구글 캘린더 'ERP' 일정 메모에도 반영
+ */
 export async function recordSubmission(input: {
-  lectureId: string;
+  lectureId: string | null;
   documentIds: string[];
   zipName: string;
   fileNames: string[];
   method: "download" | "drive_link";
   bundleFileId?: string;
-}): Promise<Result<{ shareUrl?: string; submissionId?: string }>> {
+  attachToLecture?: boolean;
+}): Promise<Result<{ shareUrl?: string; submissionId?: string; attachedTitle?: string }>> {
   try {
     const { supabase } = await requireUser();
     const { data: docs } = await supabase.from("documents").select("id, doc_type").in("id", input.documentIds);
     if (!docs?.length) return { ok: false, error: "선택한 서류를 찾지 못했습니다." };
     const docTypes = [...new Set(docs.map((d) => d.doc_type as string))];
+
+    let lecture: { id: string; title: string; memo: string | null } | null = null;
+    if (input.lectureId) {
+      const { data } = await supabase.from("lectures").select("id, title, memo").eq("id", input.lectureId).maybeSingle();
+      if (!data) return { ok: false, error: "선택한 일정을 찾지 못했습니다." };
+      lecture = data;
+    }
+    if (input.attachToLecture && !lecture) return { ok: false, error: "링크를 넣을 일정을 선택해주세요." };
 
     let shareUrl: string | undefined;
     if (input.method === "drive_link") {
@@ -154,10 +170,11 @@ export async function recordSubmission(input: {
       shareUrl = await shareWithLink(token, f.id);
     }
 
+    const attach = Boolean(input.attachToLecture && lecture && shareUrl);
     const { data: row, error } = await supabase
       .from("document_submissions")
       .insert({
-        lecture_id: input.lectureId,
+        lecture_id: lecture?.id ?? null,
         doc_types: docTypes,
         document_ids: docs.map((d) => d.id),
         file_names: input.fileNames.slice(0, 50),
@@ -166,13 +183,21 @@ export async function recordSubmission(input: {
         drive_file_id: input.bundleFileId ?? null,
         share_url: shareUrl ?? null,
         shared: input.method === "drive_link",
+        attached_to_lecture: attach,
       })
       .select("id")
       .single();
     if (error) return { ok: false, error: `기록 실패: ${error.message}` };
-    revalidatePath(`/lectures/${input.lectureId}`);
+
+    if (attach && lecture && shareUrl) {
+      const memo = [lecture.memo?.trim(), memoLine(shareUrl)].filter(Boolean).join("\n");
+      await supabase.from("lectures").update({ memo }).eq("id", lecture.id);
+      schedulePush(supabase); // 구글 캘린더 일정 메모에도 반영
+      revalidatePath("/", "layout");
+    }
+    if (lecture) revalidatePath(`/lectures/${lecture.id}`);
     revalidatePath("/documents");
-    return { ok: true, shareUrl, submissionId: row.id };
+    return { ok: true, shareUrl, submissionId: row.id, attachedTitle: attach ? lecture?.title : undefined };
   } catch (e) {
     return fail(e);
   }
@@ -184,15 +209,29 @@ export async function stopBundleSharing(submissionId: string): Promise<Result> {
     const { supabase, token } = await driveContext();
     const { data: s } = await supabase
       .from("document_submissions")
-      .select("drive_file_id, lecture_id")
+      .select("drive_file_id, lecture_id, share_url, attached_to_lecture")
       .eq("id", submissionId)
       .single();
     if (s?.drive_file_id) {
       await stopSharing(token, s.drive_file_id);
       await trashFile(token, s.drive_file_id);
     }
+    // 일정 메모에 붙였던 링크도 지운다 (구글 캘린더 일정 메모에도 반영)
+    if (s?.attached_to_lecture && s.lecture_id && s.share_url) {
+      const { data: l } = await supabase.from("lectures").select("memo").eq("id", s.lecture_id).maybeSingle();
+      if (l?.memo?.includes(s.share_url)) {
+        const memo = l.memo
+          .split("\n")
+          .filter((line: string) => !line.includes(s.share_url!))
+          .join("\n")
+          .trim();
+        await supabase.from("lectures").update({ memo: memo || null }).eq("id", s.lecture_id);
+        schedulePush(supabase);
+        revalidatePath("/", "layout");
+      }
+    }
     await supabase.from("document_submissions").update({ shared: false }).eq("id", submissionId);
-    if (s) revalidatePath(`/lectures/${s.lecture_id}`);
+    if (s?.lecture_id) revalidatePath(`/lectures/${s.lecture_id}`);
     revalidatePath("/documents");
     return { ok: true };
   } catch (e) {

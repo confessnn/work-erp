@@ -4,17 +4,24 @@ import { DeleteButton } from "@/features/lectures/components/delete-button";
 import { LectureForm } from "@/features/lectures/components/lecture-form";
 import { getLecture, listOrganizations } from "@/features/lectures/queries";
 import { SubmissionPanel } from "@/features/documents/components/submission-panel";
-import { driveStatus, lastDocTypesForOrganization, listDocuments, listSubmissions } from "@/features/documents/queries";
+import {
+  driveStatus,
+  lastDocTypesForOrganization,
+  listDocuments,
+  listLectureOptions,
+  listSubmissions,
+} from "@/features/documents/queries";
 
 export default async function EditLecturePage({ params }: PageProps<"/lectures/[id]">) {
   const { id } = await params;
   const [lecture, organizations] = await Promise.all([getLecture(id), listOrganizations()]);
   if (!lecture) notFound();
-  const [status, documents, submissions, lastTypes] = await Promise.all([
+  const [status, documents, submissions, lastTypes, lectureOptions] = await Promise.all([
     driveStatus(),
     listDocuments(),
     listSubmissions(id),
     lastDocTypesForOrganization(lecture.organization, id),
+    listLectureOptions(),
   ]);
   // 이 강의에서 이미 제출한 적이 있으면 그 서류를, 없으면 같은 기관에 냈던 서류 종류를 미리 체크
   const presetTypes = submissions[0]?.doc_types ?? lastTypes;
@@ -35,6 +42,7 @@ export default async function EditLecturePage({ params }: PageProps<"/lectures/[
           documents={documents}
           presetTypes={presetTypes}
           submissions={submissions}
+          lectureOptions={lectureOptions}
           driveReady={status === "ready"}
         />
       </section>

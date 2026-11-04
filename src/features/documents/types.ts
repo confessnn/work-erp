@@ -36,7 +36,7 @@ export type DocumentRow = {
 /** public.document_submissions 한 행 */
 export type SubmissionRow = {
   id: string;
-  lecture_id: string;
+  lecture_id: string | null;
   doc_types: string[];
   document_ids: string[];
   file_names: string[];
@@ -44,5 +44,6 @@ export type SubmissionRow = {
   method: "download" | "drive_link";
   share_url: string | null;
   shared: boolean;
+  attached_to_lecture: boolean;
   created_at: string;
 };
