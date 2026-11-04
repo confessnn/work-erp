@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { zipSync } from "fflate";
 import { getDriveSession, recordSubmission, stopBundleSharing } from "../actions";
-import { downloadFromDrive, saveBlob, uploadToDrive } from "../drive-browser";
+import { downloadFromDrive, uploadToDrive } from "../drive-browser";
 import { bundleFileNames, isStale, zipName } from "../naming";
 import { DOC_TYPES, type DocumentRow, type SubmissionRow } from "../types";
 
@@ -32,6 +32,9 @@ export function SubmissionPanel({ lecture, documents, presetTypes, submissions, 
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  // 압축이 끝난 파일. 저장은 사용자가 직접 버튼을 눌러야 한다 (아이폰·앱 내 브라우저는 자동 다운로드를 막음)
+  const [ready, setReady] = useState<{ url: string; name: string; file: File } | null>(null);
+  useEffect(() => () => { if (ready) URL.revokeObjectURL(ready.url); }, [ready]);
 
   const chosen = documents.filter((d) => selected.has(d.id));
   const stale = chosen.filter((d) => isStale(d, today));
@@ -64,11 +67,12 @@ export function SubmissionPanel({ lecture, documents, presetTypes, submissions, 
     if (!chosen.length) return setMsg({ ok: false, text: "제출할 서류를 선택해주세요." });
     setMsg(null);
     setShareUrl(null);
+    setReady(null);
     try {
       const { blob, name, names, session } = await buildZip();
       let bundleFileId: string | undefined;
       if (kind === "download") {
-        saveBlob(blob, name);
+        setReady({ url: URL.createObjectURL(blob), name, file: new File([blob], name, { type: "application/zip" }) });
       } else {
         setBusy("드라이브에 올리는 중…");
         bundleFileId = await uploadToDrive(session.token, session.bundlesFolderId, blob, name, "application/zip");
@@ -87,7 +91,7 @@ export function SubmissionPanel({ lecture, documents, presetTypes, submissions, 
         setShareUrl(r.shareUrl);
         setMsg({ ok: true, text: "공유 링크를 만들었습니다. 복사해서 메일·카톡으로 보내세요." });
       } else {
-        setMsg({ ok: true, text: `${name} 을(를) 저장했습니다.` });
+        setMsg({ ok: true, text: "압축이 끝났습니다. 아래 버튼으로 저장하거나 바로 보내세요." });
       }
       router.refresh();
     } catch (e) {
@@ -172,7 +176,7 @@ export function SubmissionPanel({ lecture, documents, presetTypes, submissions, 
 
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={!!busy || !chosen.length} onClick={() => run("download")} className="btn-primary">
-          압축파일 다운로드 ({chosen.length})
+          압축파일 만들기 ({chosen.length})
         </button>
         <button type="button" disabled={!!busy || !chosen.length} onClick={() => run("drive_link")} className="chip">
           드라이브 공유 링크 만들기
@@ -181,6 +185,7 @@ export function SubmissionPanel({ lecture, documents, presetTypes, submissions, 
       {busy && <p className="text-sm text-muted">{busy}</p>}
       {msg && <p className={`text-sm ${msg.ok ? "text-success" : "text-danger"}`}>{msg.text}</p>}
       {shareUrl && <ShareBox url={shareUrl} />}
+      {ready && <SaveBox ready={ready} />}
 
       {submissions.length > 0 && (
         <details className="text-sm">
@@ -230,6 +235,45 @@ function ShareBox({ url }: { url: string }) {
       >
         {copied ? "복사됨" : "복사"}
       </button>
+    </div>
+  );
+}
+
+function SaveBox({ ready }: { ready: { url: string; name: string; file: File } }) {
+  const [shareErr, setShareErr] = useState<string | null>(null);
+  const canShare =
+    typeof navigator !== "undefined" && typeof navigator.canShare === "function" && navigator.canShare({ files: [ready.file] });
+
+  return (
+    <div className="space-y-2 rounded-lg border border-accent p-3">
+      <p className="text-sm font-medium break-all">{ready.name}</p>
+      <div className="flex flex-wrap gap-2">
+        {/* 사용자가 직접 누르는 진짜 링크라 아이폰 Safari 에서도 저장된다 */}
+        <a href={ready.url} download={ready.name} className="btn-primary">
+          파일 저장
+        </a>
+        {canShare && (
+          <button
+            type="button"
+            className="chip"
+            onClick={async () => {
+              setShareErr(null);
+              try {
+                await navigator.share({ files: [ready.file], title: ready.name });
+              } catch (e) {
+                if (e instanceof Error && e.name !== "AbortError") setShareErr("공유하지 못했습니다. '파일 저장'을 이용하세요.");
+              }
+            }}
+          >
+            공유 (카톡·메일로 바로 보내기)
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-muted">
+        아이폰: &apos;파일 저장&apos; → &apos;다운로드&apos;를 누르면 파일 앱의 다운로드 폴더에 저장됩니다. 카카오톡 등 앱 안에서 연 화면이면
+        저장이 안 될 수 있으니 Safari·Chrome에서 열어주세요.
+      </p>
+      {shareErr && <p className="text-sm text-danger">{shareErr}</p>}
     </div>
   );
 }
