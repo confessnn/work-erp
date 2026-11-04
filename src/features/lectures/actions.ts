@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
+import { schedulePush } from "@/features/google-calendar/push";
 import { calculateWithholding, grossFrom, hoursBetween, type IncomeType } from "./tax";
 
 export type FormState = { error?: string };
@@ -74,6 +75,7 @@ export async function createLecture(_prev: FormState, fd: FormData): Promise<For
   if ("error" in parsed) return { error: parsed.error };
   const { error } = await supabase.from("lectures").insert({ ...parsed.row, user_id: userId });
   if (error) return { error: `저장 실패: ${error.message}` };
+  schedulePush(supabase);
   refresh();
   redirect("/lectures");
 }
@@ -84,6 +86,7 @@ export async function updateLecture(id: string, _prev: FormState, fd: FormData):
   if ("error" in parsed) return { error: parsed.error };
   const { error } = await supabase.from("lectures").update(parsed.row).eq("id", id);
   if (error) return { error: `저장 실패: ${error.message}` };
+  schedulePush(supabase);
   refresh();
   redirect("/lectures");
 }
@@ -91,6 +94,7 @@ export async function updateLecture(id: string, _prev: FormState, fd: FormData):
 export async function deleteLecture(id: string) {
   const { supabase } = await requireUser();
   await supabase.from("lectures").delete().eq("id", id);
+  schedulePush(supabase);
   refresh();
   redirect("/lectures");
 }
@@ -114,5 +118,6 @@ export async function setPaid(id: string, paid: boolean) {
       .update({ is_paid: false, paid_date: null, paid_amount: null })
       .eq("id", id);
   }
+  schedulePush(supabase);
   refresh();
 }
