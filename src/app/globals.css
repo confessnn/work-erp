@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+/* 색상 토큰: 라이트/다크 모드 */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1a1d23;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --accent: #2f5bea;
+  --accent-soft: #eaf0ff;
+  --success: #15803d;
+  --warn: #c2410c;
+  --danger: #dc2626;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --surface: #181b21;
+    --fg: #e7e9ee;
+    --muted: #9aa1ad;
+    --line: #2a2f38;
+    --accent: #7c9cff;
+    --accent-soft: #1e2740;
+    --success: #4ade80;
+    --warn: #fb923c;
+    --danger: #f87171;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface p-4;
+  }
+  .section-title {
+    @apply text-base font-semibold;
+  }
+  .field {
+    @apply flex flex-col gap-1 text-sm;
+  }
+  .field > span {
+    @apply font-medium;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-bg px-3 py-2 text-base text-fg outline-none focus:border-accent;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 font-semibold text-white hover:opacity-90 disabled:opacity-50;
+  }
+  .btn-ghost {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-lg hover:bg-accent-soft;
+  }
+  .choice {
+    @apply cursor-pointer rounded-lg border border-line px-3 py-2 text-center text-sm;
+  }
+  .choice-on {
+    @apply border-accent bg-accent-soft font-semibold text-accent;
+  }
+  .chip {
+    @apply rounded-full border border-line px-3 py-1;
+  }
+  .chip-on {
+    @apply border-accent bg-accent-soft font-semibold text-accent;
+  }
+  .badge {
+    @apply shrink-0 rounded-full px-3 py-1 text-sm font-medium;
+  }
+  .badge-paid {
+    @apply bg-success/15 text-success;
+  }
+  .badge-unpaid {
+    @apply border border-warn/40 text-warn;
+  }
+  .num {
+    @apply text-right tabular-nums;
+  }
+  .calc {
+    @apply space-y-1 rounded-lg bg-bg p-3 text-sm;
+  }
+  .calc > div {
+    @apply flex justify-between tabular-nums;
+  }
+  .calc-total {
+    @apply mt-1 border-t border-line pt-2 text-base font-bold;
+  }
+}
