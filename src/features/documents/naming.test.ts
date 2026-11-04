@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bundleFileNames, extOf, isStale, safeName, zipName } from "./naming";
+import { bundleFileNames, bundlePaths, extOf, isStale, safeName, zipName } from "./naming";
 
 const doc = (doc_type: string, file_name: string, title: string | null = null, mime_type: string | null = null) =>
   ({ doc_type, title, file_name, mime_type }) as Parameters<typeof bundleFileNames>[0][number];
@@ -51,5 +51,32 @@ describe("isStale", () => {
     expect(isStale({ doc_type: "employment", issued_on: "2026-09-01" }, "2026-11-05")).toBe(false);
     expect(isStale({ doc_type: "resume", issued_on: "2020-01-01" }, "2026-11-05")).toBe(false);
     expect(isStale({ doc_type: "career", issued_on: null }, "2026-11-05")).toBe(false);
+  });
+});
+
+describe("bundlePaths", () => {
+  it("서류 종류별 폴더, 서류함 순서대로 번호", () => {
+    expect(
+      bundlePaths(
+        [
+          doc("career", "c.pdf"),
+          doc("resume", "r.hwp"),
+          doc("certificate", "a.pdf", "정보처리기사"),
+          doc("certificate", "b.pdf", "원가분석사"),
+        ],
+        "임승택",
+      ),
+    ).toEqual([
+      "03_경력증명서/임승택_경력증명서.pdf",
+      "01_이력서/임승택_이력서.hwp",
+      "02_자격증 취득확인서/임승택_자격증_정보처리기사.pdf",
+      "02_자격증 취득확인서/임승택_자격증_원가분석사.pdf",
+    ]);
+  });
+
+  it("폴더 이름에 못 쓰는 문자 없음 (개인정보 수집·이용 동의서)", () => {
+    expect(bundlePaths([doc("privacy_consent", "p.pdf")], "임승택")).toEqual([
+      "01_개인정보 수집·이용 동의서/임승택_개인정보동의서.pdf",
+    ]);
   });
 });

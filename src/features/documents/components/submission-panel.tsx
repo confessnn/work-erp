@@ -6,7 +6,7 @@ import Link from "next/link";
 import { zipSync } from "fflate";
 import { getDriveSession, recordSubmission, stopBundleSharing } from "../actions";
 import { downloadFromDrive, uploadToDrive } from "../drive-browser";
-import { bundleFileNames, isStale, zipName } from "../naming";
+import { bundlePaths, isStale, zipName } from "../naming";
 import type { LectureOption } from "../queries";
 import { DOC_TYPES, type DocumentRow, type SubmissionRow } from "../types";
 
@@ -59,7 +59,7 @@ export function SubmissionPanel({ lecture, documents, presetTypes, submissions =
   async function buildZip(target: { title: string; organization: string | null } | null) {
     const s = await getDriveSession();
     if (!s.ok) throw new Error(s.error);
-    const names = bundleFileNames(chosen, s.displayName);
+    const names = bundlePaths(chosen, s.displayName); // 종류별 폴더/파일 이름
     const files: Record<string, Uint8Array> = {};
     for (let i = 0; i < chosen.length; i++) {
       setBusy(`서류 받는 중… (${i + 1}/${chosen.length})`);

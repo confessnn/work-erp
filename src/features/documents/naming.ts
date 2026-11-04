@@ -1,4 +1,4 @@
-import { docTypeInfo, type DocumentRow } from "./types";
+import { DOC_TYPES, docTypeInfo, type DocumentRow } from "./types";
 
 /** 윈도우·맥에서 파일 이름에 쓸 수 없는 문자 제거 */
 export function safeName(s: string) {
@@ -59,4 +59,22 @@ export function isStale(doc: Pick<DocumentRow, "doc_type" | "issued_on">, today:
   if (!days || !doc.issued_on) return false;
   const diff = (Date.parse(today) - Date.parse(doc.issued_on)) / 86_400_000;
   return diff > days;
+}
+
+/**
+ * 압축파일 안 경로: 서류 종류별 폴더 + 파일 이름.
+ *   01_이력서/임승택_이력서.pdf
+ *   02_자격증 취득확인서/임승택_자격증_정보처리기사.pdf
+ * 폴더 번호는 서류함 순서대로, 선택한 종류만 1번부터 붙인다.
+ */
+export function bundlePaths(
+  docs: Pick<DocumentRow, "doc_type" | "title" | "file_name" | "mime_type">[],
+  displayName: string,
+): string[] {
+  const names = bundleFileNames(docs, displayName);
+  const present = DOC_TYPES.filter((t) => docs.some((d) => d.doc_type === t.key));
+  const folderOf = new Map(
+    present.map((t, i) => [t.key as string, `${String(i + 1).padStart(2, "0")}_${safeName(t.label)}`]),
+  );
+  return docs.map((d, i) => `${folderOf.get(d.doc_type) ?? "기타"}/${names[i]}`);
 }
