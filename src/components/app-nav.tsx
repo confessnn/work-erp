@@ -8,6 +8,7 @@ export const NAV = [
   { href: "/", label: "대시보드" },
   { href: "/lectures", label: "일정" },
   { href: "/documents", label: "서류함" },
+  { href: "/baby", label: "아기" },
   { href: "/share-settings", label: "공유" },
   { href: "/integrations", label: "연동" },
 ] as const;
@@ -15,7 +16,7 @@ export const NAV = [
 export function AppNav() {
   const path = usePathname();
   return (
-    <nav className="flex gap-1 text-sm">
+    <nav className="-mx-1 flex min-w-0 gap-1 overflow-x-auto whitespace-nowrap px-1 text-sm">
       {NAV.map((n) => {
         const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
         return (

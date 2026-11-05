@@ -7,10 +7,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <>
       <header className="sticky top-0 z-10 border-b border-line bg-surface/90 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center gap-4 px-4 py-3">
-          <span className="font-bold">work-erp</span>
+          <span className="hidden font-bold sm:inline">work-erp</span>
           <AppNav />
           <form action={signOut} className="ml-auto">
-            <button type="submit" className="text-sm text-muted hover:underline">로그아웃</button>
+            <button type="submit" className="whitespace-nowrap text-sm text-muted hover:underline">로그아웃</button>
           </form>
         </div>
       </header>

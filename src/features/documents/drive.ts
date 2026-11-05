@@ -32,7 +32,7 @@ export function getFile(token: string, id: string) {
   return call<DriveFile>(token, "GET", `/files/${encodeURIComponent(id)}?fields=id,name,mimeType,size,parents,trashed,webViewLink`);
 }
 
-async function folderUsable(token: string, id: string | null) {
+export async function folderUsable(token: string, id: string | null) {
   if (!id) return false;
   try {
     const f = await getFile(token, id);
@@ -43,7 +43,7 @@ async function folderUsable(token: string, id: string | null) {
   }
 }
 
-function createFolder(token: string, name: string, parent?: string) {
+export function createFolder(token: string, name: string, parent?: string) {
   return call<DriveFile>(token, "POST", "/files?fields=id", {
     name,
     mimeType: FOLDER,
