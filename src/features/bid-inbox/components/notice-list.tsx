@@ -6,6 +6,7 @@ import { won } from "@/lib/format";
 import { setBidStatus } from "../actions";
 import { CATEGORY_LABEL } from "../categories";
 import { VERDICT_LABEL } from "../judge";
+import { SubmissionBadge } from "./submission-badge";
 import type { BidNotice, BidStatus, BidVerdict } from "../types";
 
 const VERDICT_CLASS: Record<BidVerdict, string> = {
@@ -64,6 +65,7 @@ export function NoticeList({ notices }: { notices: BidNotice[] }) {
             <span className={`badge ${VERDICT_CLASS[n.verdict]}`} title={n.verdict_reason ?? undefined}>
               {VERDICT_LABEL[n.verdict]}
             </span>
+            <SubmissionBadge awardMethod={n.award_method} />
             {n.source === "d2b" && <span className="text-muted">국방부</span>}
             {n.status === "new" && <span className="badge badge-unpaid">새 공고</span>}
             {n.notice_kind && n.notice_kind !== "등록공고" && <span className="text-muted">{n.notice_kind}</span>}
