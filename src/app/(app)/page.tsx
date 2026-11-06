@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { parsePeriod, PeriodNav } from "@/components/period-nav";
+import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
 import { LectureTable } from "@/features/lectures/components/lecture-table";
 import { listLectures, listUpcoming } from "@/features/lectures/queries";
@@ -96,6 +97,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           </table>
         </section>
       )}
+
+      <ApiCreditsSection />
 
       <section className="space-y-3">
         <h2 className="section-title">다가오는 일정</h2>

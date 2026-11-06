@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/bid-sync",
       "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/api-credits",
+      "schedule": "0 22 * * *"
     }
   ]
 }
