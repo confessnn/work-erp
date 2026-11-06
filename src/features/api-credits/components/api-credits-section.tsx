@@ -11,12 +11,12 @@ export async function ApiCreditsSection() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <section className="min-w-0 space-y-2">
+    <section className="flex min-w-0 flex-col gap-2">
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
         <h2 className="section-title">API 크레딧</h2>
         <RefreshButton />
       </div>
-      <div className="grid grid-cols-2 items-start gap-3">
+      <div className="grid flex-1 grid-cols-2 gap-3">
         {PROVIDERS.map((p) => {
           const s = settings.find((x) => x.provider === p.key);
           return (
@@ -41,9 +41,6 @@ export async function ApiCreditsSection() {
           );
         })}
       </div>
-      <p className="text-xs text-muted">
-        잔액과 충전 시점은 입력값에서 사용액을 빼 계산한 추정치이며, 사용액은 UTC 날짜 기준입니다. Claude 사용액은 보통 4시간, 길면 24시간 늦게 반영됩니다. 실제 잔액과 다르면 다시 입력하세요.
-      </p>
     </section>
   );
 }
