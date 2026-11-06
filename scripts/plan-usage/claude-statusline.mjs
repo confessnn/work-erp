@@ -10,7 +10,8 @@ const STATE_FILE = join(DATA_DIR, "claude-last.json");
 
 const readJson = (read) => {
   try {
-    return JSON.parse(read());
+    // PowerShell로 파이프하면 맨 앞에 BOM이 붙을 수 있다
+    return JSON.parse(read().replace(/^﻿/, ""));
   } catch {
     return null;
   }
