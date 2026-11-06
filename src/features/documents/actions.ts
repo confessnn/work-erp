@@ -2,34 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
-import { decryptSecret } from "@/features/google-calendar/crypto";
-import { accessToken, DRIVE_SCOPE, hasScope } from "@/features/google-calendar/google-api";
-import { ensureFolders, getFile, shareWithLink, stopSharing, trashFile } from "./drive";
+import { driveContext } from "@/features/google-drive/context";
+import { getFile, shareWithLink, stopSharing, trashFile } from "./drive";
 import { isDocType } from "./types";
 import { schedulePush } from "@/features/google-calendar/push";
 import { todayInSeoul } from "@/lib/format";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
-
-/** 서버용 드라이브 토큰 + 폴더 (없으면 생성) */
-async function driveContext() {
-  const { supabase, userId } = await requireUser();
-  const { data: conn } = await supabase.from("google_connections").select("*").maybeSingle();
-  if (!conn) throw new Error("구글이 연결되어 있지 않습니다. '연동' 화면에서 연결해주세요.");
-  if (!hasScope(conn.scopes, DRIVE_SCOPE)) {
-    throw new Error("드라이브 권한이 없습니다. '연동' 화면에서 구글을 다시 연결해주세요.");
-  }
-  const refresh = decryptSecret(conn.refresh_token_enc);
-  const { token } = await accessToken(refresh, [DRIVE_SCOPE]);
-  const folders = await ensureFolders(token, { docs: conn.drive_docs_folder_id, bundles: conn.drive_bundles_folder_id });
-  if (folders.changed) {
-    await supabase
-      .from("google_connections")
-      .update({ drive_docs_folder_id: folders.docs, drive_bundles_folder_id: folders.bundles })
-      .eq("user_id", userId);
-  }
-  return { supabase, userId, token, refresh, folders };
-}
 
 const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? e.message : "알 수 없는 오류" });
 
