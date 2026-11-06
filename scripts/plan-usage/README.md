@@ -5,7 +5,9 @@ Claude·Codex 구독의 5시간·주간 한도는 서버에서 읽을 수 없어
 | 파일 | 하는 일 | 실행 |
 |---|---|---|
 | `claude-statusline.mjs` | Claude Code 상태줄 입력의 `rate_limits`를 표시하고 전송 | Claude Code `statusLine` 설정 |
-| `codex-report.mjs` | Codex app-server의 `account/rateLimits/read`를 읽어 전송 | Windows 작업 스케줄러 15분 간격 |
+| `codex-report.mjs` | 화면의 갱신 요청을 확인하고, 요청이 있거나 15분이 지났으면 Codex 한도를 읽어 전송 | Windows 작업 스케줄러 1분 간격 |
+
+화면의 `지금 갱신`은 요청만 남긴다. Codex는 1분 안에 갱신되고, Claude 값은 Claude Code를 쓸 때만 갱신된다.
 
 ## 설치 위치
 
