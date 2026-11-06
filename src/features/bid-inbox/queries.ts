@@ -23,6 +23,14 @@ export async function listBidNotices(tab: BidTab, category?: BidCategory): Promi
   return (data ?? []) as BidNotice[];
 }
 
+/** 공고 한 건. 주소에 잘못된 값이 들어오면 null */
+export async function getBidNotice(id: string): Promise<BidNotice | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("bid_notices").select("*").eq("id", id).maybeSingle();
+  return (data as BidNotice | null) ?? null;
+}
+
 export async function getBidSettings(): Promise<BidSettings | null> {
   const { supabase } = await requireUser();
   const { data } = await supabase.from("bid_settings").select("auto_fetch, last_fetched_at, last_fetch_result").maybeSingle();
