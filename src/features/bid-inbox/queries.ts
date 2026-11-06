@@ -1,0 +1,30 @@
+import "server-only";
+import { requireUser } from "@/lib/supabase/server";
+import type { BidCategory, BidNotice, BidSettings } from "./types";
+
+export type BidTab = "open" | "interested" | "dismissed" | "all";
+
+export async function listBidNotices(tab: BidTab, category?: BidCategory): Promise<BidNotice[]> {
+  const { supabase } = await requireUser();
+  let q = supabase.from("bid_notices").select("*");
+  if (category) q = q.eq("category", category);
+
+  if (tab === "open") {
+    // 마감 전이거나 마감일을 모르는 공고 (제외한 것은 빼고)
+    q = q.neq("status", "dismissed").or(`closes_at.gte.${new Date().toISOString()},closes_at.is.null`);
+  } else if (tab !== "all") {
+    q = q.eq("status", tab);
+  }
+
+  const { data, error } = tab === "open"
+    ? await q.order("closes_at", { ascending: true, nullsFirst: false }).limit(200)
+    : await q.order("noticed_at", { ascending: false, nullsFirst: false }).limit(200);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BidNotice[];
+}
+
+export async function getBidSettings(): Promise<BidSettings | null> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("bid_settings").select("auto_fetch, last_fetched_at, last_fetch_result").maybeSingle();
+  return (data as BidSettings | null) ?? null;
+}
