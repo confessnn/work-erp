@@ -9,6 +9,7 @@ export const NAV = [
   { href: "/lectures", label: "일정" },
   { href: "/documents", label: "서류함" },
   { href: "/baby", label: "아기" },
+  { href: "/bids", label: "공고" },
   { href: "/share-settings", label: "공유" },
   { href: "/integrations", label: "연동" },
 ] as const;
