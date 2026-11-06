@@ -6,9 +6,11 @@ export async function PlanUsageSection() {
   const usage = await listPlanUsage();
   const now = new Date().getTime();
   return (
-    <section className="space-y-3">
-      <h2 className="section-title">플랜 사용량</h2>
-      <div className="flex flex-wrap gap-3">
+    <section className="min-w-0 space-y-2">
+      <div className="flex min-h-8 items-center">
+        <h2 className="section-title">플랜 사용량</h2>
+      </div>
+      <div className="grid grid-cols-2 items-start gap-3">
         <PlanUsageCard title="Claude" hint="터미널의 Claude Code를 쓰면 들어옵니다." usage={usage.find((u) => u.provider === "claude")} now={now} />
         <PlanUsageCard title="Codex" hint="PC가 켜져 있으면 15분마다 들어옵니다." usage={usage.find((u) => u.provider === "codex")} now={now} />
       </div>

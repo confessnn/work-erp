@@ -7,8 +7,8 @@ const LEVEL_CLASS: Record<UsageBar["level"], string> = {
   high: "stroke-red-500",
 };
 
-const SIZE = 64;
-const STROKE = 7;
+const SIZE = 56;
+const STROKE = 6;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
@@ -34,7 +34,7 @@ function Donut({ bar }: { bar: UsageBar }) {
             />
           )}
         </svg>
-        <span className="absolute inset-0 flex items-center justify-center text-sm font-semibold tabular-nums">{percent}%</span>
+        <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold tabular-nums">{percent}%</span>
       </div>
       <div className="text-xs font-medium">{bar.label}</div>
       {bar.reset && <div className="break-keep text-[11px] leading-tight text-muted">{bar.reset}</div>}
@@ -52,8 +52,8 @@ export function PlanUsageCard({ title, hint, usage, now }: { title: string; hint
     : [];
 
   return (
-    <div className="w-full space-y-2 rounded-xl border border-line bg-surface p-3 sm:w-64">
-      <div className="flex items-baseline justify-between gap-2">
+    <div className="min-w-0 space-y-2 rounded-xl border border-line bg-surface p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2">
         <h3 className="text-sm font-semibold">
           {title}
           {usage?.plan && <span className="ml-1 font-normal text-muted">· {usage.plan}</span>}

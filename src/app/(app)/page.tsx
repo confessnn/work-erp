@@ -99,9 +99,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </section>
       )}
 
-      <PlanUsageSection />
-
-      <ApiCreditsSection />
+      <div className="grid items-start gap-4 md:grid-cols-2 md:gap-3">
+        <PlanUsageSection />
+        <ApiCreditsSection />
+      </div>
 
       <section className="space-y-3">
         <h2 className="section-title">다가오는 일정</h2>

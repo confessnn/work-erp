@@ -11,12 +11,12 @@ export async function ApiCreditsSection() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <section className="min-w-0 space-y-2">
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
         <h2 className="section-title">API 크레딧</h2>
         <RefreshButton />
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-2 items-start gap-3">
         {PROVIDERS.map((p) => {
           const s = settings.find((x) => x.provider === p.key);
           return (
