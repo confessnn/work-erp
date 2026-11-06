@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { saveCreditSettings } from "../actions";
 import type { ApiProvider, CreditSettings, ReloadMode } from "../types";
 
-const dollars = (cents: number | null | undefined) => (cents == null ? "" : String(cents / 100));
+const INPUT = "input px-2 py-1 text-sm tabular-nums";
+
+const dollars =(cents: number | null | undefined) => (cents == null ? "" : String(cents / 100));
 
 /** 잔액·자동 충전 설정. 잔액은 조회 API가 없어 Console 화면의 값을 직접 넣는다 */
 export function CreditSettingsForm({ provider, settings }: { provider: ApiProvider; settings: CreditSettings | undefined }) {
@@ -23,40 +25,37 @@ export function CreditSettingsForm({ provider, settings }: { provider: ApiProvid
     });
 
   return (
-    <details className="rounded-lg border border-line p-3 text-sm">
-      <summary className="cursor-pointer font-medium">잔액·자동 충전 설정</summary>
-      <div className="mt-3 space-y-3">
-        <label className="field">
+    <details className="rounded-lg border border-line px-2 py-1.5 text-xs">
+      <summary className="cursor-pointer font-medium">잔액·충전 설정</summary>
+      <div className="mt-2 space-y-2">
+        <label className="field text-xs">
           <span>현재 잔액 ($)</span>
-          <input className="input tabular-nums" inputMode="decimal" placeholder="다시 맞출 때만 입력" value={balance} onChange={(e) => setBalance(e.target.value)} />
-          <small className="text-muted">
-            Console의 잔액을 넣으세요.
-            {settings?.base_date && ` 마지막 입력: ${settings.base_date}, $${dollars(settings.base_balance_cents)}`}
+          <input className={INPUT} inputMode="decimal" placeholder="맞출 때만 입력" value={balance} onChange={(e) => setBalance(e.target.value)} />
+          <small className="text-[11px] leading-tight text-muted">
+            결제 화면의 잔액을 넣으세요.
+            {settings?.base_date && ` 마지막: ${settings.base_date}, $${dollars(settings.base_balance_cents)}`}
           </small>
         </label>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="field">
-            <span>충전 기준 ($)</span>
-            <input className="input tabular-nums" inputMode="decimal" placeholder="예: 2" value={threshold} onChange={(e) => setThreshold(e.target.value)} />
-            <small className="text-muted">잔액이 이 아래로 내려가면 충전</small>
-          </label>
-          <label className="field">
-            <span>{mode === "add" ? "충전 금액 ($)" : "채울 잔액 ($)"}</span>
-            <input className="input tabular-nums" inputMode="decimal" placeholder="예: 5" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </label>
-        </div>
-        <label className="field">
+        <label className="field text-xs">
+          <span>충전 기준 ($)</span>
+          <input className={INPUT} inputMode="decimal" placeholder="예: 2" value={threshold} onChange={(e) => setThreshold(e.target.value)} />
+        </label>
+        <label className="field text-xs">
+          <span>{mode === "add" ? "충전 금액 ($)" : "채울 잔액 ($)"}</span>
+          <input className={INPUT} inputMode="decimal" placeholder="예: 5" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </label>
+        <label className="field text-xs">
           <span>충전 방식</span>
-          <select className="input" value={mode} onChange={(e) => setMode(e.target.value as ReloadMode)}>
-            <option value="add">정해진 금액을 더함</option>
-            <option value="to">정해진 잔액까지 채움</option>
+          <select className={INPUT} value={mode} onChange={(e) => setMode(e.target.value as ReloadMode)}>
+            <option value="add">금액 더하기</option>
+            <option value="to">잔액까지 채우기</option>
           </select>
         </label>
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="button" disabled={pending} onClick={save} className={`btn-primary ${pending ? "opacity-50" : ""}`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" disabled={pending} onClick={save} className={`btn-primary px-3 py-1 text-xs ${pending ? "opacity-50" : ""}`}>
             {pending ? "저장 중…" : "저장"}
           </button>
-          {message && <span className="text-muted">{message}</span>}
+          {message && <span className="break-words text-muted">{message}</span>}
         </div>
       </div>
     </details>
