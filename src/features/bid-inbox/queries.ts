@@ -10,8 +10,8 @@ export async function listBidNotices(tab: BidTab, category?: BidCategory): Promi
   if (category) q = q.eq("category", category);
 
   if (tab === "open") {
-    // 마감 전이거나 마감일을 모르는 공고 (제외한 것은 빼고)
-    q = q.neq("status", "dismissed").or(`closes_at.gte.${new Date().toISOString()},closes_at.is.null`);
+    // 마감 전이거나 마감일을 모르는 공고 (제외한 것과 불가 판정은 빼고. 불가는 대부분 다른 지역 제한이라 전체 탭에서 본다)
+    q = q.neq("status", "dismissed").neq("verdict", "impossible").or(`closes_at.gte.${new Date().toISOString()},closes_at.is.null`);
   } else if (tab !== "all") {
     q = q.eq("status", tab);
   }

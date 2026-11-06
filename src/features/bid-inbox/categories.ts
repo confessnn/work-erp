@@ -20,7 +20,7 @@ export const CATEGORIES: CategoryDef[] = [
   {
     key: "cost",
     label: "원가계산",
-    operation: "getBidPblancListInfoServcPPSSrch",
+    operation: "getBidPblancListInfoServcPPSSrch02",
     searches: [keyword("원가")],
     accept: isCostNotice,
     judge: judgeCost,
@@ -28,10 +28,11 @@ export const CATEGORIES: CategoryDef[] = [
   {
     key: "hanil",
     label: "한일ENG",
-    operation: "getBidPblancListInfoCnstwkPPSSrch",
+    operation: "getBidPblancListInfoCnstwkPPSSrch02",
     // 공고명만으로는 놓치는 공사가 많아('보수공사', '개선사업' 등) 업종을 기본으로 찾는다
+    // 업종명은 가운뎃점 표기에 따라 결과가 0건이 되므로 코드(4992 도장ㆍ습식ㆍ방수ㆍ석공사업)로 찾는다
     searches: [
-      { params: { indstrytyNm: "도장ㆍ습식ㆍ방수ㆍ석공사업" }, matchedBy: "industry" },
+      { params: { indstrytyCd: "4992" }, matchedBy: "industry" },
       keyword("방수"),
       keyword("도장"),
     ],

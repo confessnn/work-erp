@@ -1,10 +1,14 @@
 import type { CategoryDef } from "./categories";
 import type { BidMatch, BidNoticeInput } from "./types";
 
-// 조달청_나라장터 입찰공고정보서비스 > 나라장터검색조건에 의한 입찰공고 조회
-const BASE_URL = "https://apis.data.go.kr/1230000/ad/BidPublicInfoService";
+// 조달청_나라장터 입찰공고정보서비스. 주소와 오퍼레이션 이름 모두 끝에 02가 붙는다
+const BASE_URL = "https://apis.data.go.kr/1230000/ad/BidPublicInfoService02";
+/** 입찰공고 목록 정보에 대한 참가가능지역 조회. 공고 목록에는 지역 제한 항목이 없다 */
+const REGION_OPERATION = "getBidPblancListInfoPrtcptPsblRgn02";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
+const REGION_PAGE_SIZE = 999;
+const REGION_MAX_PAGES = 30;
 
 /** 매번 최근 7일을 다시 조회한다. 저장 때 중복을 건너뛰므로 며칠 실패해도 빠지는 공고가 없다. */
 export const FETCH_WINDOW_DAYS = 7;
@@ -34,14 +38,13 @@ function price(v: unknown): number | null {
 }
 
 /** API 한 건 → 저장 값. 공고번호·공고명이 없거나 구분 조건에 맞지 않으면 null */
-export function toNotice(item: ApiItem, category: CategoryDef, matchedBy: BidMatch): BidNoticeInput | null {
+export function toNotice(item: ApiItem, category: CategoryDef, matchedBy: BidMatch, regionLimit: string | null = null): BidNoticeInput | null {
   const bidNo = text(item.bidNtceNo);
   const title = text(item.bidNtceNm);
   if (!bidNo || !title || !category.accept(title)) return null;
 
   const contractMethod = text(item.cntrctCnclsMthdNm);
   const awardMethod = text(item.sucsfbidMthdNm);
-  const regionLimit = text(item.prtcptLmtRgnNm);
   const presumedPrice = price(item.presmptPrce);
   const { verdict, reason } = category.judge({ contractMethod, awardMethod, regionLimit, presumedPrice, matchedBy });
 
@@ -83,6 +86,10 @@ export function parseResponse(body: string): { items: ApiItem[]; total: number }
   const denied = json.OpenAPI_ServiceResponse as { cmmMsgHeader?: { returnAuthMsg?: string; errMsg?: string } } | undefined;
   if (denied) throw new Error(`나라장터 API 오류: ${denied.cmmMsgHeader?.returnAuthMsg ?? denied.cmmMsgHeader?.errMsg ?? "인증 실패"}`);
 
+  // 요청 값이 틀리면 { "nkoneps.com.response.ResponseError": { header: {...} } } 로 온다
+  const failed = Object.entries(json).find(([name]) => name.endsWith("ResponseError"))?.[1] as { header?: { resultMsg?: string } } | undefined;
+  if (failed) throw new Error(`나라장터 API 오류: ${failed.header?.resultMsg ?? "요청 오류"}`);
+
   const res = (json.response ?? json) as { header?: { resultCode?: string; resultMsg?: string }; body?: { items?: unknown; totalCount?: unknown } };
   const code = res.header?.resultCode;
   if (code && code !== "00") throw new Error(`나라장터 API 오류: ${res.header?.resultMsg ?? code}`);
@@ -94,16 +101,16 @@ export function parseResponse(body: string): { items: ApiItem[]; total: number }
   return { items, total: Number(res.body?.totalCount) || 0 };
 }
 
-async function fetchSearch(operation: string, search: Record<string, string>, now: Date): Promise<ApiItem[]> {
+async function fetchSearch(operation: string, search: Record<string, string>, now: Date, pageSize = PAGE_SIZE, maxPages = MAX_PAGES): Promise<ApiItem[]> {
   const key = process.env.BID_API_KEY;
   if (!key) throw new Error("BID_API_KEY가 설정되지 않았습니다.");
 
   const begin = new Date(now.getTime() - FETCH_WINDOW_DAYS * 86_400_000);
   const all: ApiItem[] = [];
 
-  for (let page = 1; page <= MAX_PAGES; page++) {
+  for (let page = 1; page <= maxPages; page++) {
     const params = new URLSearchParams({
-      numOfRows: String(PAGE_SIZE),
+      numOfRows: String(pageSize),
       pageNo: String(page),
       type: "json",
       inqryDiv: "1", // 공고게시일시 기준
@@ -119,21 +126,59 @@ async function fetchSearch(operation: string, search: Record<string, string>, no
     });
     const { items, total } = parseResponse(await res.text());
     all.push(...items);
-    if (items.length === 0 || page * PAGE_SIZE >= total) break;
+    if (items.length === 0 || page * pageSize >= total) break;
   }
   return all;
 }
 
-/** 한 구분의 최근 공고. 같은 공고번호·차수는 앞선 검색(업종) 결과를 쓴다. */
-export async function fetchCategoryNotices(category: CategoryDef, now = new Date()): Promise<BidNoticeInput[]> {
-  const results = await Promise.all(category.searches.map((s) => fetchSearch(category.operation, s.params, now)));
-  const found = new Map<string, BidNoticeInput>();
-  results.forEach((items, i) => {
+/** 참가가능지역 행 → "공고번호-차수"별 지역 목록 */
+export function groupRegions(items: ApiItem[]): Map<string, string> {
+  const regions = new Map<string, string[]>();
+  for (const item of items) {
+    const region = text(item.prtcptPsblRgnNm);
+    if (!region) continue;
+    const id = `${text(item.bidNtceNo)}-${text(item.bidNtceOrd) ?? "000"}`;
+    regions.set(id, [...(regions.get(id) ?? []), region]);
+  }
+  return new Map([...regions].map(([id, list]) => [id, [...new Set(list)].join(", ")]));
+}
+
+/** 최근 공고의 참가가능지역 (공고 목록에 없어 따로 받는다) */
+export async function fetchRegionLimits(now = new Date()): Promise<Map<string, string>> {
+  return groupRegions(await fetchSearch(REGION_OPERATION, {}, now, REGION_PAGE_SIZE, REGION_MAX_PAGES));
+}
+
+type Found = { item: ApiItem; matchedBy: BidMatch; ord: string };
+
+/**
+ * 공고번호마다 최신 차수만 남긴다. 취소됐거나 이미 마감된 공고는 뺀다.
+ * 차수가 같으면 앞선 검색(업종) 결과를 쓴다.
+ */
+export function pickOpenNotices(results: { items: ApiItem[]; matchedBy: BidMatch }[], now: Date): Found[] {
+  const latest = new Map<string, Found>();
+  for (const { items, matchedBy } of results) {
     for (const item of items) {
-      const n = toNotice(item, category, category.searches[i].matchedBy);
-      const id = n && `${n.bid_no}-${n.bid_ord}`;
-      if (n && id && !found.has(id)) found.set(id, n);
+      const no = text(item.bidNtceNo);
+      if (!no) continue;
+      const ord = text(item.bidNtceOrd) ?? "000";
+      const prev = latest.get(no);
+      if (!prev || ord > prev.ord) latest.set(no, { item, matchedBy, ord });
     }
+  }
+  return [...latest.values()].filter(({ item }) => {
+    if (text(item.ntceKindNm)?.includes("취소")) return false;
+    const closesAt = kstToIso(item.bidClseDt);
+    return !closesAt || Date.parse(closesAt) > now.getTime();
   });
-  return [...found.values()];
+}
+
+/** 한 구분의 최근 공고 */
+export async function fetchCategoryNotices(category: CategoryDef, regions: Map<string, string>, now = new Date()): Promise<BidNoticeInput[]> {
+  const results = await Promise.all(
+    category.searches.map(async (s) => ({ items: await fetchSearch(category.operation, s.params, now), matchedBy: s.matchedBy })),
+  );
+  return pickOpenNotices(results, now).flatMap(({ item, matchedBy, ord }) => {
+    const n = toNotice(item, category, matchedBy, regions.get(`${text(item.bidNtceNo)}-${ord}`) ?? null);
+    return n ? [n] : [];
+  });
 }
