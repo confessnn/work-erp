@@ -44,6 +44,11 @@ export function statusText(usage) {
   return parts.join(" · ");
 }
 
+/** 작업은 1분마다 돌지만 Codex는 갱신 요청이 있거나 간격이 지났을 때만 읽는다 */
+export function shouldReadCodex(lastAt, requested, now, intervalMs) {
+  return requested || typeof lastAt !== "number" || now - lastAt >= intervalMs;
+}
+
 /** 값이 바뀌었거나 간격이 지났을 때만 보낸다 */
 export function shouldReport(last, usage, now, minIntervalMs) {
   if (!usage) return false;

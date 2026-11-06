@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { parseClaude, parseCodex, shouldReport, statusText } from "../../../scripts/plan-usage/parse.mjs";
+import { parseClaude, parseCodex, shouldReadCodex, shouldReport, statusText } from "../../../scripts/plan-usage/parse.mjs";
 import { usageBar } from "./view";
+
+describe("shouldReadCodex", () => {
+  it("요청이 있으면 바로 읽는다", () => {
+    expect(shouldReadCodex(990, true, 1000, 300)).toBe(true);
+  });
+  it("요청이 없으면 간격이 지나야 읽는다", () => {
+    expect(shouldReadCodex(990, false, 1000, 300)).toBe(false);
+    expect(shouldReadCodex(700, false, 1000, 300)).toBe(true);
+  });
+  it("처음이면 읽는다", () => {
+    expect(shouldReadCodex(null, false, 1000, 300)).toBe(true);
+  });
+});
 
 const NOW = Date.parse("2026-11-07T00:00:00Z");
 
