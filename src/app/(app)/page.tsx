@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { parsePeriod, PeriodNav } from "@/components/period-nav";
-import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
-import { PlanUsageSection } from "@/features/plan-usage/components/plan-usage-section";
 import { LectureTable } from "@/features/lectures/components/lecture-table";
 import { listLectures, listUpcoming } from "@/features/lectures/queries";
 import { flushPendingGoogleDeletes } from "@/features/google-calendar/push";
@@ -26,16 +24,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">대시보드</h1>
         <Link href="/lectures/new" className="btn-primary">+ 일정 추가</Link>
-      </div>
-
-      <div className="space-y-2">
-        <div className="grid gap-4 md:grid-cols-2 md:gap-3">
-          <PlanUsageSection />
-          <ApiCreditsSection />
-        </div>
-        <p className="text-xs text-muted">
-          플랜 사용량은 이 PC에서 받은 마지막 값이며, Codex 값은 ChatGPT 채팅 한도가 아니라 Codex 한도입니다. API 잔액과 충전 시점은 입력값에서 사용액을 빼 계산한 추정치이고, 사용액은 UTC 날짜 기준입니다. Claude 사용액은 보통 4시간, 길면 24시간 늦게 반영됩니다. 실제 잔액과 다르면 다시 입력하세요.
-        </p>
       </div>
 
       <section className="space-y-3">
