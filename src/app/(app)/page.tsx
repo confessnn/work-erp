@@ -99,9 +99,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </section>
       )}
 
-      <div className="grid items-start gap-4 md:grid-cols-2 md:gap-3">
-        <PlanUsageSection />
-        <ApiCreditsSection />
+      <div className="space-y-2">
+        <div className="grid gap-4 md:grid-cols-2 md:gap-3">
+          <PlanUsageSection />
+          <ApiCreditsSection />
+        </div>
+        <p className="text-xs text-muted">
+          플랜 사용량은 이 PC에서 받은 마지막 값이며, Codex 값은 ChatGPT 채팅 한도가 아니라 Codex 한도입니다. API 잔액과 충전 시점은 입력값에서 사용액을 빼 계산한 추정치이고, 사용액은 UTC 날짜 기준입니다. Claude 사용액은 보통 4시간, 길면 24시간 늦게 반영됩니다. 실제 잔액과 다르면 다시 입력하세요.
+        </p>
       </div>
 
       <section className="space-y-3">
