@@ -4,6 +4,9 @@ import { FetchButton } from "@/features/bid-inbox/components/fetch-button";
 import { NoticeList } from "@/features/bid-inbox/components/notice-list";
 import { getBidSettings, listBidNotices, type BidTab } from "@/features/bid-inbox/queries";
 
+// '요약 만들기'가 첨부를 받아 AI 요약까지 기다린다
+export const maxDuration = 300;
+
 const TABS: { v: BidTab; label: string }[] = [
   { v: "open", label: "마감 전" },
   { v: "interested", label: "관심" },

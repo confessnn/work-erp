@@ -7,6 +7,7 @@ import { setBidStatus } from "../actions";
 import { CATEGORY_LABEL } from "../categories";
 import { VERDICT_LABEL } from "../judge";
 import type { BidNotice, BidStatus, BidVerdict } from "../types";
+import { NoticeSummary } from "./notice-summary";
 
 const VERDICT_CLASS: Record<BidVerdict, string> = {
   possible: "badge-paid",
@@ -102,6 +103,8 @@ export function NoticeList({ notices }: { notices: BidNotice[] }) {
           </div>
 
           {n.verdict_reason && <p className="text-xs text-muted">1차 판정 근거: {n.verdict_reason}</p>}
+
+          {n.category === "cost" && n.verdict !== "na" && <NoticeSummary notice={n} />}
         </li>
       ))}
     </ul>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { fetchAllNotices } from "./fetch-all";
+import { summarizeNotice } from "./summarize";
 import type { BidStatus } from "./types";
 
 /** '지금 수신' 버튼. 처음 누르면 설정 행이 생겨 매일 자동 수신도 시작된다. */
@@ -52,6 +53,24 @@ export async function fetchBidsNow(): Promise<{ message: string; failed?: boolea
   );
   revalidatePath("/bids");
   return { message, failed };
+}
+
+/** '요약 만들기' 버튼. 아침 수신 전이거나 실패한 공고를 바로 요약한다 */
+export async function summarizeBid(id: string) {
+  const { supabase } = await requireUser();
+  const { data: notice, error } = await supabase.from("bid_notices").select("bid_no, bid_ord, title").eq("id", id).single();
+  if (error) throw new Error(error.message);
+
+  const saved = await summarizeNotice(notice.bid_no, notice.bid_ord, notice.title).then(
+    (r) => ({ summary: r.summary, summary_files: r.files, summary_error: null }),
+    (e) => ({ summary: null, summary_files: null, summary_error: e instanceof Error ? e.message : "알 수 없는 오류" }),
+  );
+  const { error: e2 } = await supabase
+    .from("bid_notices")
+    .update({ ...saved, summarized_at: new Date().toISOString() })
+    .eq("id", id);
+  if (e2) throw new Error(e2.message);
+  revalidatePath("/bids");
 }
 
 export async function setBidStatus(id: string, status: BidStatus) {
