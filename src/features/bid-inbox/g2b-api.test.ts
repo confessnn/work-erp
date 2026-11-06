@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CATEGORIES } from "./categories";
-import { kstToIso, parseResponse, toApiDate, toNotice } from "./g2b-api";
+import { groupRegions, kstToIso, parseResponse, pickOpenNotices, toApiDate, toNotice } from "./g2b-api";
 
 const [COST, HANIL] = CATEGORIES;
 
@@ -56,6 +56,53 @@ describe("toNotice", () => {
     expect(toNotice({ ...ITEM, presmptPrce: "" }, COST, "keyword")?.presumed_price).toBeNull();
     expect(toNotice({ ...ITEM, presmptPrce: "0" }, COST, "keyword")?.presumed_price).toBeNull();
   });
+  it("따로 받은 참가가능지역으로 판정한다", () => {
+    const hanil = { ...ITEM, bidNtceNm: "옥상 방수공사", cntrctCnclsMthdNm: "수의계약" };
+    expect(toNotice(hanil, HANIL, "industry", "충청남도 홍성군")).toMatchObject({ region_limit: "충청남도 홍성군", verdict: "impossible" });
+    expect(toNotice(hanil, HANIL, "industry", "충청남도 천안시")).toMatchObject({ verdict: "possible" });
+  });
+});
+
+describe("groupRegions", () => {
+  it("공고번호·차수별로 지역을 모으고 중복을 없앤다", () => {
+    const regions = groupRegions([
+      { bidNtceNo: "A", bidNtceOrd: "000", prtcptPsblRgnNm: "충청남도" },
+      { bidNtceNo: "A", bidNtceOrd: "000", prtcptPsblRgnNm: "대전광역시" },
+      { bidNtceNo: "A", bidNtceOrd: "000", prtcptPsblRgnNm: "충청남도" },
+      { bidNtceNo: "A", bidNtceOrd: "001", prtcptPsblRgnNm: "세종특별자치시" },
+      { bidNtceNo: "B", bidNtceOrd: "000", prtcptPsblRgnNm: "" },
+    ]);
+    expect(regions.get("A-000")).toBe("충청남도, 대전광역시");
+    expect(regions.get("A-001")).toBe("세종특별자치시");
+    expect(regions.has("B-000")).toBe(false);
+  });
+});
+
+describe("pickOpenNotices", () => {
+  const NOW = new Date("2026-11-06T10:00:00+09:00");
+  const pick = (items: Record<string, unknown>[]) => pickOpenNotices([{ items, matchedBy: "industry" }], NOW);
+
+  it("취소공고는 원래 차수까지 뺀다", () => {
+    expect(pick([ITEM, { ...ITEM, bidNtceOrd: "001", ntceKindNm: "취소공고" }])).toHaveLength(0);
+  });
+  it("같은 공고는 최신 차수만 남긴다", () => {
+    const found = pick([ITEM, { ...ITEM, bidNtceOrd: "001", ntceKindNm: "변경공고" }]);
+    expect(found.map((f) => f.ord)).toEqual(["001"]);
+  });
+  it("이미 마감된 공고는 뺀다", () => {
+    expect(pick([{ ...ITEM, bidClseDt: "2026-11-06 09:59:00" }])).toHaveLength(0);
+  });
+  it("차수가 같으면 앞선 검색 결과를 쓴다", () => {
+    const found = pickOpenNotices(
+      [
+        { items: [ITEM], matchedBy: "industry" },
+        { items: [ITEM], matchedBy: "keyword" },
+      ],
+      NOW,
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0].matchedBy).toBe("industry");
+  });
 });
 
 describe("parseResponse", () => {
@@ -73,5 +120,6 @@ describe("parseResponse", () => {
     expect(() => parseResponse(denied)).toThrow("SERVICE_KEY_IS_NOT_REGISTERED_ERROR");
     expect(() => parseResponse(JSON.stringify({ response: { header: { resultCode: "07", resultMsg: "입력범위값 초과" } } }))).toThrow("입력범위값 초과");
     expect(() => parseResponse("<OpenAPI_ServiceResponse><returnAuthMsg>LIMITED</returnAuthMsg></OpenAPI_ServiceResponse>")).toThrow("LIMITED");
+    expect(() => parseResponse(JSON.stringify({ "nkoneps.com.response.ResponseError": { header: { resultCode: "08", resultMsg: "필수값 입력 에러" } } }))).toThrow("필수값 입력 에러");
   });
 });
