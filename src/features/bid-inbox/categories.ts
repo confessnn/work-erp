@@ -1,4 +1,4 @@
-import { isCostNotice, judgeCost, judgeHanil, type JudgeInput } from "./judge";
+import { costRegionOk, isCostNotice, judgeCost, judgeHanil, type JudgeInput } from "./judge";
 import type { BidCategory, BidMatch, BidVerdict } from "./types";
 
 type Search = { params: Record<string, string>; matchedBy: BidMatch };
@@ -11,6 +11,8 @@ export type CategoryDef = {
   /** 앞의 검색이 우선한다. 같은 공고가 업종·공고명 양쪽에 잡히면 앞쪽 결과를 쓴다 */
   searches: Search[];
   accept: (title: string) => boolean;
+  /** 있으면 참가가능지역 제한이 맞지 않는 공고를 아예 저장하지 않는다 (제한이 없는 공고는 통과) */
+  regionOk?: (region: string) => boolean;
   judge: (input: JudgeInput) => { verdict: BidVerdict; reason: string };
 };
 
@@ -23,6 +25,7 @@ export const CATEGORIES: CategoryDef[] = [
     operation: "getBidPblancListInfoServcPPSSrch02",
     searches: [keyword("원가")],
     accept: isCostNotice,
+    regionOk: costRegionOk,
     judge: judgeCost,
   },
   {

@@ -19,16 +19,22 @@ export type JudgeInput = {
 type Judgment = { verdict: BidVerdict; reason: string };
 
 /**
- * 원가계산: 충북대학교산학협력단(충북 소재) 기준 1차 판정. 공고 목록 정보만 보므로 참고용이며,
- * 참가자격은 공고문에서 다시 확인해야 한다.
+ * 충북대학교산학협력단(청주 소재)이 들어갈 수 있는 참가가능지역인지.
+ * 충북 전체·청주·전국만 통과한다. '충청북도 충주시'처럼 다른 시·군으로 좁힌 제한은 안 된다.
  */
-export function judgeCost({ contractMethod, awardMethod, regionLimit }: JudgeInput): Judgment {
+export function costRegionOk(region: string) {
+  return region.split(",").some((r) => /청주|전국/.test(r) || /^(충북|충청북도)$/.test(r.trim()));
+}
+
+/**
+ * 원가계산: 충북대학교산학협력단 기준 1차 판정. 지역이 맞지 않는 공고는 판정 전에 걸러진다(costRegionOk).
+ * 공고 목록 정보만 보므로 참고용이며, 참가자격은 공고문에서 다시 확인해야 한다.
+ */
+export function judgeCost({ contractMethod, awardMethod }: JudgeInput): Judgment {
   const method = contractMethod ?? "";
   const award = awardMethod ?? "";
-  const region = (regionLimit ?? "").trim();
 
   if (/수의|견적|지명/.test(method)) return { verdict: "na", reason: `${method}: 공개 투찰 대상 아님` };
-  if (region && !/충북|충청북도|전국/.test(region)) return { verdict: "impossible", reason: `지역 제한: ${region}` };
   if (/제한/.test(method)) return { verdict: "check", reason: "제한경쟁: 공고문에서 참가자격 확인 필요" };
   if (/일반/.test(method) || /협상/.test(award) || /협상/.test(method)) {
     return { verdict: "possible", reason: `${method || award}: 공고문 검토 후 투찰 가능` };
