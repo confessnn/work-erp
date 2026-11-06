@@ -56,6 +56,12 @@ describe("toNotice", () => {
     expect(toNotice({ ...ITEM, presmptPrce: "" }, COST, "keyword")?.presumed_price).toBeNull();
     expect(toNotice({ ...ITEM, presmptPrce: "0" }, COST, "keyword")?.presumed_price).toBeNull();
   });
+  it("원가계산은 참가가능지역이 맞지 않으면 저장하지 않는다", () => {
+    expect(toNotice(ITEM, COST, "keyword", "서울특별시")).toBeNull();
+    expect(toNotice(ITEM, COST, "keyword", "충청북도 충주시")).toBeNull();
+    expect(toNotice(ITEM, COST, "keyword", "충청북도 청주시")).toMatchObject({ region_limit: "충청북도 청주시", verdict: "check" });
+    expect(toNotice(ITEM, COST, "keyword", null)).toMatchObject({ region_limit: null });
+  });
   it("따로 받은 참가가능지역으로 판정한다", () => {
     const hanil = { ...ITEM, bidNtceNm: "옥상 방수공사", cntrctCnclsMthdNm: "수의계약" };
     expect(toNotice(hanil, HANIL, "industry", "충청남도 홍성군")).toMatchObject({ region_limit: "충청남도 홍성군", verdict: "impossible" });

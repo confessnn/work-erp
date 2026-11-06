@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCostNotice, judgeCost, judgeHanil, type JudgeInput } from "./judge";
+import { costRegionOk, isCostNotice, judgeCost, judgeHanil, type JudgeInput } from "./judge";
 
 const base: JudgeInput = { contractMethod: null, awardMethod: null, regionLimit: null, presumedPrice: null, matchedBy: "industry" };
 
@@ -15,6 +15,20 @@ describe("isCostNotice", () => {
   });
 });
 
+describe("costRegionOk", () => {
+  it("충북 전체·청주·전국은 통과", () => {
+    for (const r of ["충청북도", "충북", "충청북도 청주시", "청주시", "전국"]) expect(costRegionOk(r)).toBe(true);
+  });
+  it("다른 지역과 충북의 다른 시·군은 막는다", () => {
+    for (const r of ["서울특별시", "충청남도", "충청북도 충주시", "세종특별자치시"]) expect(costRegionOk(r)).toBe(false);
+  });
+  it("여러 지역 중 하나라도 맞으면 통과", () => {
+    expect(costRegionOk("대전광역시, 충청북도")).toBe(true);
+    expect(costRegionOk("충청북도 충주시, 충청북도 청주시")).toBe(true);
+    expect(costRegionOk("대전광역시, 충청북도 제천시")).toBe(false);
+  });
+});
+
 describe("judgeCost", () => {
   it("일반경쟁은 가능", () => {
     expect(judgeCost({ ...base, contractMethod: "일반경쟁" }).verdict).toBe("possible");
@@ -24,12 +38,6 @@ describe("judgeCost", () => {
   });
   it("제한경쟁은 자격 확인", () => {
     expect(judgeCost({ ...base, contractMethod: "제한경쟁", awardMethod: "협상에 의한 계약" }).verdict).toBe("check");
-  });
-  it("충북 외 지역 제한은 불가", () => {
-    expect(judgeCost({ ...base, contractMethod: "제한경쟁", regionLimit: "서울특별시" }).verdict).toBe("impossible");
-  });
-  it("충북 지역 제한은 불가가 아니다", () => {
-    expect(judgeCost({ ...base, contractMethod: "제한경쟁", regionLimit: "충청북도" }).verdict).toBe("check");
   });
   it("수의계약은 해당 없음", () => {
     expect(judgeCost({ ...base, contractMethod: "수의계약" }).verdict).toBe("na");

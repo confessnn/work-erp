@@ -37,11 +37,12 @@ function price(v: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
 }
 
-/** API 한 건 → 저장 값. 공고번호·공고명이 없거나 구분 조건에 맞지 않으면 null */
+/** API 한 건 → 저장 값. 공고번호·공고명이 없거나 구분·지역 조건에 맞지 않으면 null */
 export function toNotice(item: ApiItem, category: CategoryDef, matchedBy: BidMatch, regionLimit: string | null = null): BidNoticeInput | null {
   const bidNo = text(item.bidNtceNo);
   const title = text(item.bidNtceNm);
   if (!bidNo || !title || !category.accept(title)) return null;
+  if (regionLimit && category.regionOk && !category.regionOk(regionLimit)) return null;
 
   const contractMethod = text(item.cntrctCnclsMthdNm);
   const awardMethod = text(item.sucsfbidMthdNm);

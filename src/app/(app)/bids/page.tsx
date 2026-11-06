@@ -32,7 +32,7 @@ export default async function BidsPage({ searchParams }: PageProps<"/bids">) {
       </div>
 
       <p className="text-sm text-muted">
-        원가계산 용역과 한일ENG 공사(나라장터·국방부) 공고를 매일 아침 받아 옵니다. 판정은 목록 정보만 본 1차 결과이니, 투찰 전에 공고문을 확인하세요. 불가 판정 공고는 전체 탭에서 볼 수 있습니다.
+        원가계산 용역과 한일ENG 공사(나라장터·국방부) 공고를 매일 아침 받아 옵니다. 판정은 목록 정보만 본 1차 결과이니, 투찰 전에 공고문을 확인하세요. 원가계산은 지역 제한이 없거나 충북·청주·전국인 공고만 받습니다. 한일ENG의 불가 판정 공고는 전체 탭에서 볼 수 있습니다.
         {settings?.last_fetch_result && (
           <>
             <br />
