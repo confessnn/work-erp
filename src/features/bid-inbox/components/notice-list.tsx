@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { won } from "@/lib/format";
 import { setBidStatus } from "../actions";
@@ -90,6 +91,11 @@ export function NoticeList({ notices }: { notices: BidNotice[] }) {
             {n.closes_at && <span className="tabular-nums text-muted">마감 {dateTime(n.closes_at)}</span>}
             <span className="text-muted tabular-nums">{n.bid_no}-{n.bid_ord}</span>
             <div className="ml-auto flex gap-2">
+              {n.category === "cost" && (
+                <Link href={`/bids/calculator?notice=${n.id}`} className="chip">
+                  입찰가 계산
+                </Link>
+              )}
               <StatusButton id={n.id} status={n.status} to="interested" label="관심" />
               <StatusButton id={n.id} status={n.status} to="dismissed" label="제외" />
             </div>
