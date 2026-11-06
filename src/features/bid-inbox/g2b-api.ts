@@ -102,30 +102,32 @@ export function parseResponse(body: string): { items: ApiItem[]; total: number }
   return { items, total: Number(res.body?.totalCount) || 0 };
 }
 
-async function fetchSearch(operation: string, search: Record<string, string>, now: Date, pageSize = PAGE_SIZE, maxPages = MAX_PAGES): Promise<ApiItem[]> {
+/** 오퍼레이션 한 번 호출 */
+export async function callApi(operation: string, params: Record<string, string>) {
   const key = process.env.BID_API_KEY;
   if (!key) throw new Error("BID_API_KEY가 설정되지 않았습니다.");
+  // 이미 인코딩된 키를 붙여 넣어도 동작하도록 % 가 있으면 그대로 쓴다
+  const serviceKey = key.includes("%") ? key : encodeURIComponent(key);
+  const res = await fetch(`${BASE_URL}/${operation}?serviceKey=${serviceKey}&${new URLSearchParams({ type: "json", ...params })}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  return parseResponse(await res.text());
+}
 
+async function fetchSearch(operation: string, search: Record<string, string>, now: Date, pageSize = PAGE_SIZE, maxPages = MAX_PAGES): Promise<ApiItem[]> {
   const begin = new Date(now.getTime() - FETCH_WINDOW_DAYS * 86_400_000);
   const all: ApiItem[] = [];
 
   for (let page = 1; page <= maxPages; page++) {
-    const params = new URLSearchParams({
+    const { items, total } = await callApi(operation, {
       numOfRows: String(pageSize),
       pageNo: String(page),
-      type: "json",
       inqryDiv: "1", // 공고게시일시 기준
       inqryBgnDt: toApiDate(begin),
       inqryEndDt: toApiDate(now),
       ...search,
     });
-    // 이미 인코딩된 키를 붙여 넣어도 동작하도록 % 가 있으면 그대로 쓴다
-    const serviceKey = key.includes("%") ? key : encodeURIComponent(key);
-    const res = await fetch(`${BASE_URL}/${operation}?serviceKey=${serviceKey}&${params}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
-    });
-    const { items, total } = parseResponse(await res.text());
     all.push(...items);
     if (items.length === 0 || page * pageSize >= total) break;
   }

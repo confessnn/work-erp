@@ -29,10 +29,15 @@ export type BidNoticeInput = {
   verdict_reason: string;
 };
 
+export type BidFile = { name: string; url: string };
+
 export type BidNotice = BidNoticeInput & {
   id: string;
   status: BidStatus;
   created_at: string;
+  summary: string | null;
+  summary_files: BidFile[] | null;
+  summary_error: string | null;
 };
 
 export type BidSettings = {
