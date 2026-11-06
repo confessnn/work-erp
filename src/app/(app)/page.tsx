@@ -2,6 +2,7 @@ import Link from "next/link";
 import { parsePeriod, PeriodNav } from "@/components/period-nav";
 import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
+import { PlanUsageSection } from "@/features/plan-usage/components/plan-usage-section";
 import { LectureTable } from "@/features/lectures/components/lecture-table";
 import { listLectures, listUpcoming } from "@/features/lectures/queries";
 import { flushPendingGoogleDeletes } from "@/features/google-calendar/push";
@@ -97,6 +98,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           </table>
         </section>
       )}
+
+      <PlanUsageSection />
 
       <ApiCreditsSection />
 
