@@ -152,8 +152,8 @@ function Form({ draftKey, initial }: { draftKey: string; initial: Draft }) {
           {d.staff.map((s, i) => (
             <div key={s.label} className="contents">
               <span>{s.label}</span>
-              <input aria-label={`${s.label} 인원`} className="input tabular-nums" inputMode="decimal" value={s.people} onChange={(e) => setStaff(i, "people", e.target.value)} />
-              <input aria-label={`${s.label} 월수`} className="input tabular-nums" inputMode="decimal" value={s.months} onChange={(e) => setStaff(i, "months", e.target.value)} />
+              <input aria-label={`${s.label} 인원`} className="input px-2 text-center tabular-nums" inputMode="decimal" value={s.people} onChange={(e) => setStaff(i, "people", e.target.value)} />
+              <input aria-label={`${s.label} 월수`} className="input px-2 text-center tabular-nums" inputMode="decimal" value={s.months} onChange={(e) => setStaff(i, "months", e.target.value)} />
               <input aria-label={`${s.label} 월 단가`} className="input tabular-nums" inputMode="numeric" value={s.monthlyPay} onChange={(e) => setStaff(i, "monthlyPay", e.target.value)} />
             </div>
           ))}
