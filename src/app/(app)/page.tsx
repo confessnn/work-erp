@@ -23,7 +23,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">대시보드</h1>
+        <h1 className="page-title">대시보드</h1>
         <Link href="/lectures/new" className="btn-primary">+ 일정 추가</Link>
       </div>
 
@@ -46,15 +46,15 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       <PeriodNav base="/" period={period} />
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="총 강의료 (세전)" value={won(s.grossTotal)} sub={`${s.count}건 · ${hoursLabel(s.totalHours)}`} />
-        <Stat label="예상 수령액 (세후)" value={won(s.expectedNet)} sub={`원천징수 ${won(s.taxTotal)}`} />
+        <Stat label="총 강의료 (세전)" value={won(s.grossTotal)} sub={`${s.count}건 · ${hoursLabel(s.totalHours)}`} tone="lavender" />
+        <Stat label="예상 수령액 (세후)" value={won(s.expectedNet)} sub={`원천징수 ${won(s.taxTotal)}`} tone="ochre" />
         <Stat
           label="수령한 금액"
           value={won(s.receivedTotal)}
           sub={`${s.paidCount}건${diff !== 0 ? ` · 예상 대비 ${diff > 0 ? "+" : ""}${won(diff)}` : ""}`}
-          tone="success"
+          tone="mint"
         />
-        <Stat label="미수령 금액" value={won(s.unpaidTotal)} sub={`${s.unpaidCount}건`} tone="warn" />
+        <Stat label="미수령 금액" value={won(s.unpaidTotal)} sub={`${s.unpaidCount}건`} tone="peach" />
       </section>
 
       {s.expectedNet > 0 && (
@@ -117,13 +117,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   );
 }
 
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "success" | "warn" }) {
-  const color = tone === "success" ? "text-success" : tone === "warn" ? "text-warn" : "";
+const STAT_TONE = { lavender: "bg-lavender", ochre: "bg-ochre", mint: "bg-mint", peach: "bg-peach" };
+
+function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: keyof typeof STAT_TONE }) {
   return (
-    <div className="card">
-      <div className="text-sm text-muted">{label}</div>
-      <div className={`mt-1 text-xl font-bold tabular-nums ${color}`}>{value}</div>
-      {sub && <div className="mt-1 text-xs text-muted">{sub}</div>}
+    <div className={`rounded-2xl p-4 sm:p-5 ${STAT_TONE[tone]}`}>
+      <div className="text-sm font-medium">{label}</div>
+      <div className="mt-1 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">{value}</div>
+      {sub && <div className="mt-1 text-xs">{sub}</div>}
     </div>
   );
 }

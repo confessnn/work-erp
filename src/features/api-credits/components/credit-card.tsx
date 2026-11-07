@@ -31,7 +31,7 @@ function Outlook({ settings, f }: { settings: CreditSettings | undefined; f: For
 /** 서비스 하나의 크레딧 요약 */
 export function CreditCard({ provider, label, keyName, hasKey, settings, forecast: f }: { provider: ApiProvider; label: string; keyName: string; hasKey: boolean; settings: CreditSettings | undefined; forecast: Forecast }) {
   return (
-    <div className="flex min-h-56 min-w-0 flex-col gap-2 rounded-xl border border-line bg-surface p-3">
+    <div className="flex min-h-56 min-w-0 flex-col gap-2 rounded-2xl border border-line bg-surface p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-2">
         <h3 className="text-sm font-semibold">{label}</h3>
         {settings?.last_synced_at && <span className="text-[11px] text-muted">{synced(settings.last_synced_at)}</span>}
@@ -60,7 +60,7 @@ export function CreditCard({ provider, label, keyName, hasKey, settings, forecas
       <Outlook settings={settings} f={f} />
 
       {!hasKey && <p className="text-xs break-words text-warn">관리자 키 {keyName} 미등록</p>}
-      {settings?.last_sync_error && <p className="text-xs break-words text-red-500">조회 실패: {settings.last_sync_error}</p>}
+      {settings?.last_sync_error && <p className="text-xs break-words text-danger">조회 실패: {settings.last_sync_error}</p>}
 
       <div className="mt-auto">
         <CreditSettingsForm provider={provider} settings={settings} />

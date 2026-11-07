@@ -9,7 +9,7 @@ export function FetchButton() {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {result && <span className={`text-sm ${result.failed ? "text-red-600" : "text-muted"}`}>{result.message}</span>}
+      {result && <span className={`text-sm ${result.failed ? "text-danger" : "text-muted"}`}>{result.message}</span>}
       <button
         type="button"
         disabled={pending}

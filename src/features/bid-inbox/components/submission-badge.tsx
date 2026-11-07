@@ -1,8 +1,8 @@
 import { SUBMISSION_HINT, SUBMISSION_LABEL, submissionKind, type SubmissionKind } from "../submission";
 
 const CLASS: Record<SubmissionKind, string> = {
-  proposal: "bg-violet-100 text-violet-800",
-  price: "bg-sky-100 text-sky-800",
+  proposal: "bg-lavender/40 text-fg",
+  price: "bg-mint/50 text-fg",
   unknown: "text-muted",
 };
 

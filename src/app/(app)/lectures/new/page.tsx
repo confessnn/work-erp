@@ -7,7 +7,7 @@ export default async function NewLecturePage() {
   const organizations = await listOrganizations();
   return (
     <>
-      <h1 className="text-2xl font-bold">일정 추가</h1>
+      <h1 className="page-title">일정 추가</h1>
       <LectureForm
         action={createLecture}
         organizations={organizations}

@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "개인정보처리방침 · work-erp
 export default function PrivacyPage() {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 space-y-4 px-4 py-10 leading-relaxed">
-      <h1 className="text-2xl font-bold">개인정보처리방침</h1>
+      <h1 className="page-title">개인정보처리방침</h1>
       <p className="text-sm text-muted">시행일: 2026년 11월 5일</p>
 
       <h2 className="section-title">1. 운영 목적</h2>

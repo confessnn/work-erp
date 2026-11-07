@@ -24,7 +24,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
 
   return (
     <>
-      <h1 className="text-2xl font-bold">연동</h1>
+      <h1 className="page-title">연동</h1>
       {msg && <p className={`card text-sm ${msg.ok ? "text-success" : "text-danger"}`}>{msg.text}</p>}
 
       <section className="card space-y-4">
@@ -37,7 +37,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
         </div>
 
         {conn && !hasScope(conn.scopes, DRIVE_SCOPE) && (
-          <div className="rounded-lg border border-warn/40 p-3 text-sm">
+          <div className="rounded-xl border border-warn/40 p-3 text-sm">
             <p className="font-medium">서류함(구글 드라이브) 권한 추가가 필요합니다</p>
             <p className="mt-1 text-muted">
               아래 버튼으로 한 번 다시 연결하고, 구글 권한 화면에서 <b>캘린더</b>와 <b>드라이브</b> 항목 모두 체크해주세요. 기존 일정은
@@ -51,7 +51,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
         ) : configured ? (
           <a href="/api/google/connect" className="btn-primary">구글 캘린더 연결</a>
         ) : (
-          <p className="rounded-lg bg-bg p-3 text-sm text-muted">
+          <p className="rounded-xl bg-bg p-3 text-sm text-muted">
             관리자 설정(구글 클라우드 OAuth 클라이언트)이 아직 없습니다. 설정이 끝나면 여기에 &apos;구글 캘린더 연결&apos; 버튼이 나타납니다.
           </p>
         )}

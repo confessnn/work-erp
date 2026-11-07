@@ -13,7 +13,7 @@ import { NoticeSummary } from "./notice-summary";
 const VERDICT_CLASS: Record<BidVerdict, string> = {
   possible: "badge-paid",
   check: "badge-unpaid",
-  impossible: "bg-red-100 text-red-700",
+  impossible: "bg-danger/10 text-danger",
   na: "text-muted",
 };
 

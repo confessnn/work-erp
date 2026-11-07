@@ -25,7 +25,7 @@ export function CreditSettingsForm({ provider, settings }: { provider: ApiProvid
     });
 
   return (
-    <details className="rounded-lg border border-line px-2 py-1.5 text-xs">
+    <details className="rounded-xl border border-line px-2 py-1.5 text-xs">
       <summary className="cursor-pointer font-medium">잔액·충전 설정</summary>
       <div className="mt-2 space-y-2">
         <label className="field text-xs">

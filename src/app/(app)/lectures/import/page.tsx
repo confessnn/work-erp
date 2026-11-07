@@ -32,7 +32,7 @@ export default async function ImportPage({ searchParams }: PageProps<"/lectures/
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">캘린더에서 불러오기</h1>
+        <h1 className="page-title">캘린더에서 불러오기</h1>
         <Link href="/lectures" className="text-sm text-muted hover:underline">← 일정 목록</Link>
       </div>
 
@@ -93,7 +93,7 @@ export default async function ImportPage({ searchParams }: PageProps<"/lectures/
 
 function GoogleHelp() {
   return (
-    <div className="rounded-lg bg-bg p-3 text-sm leading-relaxed">
+    <div className="rounded-xl bg-bg p-3 text-sm leading-relaxed">
       <p className="font-medium">구글 캘린더 주소 찾는 법 (PC 웹)</p>
       <ol className="mt-1 list-decimal space-y-0.5 pl-5 text-muted">
         <li>calendar.google.com → 왼쪽 &apos;내 캘린더&apos;에서 캘린더 이름 옆 ⋮ → 설정 및 공유</li>

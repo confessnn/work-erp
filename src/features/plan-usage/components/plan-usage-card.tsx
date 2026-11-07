@@ -52,7 +52,7 @@ export function PlanUsageCard({ title, hint, usage, now }: { title: string; hint
     : [];
 
   return (
-    <div className="flex min-h-56 min-w-0 flex-col gap-2 rounded-xl border border-line bg-surface p-3">
+    <div className="flex min-h-56 min-w-0 flex-col gap-2 rounded-2xl border border-line bg-surface p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-2">
         <h3 className="text-sm font-semibold">
           {title}

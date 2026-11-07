@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "work-erp 소개" };
 export default function AboutPage() {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 space-y-4 px-4 py-10 leading-relaxed">
-      <h1 className="text-2xl font-bold">work-erp</h1>
+      <h1 className="page-title">work-erp</h1>
       <p>
         work-erp는 강사 개인이 자신의 강의 일정과 강의료(원천징수, 수령 여부)를 관리하기 위해 만든 개인용 웹 앱입니다.
         가입한 본인만 사용하며, 일반에 서비스하지 않습니다.

@@ -44,16 +44,16 @@ export function PeriodNav({
         {year}년{month ? ` ${month}월` : " 전체"}
       </span>
       <Link href={href(base, next, extra)} className="btn-ghost" aria-label="다음">›</Link>
-      <div className="ml-auto flex rounded-lg border border-line p-0.5 text-sm">
+      <div className="ml-auto flex rounded-full border border-line bg-surface p-0.5 text-sm">
         <Link
           href={href(base, { year, month: month ?? 1 }, extra)}
-          className={`rounded-md px-3 py-1 ${month ? "bg-accent text-white" : ""}`}
+          className={`rounded-full px-4 py-1.5 ${month ? "bg-accent-soft font-semibold" : "text-muted"}`}
         >
           월별
         </Link>
         <Link
           href={href(base, { year }, extra)}
-          className={`rounded-md px-3 py-1 ${month ? "" : "bg-accent text-white"}`}
+          className={`rounded-full px-4 py-1.5 ${month ? "text-muted" : "bg-accent-soft font-semibold"}`}
         >
           연도별
         </Link>

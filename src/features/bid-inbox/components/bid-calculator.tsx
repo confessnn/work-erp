@@ -209,7 +209,7 @@ function Form({ draftKey, initial }: { draftKey: string; initial: Draft }) {
                     </div>
                   )}
                   {cost.cost > 0 && (
-                    <div className={margin < 0 ? "font-semibold text-red-500" : ""}>
+                    <div className={margin < 0 ? "font-semibold text-danger" : ""}>
                       <span>원가 대비</span>
                       <span>{margin < 0 ? `원가 미달 ${won(-margin)}` : `+${won(margin)} (${pct((margin / cost.cost) * 100)})`}</span>
                     </div>
