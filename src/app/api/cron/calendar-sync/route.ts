@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { collectAutoImport, type ExistingLecture, type ImportSettings } from "@/features/calendar-import/sync";
+import { rememberedFees, withRememberedFee, type FeeRecord } from "@/features/lectures/fee-memory";
 import { todayInSeoul } from "@/lib/format";
 
 export const maxDuration = 60;
@@ -38,7 +39,12 @@ export async function GET(request: Request) {
       }
       const { data: existing, error: e0 } = await db.rpc("cron_existing_lectures", { p_secret: secret, p_user: job.user_id });
       if (e0) throw new Error(e0.message);
-      const { rows, links } = await collectAutoImport(job.ics_url, job, known, (existing ?? []) as ExistingLecture[], today);
+      const { rows: collected, links } = await collectAutoImport(job.ics_url, job, known, (existing ?? []) as ExistingLecture[], today);
+      // 같은 제목의 일정에 입력해 둔 강의료를 새 일정에 넣는다
+      const { data: feeRecords, error: e2 } = await db.rpc("cron_lecture_fees", { p_secret: secret, p_user: job.user_id });
+      if (e2) throw new Error(e2.message);
+      const fees = rememberedFees((feeRecords ?? []) as FeeRecord[]);
+      const rows = collected.map((r) => withRememberedFee(r, fees));
       // ERP에 이미 있는 강의 → 구글 원본과 연결 (ERP 캘린더 사본은 지울 대상으로)
       if (links.length) {
         const { error: e1 } = await db.rpc("cron_link_lectures", { p_secret: secret, p_user: job.user_id, p_links: links });

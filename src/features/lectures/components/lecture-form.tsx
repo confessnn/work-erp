@@ -161,6 +161,16 @@ export function LectureForm({ action, lecture, organizations, defaultDate, submi
           </label>
         </fieldset>
 
+        <div className="space-y-2 text-sm">
+          <p className="text-muted">저장하면 제목이 같고 강의료가 비어 있는 일정에도 자동으로 들어갑니다. 금액은 일정별 시간으로 계산합니다.</p>
+          {lecture && (
+            <label className="flex items-start gap-2">
+              <input type="checkbox" name="apply_same_title" className="mt-1" />
+              이미 입력한 같은 제목 일정도 이 강의료로 바꾸기 (받은 일정 제외)
+            </label>
+          )}
+        </div>
+
         <dl className="calc">
           <div><dt>총 강의료</dt><dd>{won(gross)}</dd></div>
           <div><dt>소득세</dt><dd>− {won(tax.incomeTax)}</dd></div>
