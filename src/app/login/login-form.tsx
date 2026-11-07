@@ -3,7 +3,8 @@
 import { useActionState, useState } from "react";
 import { signIn, signUp, type AuthState } from "./actions";
 
-export function LoginForm() {
+/** next: 로그인 후 돌아갈 주소 (가족 초대 화면에서만 씀) */
+export function LoginForm({ next }: { next?: string } = {}) {
   const [mode, setMode] = useState<"in" | "up">("in");
   const [inState, inAction, inPending] = useActionState<AuthState, FormData>(signIn, {});
   const [upState, upAction, upPending] = useActionState<AuthState, FormData>(signUp, {});
@@ -12,6 +13,7 @@ export function LoginForm() {
 
   return (
     <form action={mode === "in" ? inAction : upAction} className="card space-y-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <label className="field">
         <span>이메일</span>
         <input name="email" type="email" required autoComplete="email" className="input" />
