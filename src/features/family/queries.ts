@@ -23,7 +23,7 @@ export async function listFamilyMonth(year: number, month: number) {
   const [ev, lec] = await Promise.all([
     supabase
       .from("family_events")
-      .select("id, family_id, person, title, event_date, start_time, end_time, memo, created_by, updated_at")
+      .select("id, family_id, person, title, event_date, start_time, end_time, memo, created_by, updated_at, source_id")
       .gte("event_date", start)
       .lt("event_date", next)
       .order("event_date")
@@ -39,7 +39,7 @@ export async function getFamilyEvent(id: string): Promise<FamilyEvent | null> {
   const { supabase } = await requireUser();
   const { data } = await supabase
     .from("family_events")
-    .select("id, family_id, person, title, event_date, start_time, end_time, memo, created_by, updated_at")
+    .select("id, family_id, person, title, event_date, start_time, end_time, memo, created_by, updated_at, source_id")
     .eq("id", id)
     .maybeSingle();
   return (data as FamilyEvent | null) ?? null;
@@ -62,4 +62,23 @@ export async function listFamilyAdmin() {
     supabase.from("family_members").select("member_id, label, created_at").eq("owner_id", userId).order("created_at"),
   ]);
   return { invites: (inv.data ?? []) as FamilyInvite[], members: (mem.data ?? []) as FamilyMember[] };
+}
+
+export type FamilySource = {
+  id: string;
+  person: string;
+  name: string;
+  last_synced_at: string | null;
+  last_result: string | null;
+};
+
+/** 내가 연결한 구글 캘린더 (iCal 주소는 화면에 다시 보여 주지 않는다) */
+export async function listMyFamilySources(): Promise<FamilySource[]> {
+  const { supabase, userId } = await requireUser();
+  const { data } = await supabase
+    .from("family_calendar_sources")
+    .select("id, person, name, last_synced_at, last_result")
+    .eq("created_by", userId)
+    .order("created_at");
+  return (data ?? []) as FamilySource[];
 }

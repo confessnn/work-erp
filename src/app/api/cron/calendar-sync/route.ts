@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { collectAutoImport, type ExistingLecture, type ImportSettings } from "@/features/calendar-import/sync";
 import { rememberedFees, withRememberedFee, type FeeRecord } from "@/features/lectures/fee-memory";
 import { todayInSeoul } from "@/lib/format";
+import { importFamilySources } from "@/features/family/auto-import";
 
 export const maxDuration = 60;
 
@@ -67,5 +68,13 @@ export async function GET(request: Request) {
     }
   }
 
-  return Response.json({ ok: true, results });
+  // 가족 구성원이 연결한 구글 캘린더 → 가족 달력
+  let family: unknown;
+  try {
+    family = await importFamilySources();
+  } catch (e) {
+    family = { error: e instanceof Error ? e.message : "알 수 없는 오류" };
+  }
+
+  return Response.json({ ok: true, results, family });
 }
