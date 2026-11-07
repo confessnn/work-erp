@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { after } from "next/server";
+import { importFamilySources } from "@/features/family/auto-import";
 import { FamilyCalendar } from "@/features/family/components/family-calendar";
 import { getFamilyRole, listFamilyMonth } from "@/features/family/queries";
 import { nowInSeoul, todayInSeoul } from "@/lib/format";
@@ -14,12 +16,15 @@ export default async function FamilyPage({ searchParams }: PageProps<"/family">)
   const next = month === 12 ? { y: year + 1, m: 1 } : { y: year, m: month + 1 };
 
   const [role, { events, lectures }] = await Promise.all([getFamilyRole(), listFamilyMonth(year, month)]);
+  // 응답을 보낸 뒤, 30분 넘게 안 가져온 가족 구글 캘린더를 가져온다 (다음에 열 때 반영)
+  after(() => importFamilySources({ familyId: role.role === "member" ? role.ownerId : role.userId, staleOnly: true }).catch(() => {}));
 
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-title">가족 달력</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Link href="/family/calendars" className="chip self-center">구글 캘린더 연결</Link>
           {role.role === "owner" && (
             <Link href="/family/settings" className="chip self-center">가족 초대</Link>
           )}

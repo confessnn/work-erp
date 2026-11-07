@@ -25,6 +25,7 @@ export type FamilyEvent = {
   memo: string | null;
   created_by: string | null;
   updated_at: string;
+  source_id: string | null; // 구글 캘린더에서 가져온 일정이면 원본 id (수정은 구글에서)
 };
 
 /** 가족에게 보이는 강의 일정. 금액·수령 여부 열은 DB 함수가 아예 주지 않는다. */
