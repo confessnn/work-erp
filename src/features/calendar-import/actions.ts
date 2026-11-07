@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
+import { rememberedFees, withRememberedFee, type FeeRecord } from "@/features/lectures/fee-memory";
 import type { IncomeType } from "@/features/lectures/tax";
 import { normalizeIcsUrl, type CalendarEvent } from "./ics";
 import { collectAutoImport, eventToRow, planImport, type ExistingLecture, type ImportSettings } from "./sync";
@@ -73,7 +74,8 @@ export async function syncNow(id: string): Promise<SourceState> {
 
   const linked = await linkLectures(supabase, links);
   if (rows.length) {
-    const { error } = await supabase.from("lectures").insert(rows.map((r) => ({ ...r, user_id: userId })));
+    const fees = await loadRememberedFees(supabase);
+    const { error } = await supabase.from("lectures").insert(rows.map((r) => ({ ...withRememberedFee(r, fees), user_id: userId })));
     if (error) return { error: `저장 실패: ${error.message}` };
   }
   await supabase
@@ -90,6 +92,16 @@ export async function syncNow(id: string): Promise<SourceState> {
 }
 
 type Db = Awaited<ReturnType<typeof requireUser>>["supabase"];
+
+/** 같은 제목의 새 일정에 넣을 강의료. 조회가 실패하면 불러오기가 멈추지 않도록 빈 값으로 둔다 */
+async function loadRememberedFees(supabase: Db) {
+  const { data, error } = await supabase
+    .from("lectures")
+    .select("title, lecture_date, hours, hourly_rate, gross_amount, income_type, apply_tax_exemption")
+    .or("hourly_rate.gt.0,gross_amount.gt.0");
+  if (error) console.error("강의료 조회 실패", error.message);
+  return rememberedFees((data ?? []) as FeeRecord[]);
+}
 
 /** 중복 판단에 필요한 것: 이미 불러온/삭제한 구글 일정 ID, 최근 1개월 이후 ERP 일정 */
 async function loadDedupeContext(supabase: Db) {
@@ -158,7 +170,8 @@ export async function importEvents(fd: FormData) {
     known,
     existing,
   );
-  const fresh = plan.newEvents.map((e) => ({ ...eventToRow(e, settings), user_id: userId }));
+  const fees = await loadRememberedFees(supabase);
+  const fresh = plan.newEvents.map((e) => ({ ...withRememberedFee(eventToRow(e, settings), fees), user_id: userId }));
   const linked = await linkLectures(supabase, plan.links);
 
   if (fresh.length) {

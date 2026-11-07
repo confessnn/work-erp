@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
 import { schedulePush } from "@/features/google-calendar/push";
+import { feeFields, feeFrom, isBlankFee, titleKey, type FeeRecord } from "./fee-memory";
 import { calculateWithholding, grossFrom, hoursBetween, type IncomeType } from "./tax";
 
 export type FormState = { error?: string; duplicate?: boolean };
@@ -65,8 +66,31 @@ function toRow(fd: FormData) {
   } as const;
 }
 
+type Db = Awaited<ReturnType<typeof requireUser>>["supabase"];
+
 function refresh() {
   revalidatePath("/", "layout");
+}
+
+/**
+ * 저장한 강의료를 같은 제목의 다른 일정에 넣는다. 수령한 일정은 건드리지 않는다.
+ * 기본은 강의료가 빈 일정만 채우고, overwrite 면 이미 입력한 일정도 바꾼다.
+ * 원래 일정은 이미 저장됐으므로 여기서 실패해도 저장을 되돌리지 않는다.
+ */
+async function applyFeeToSameTitle(supabase: Db, row: FeeRecord, overwrite: boolean, exceptId?: string) {
+  const fee = feeFrom(row);
+  if (!fee) return;
+  const { data, error } = await supabase.from("lectures").select("id, title, hours, hourly_rate, gross_amount").eq("is_paid", false);
+  if (error) {
+    console.error("같은 제목 강의료 조회 실패", error.message);
+    return;
+  }
+  const targets = (data ?? []).filter(
+    (l) => l.id !== exceptId && titleKey(l.title) === titleKey(row.title) && (overwrite || isBlankFee(l)),
+  );
+  const results = await Promise.all(targets.map((l) => supabase.from("lectures").update(feeFields(l.hours, fee)).eq("id", l.id)));
+  const failed = results.find((r) => r.error);
+  if (failed) console.error("같은 제목 강의료 저장 실패", failed.error?.message);
 }
 
 export async function createLecture(_prev: FormState, fd: FormData): Promise<FormState> {
@@ -89,8 +113,9 @@ export async function createLecture(_prev: FormState, fd: FormData): Promise<For
       };
     }
   }
-  const { error } = await supabase.from("lectures").insert({ ...parsed.row, user_id: userId });
+  const { data: created, error } = await supabase.from("lectures").insert({ ...parsed.row, user_id: userId }).select("id").single();
   if (error) return { error: `저장 실패: ${error.message}` };
+  await applyFeeToSameTitle(supabase, parsed.row, false, created.id);
   schedulePush(supabase);
   refresh();
   redirect("/lectures");
@@ -102,6 +127,7 @@ export async function updateLecture(id: string, _prev: FormState, fd: FormData):
   if ("error" in parsed) return { error: parsed.error };
   const { error } = await supabase.from("lectures").update(parsed.row).eq("id", id);
   if (error) return { error: `저장 실패: ${error.message}` };
+  await applyFeeToSameTitle(supabase, parsed.row, fd.get("apply_same_title") === "on", id);
   schedulePush(supabase);
   refresh();
   redirect("/lectures");
