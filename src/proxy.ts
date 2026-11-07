@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/auth", "/share", "/api/cron", "/about", "/privacy"];
+// manifest.webmanifest: 홈 화면 앱 설정은 로그인 전에도 읽혀야 한다
+const PUBLIC_PATHS = ["/login", "/auth", "/share", "/api/cron", "/about", "/privacy", "/manifest.webmanifest"];
 
 /** 요청마다 Supabase 세션을 갱신하고, 로그인하지 않았으면 /login으로 보낸다. */
 export async function proxy(request: NextRequest) {
