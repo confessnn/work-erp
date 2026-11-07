@@ -163,3 +163,33 @@ export async function setPaid(id: string, paid: boolean) {
   schedulePush(supabase);
   refresh();
 }
+
+/** 달력에서 고른 일정들을 한 번에 수령 처리. 이미 수령한 일정은 건드리지 않는다. */
+export async function markPaidMany(ids: string[]): Promise<{ count: number; error?: string }> {
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > 200) return { count: 0, error: "선택한 일정이 없습니다." };
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase
+    .from("lectures")
+    .select("id, expected_net")
+    .in("id", ids)
+    .eq("is_paid", false);
+  if (error) return { count: 0, error: error.message };
+
+  const today = todayInSeoul();
+  let count = 0;
+  for (const row of data ?? []) {
+    const { error: e } = await supabase
+      .from("lectures")
+      .update({ is_paid: true, paid_date: today, paid_amount: row.expected_net })
+      .eq("id", row.id)
+      .eq("is_paid", false);
+    if (e) {
+      refresh();
+      return { count, error: `${count}건 처리 후 실패: ${e.message}` };
+    }
+    count++;
+  }
+  schedulePush(supabase);
+  refresh();
+  return { count };
+}
