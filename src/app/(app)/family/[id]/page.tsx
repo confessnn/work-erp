@@ -5,19 +5,31 @@ import { FamilyEventForm } from "@/features/family/components/event-form";
 import { getFamilyEvent } from "@/features/family/queries";
 import { personOf } from "@/features/family/types";
 import { DeleteButton } from "@/features/lectures/components/delete-button";
-import { dateLabel, timeLabel } from "@/lib/format";
+import { ReminderBell } from "@/features/reminders/components/reminder-bell";
+import { familyEventTarget, reminderKey } from "@/features/reminders/keys";
+import { listMyReminderKeys } from "@/features/reminders/queries";
+import { dateLabel, timeLabel, todayInSeoul } from "@/lib/format";
 
 export default async function EditFamilyEventPage({ params }: PageProps<"/family/[id]">) {
   const { id } = await params;
-  const event = await getFamilyEvent(id);
+  const [event, keys] = await Promise.all([getFamilyEvent(id), listMyReminderKeys()]);
   if (!event) notFound();
+
+  const target = familyEventTarget(event);
+  const bell =
+    event.event_date >= todayInSeoul() ? (
+      <ReminderBell target={target} on={keys.includes(reminderKey(target.kind, target.ref))} allDay={!event.start_time} withLabel />
+    ) : null;
 
   // 구글 캘린더에서 가져온 일정은 다음 가져오기 때 덮어쓰이므로 여기서는 보기만
   if (event.source_id) {
     const p = personOf(event.person);
     return (
       <>
-        <h1 className="page-title">가족 일정</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="page-title">가족 일정</h1>
+          {bell}
+        </div>
         <section className="card space-y-2">
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${p.cls}`}>{p.label}</span>
           <p className="text-lg font-semibold">{event.title}</p>
@@ -36,7 +48,10 @@ export default async function EditFamilyEventPage({ params }: PageProps<"/family
 
   return (
     <>
-      <h1 className="page-title">가족 일정 수정</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="page-title">가족 일정 수정</h1>
+        {bell}
+      </div>
       <FamilyEventForm
         action={saveFamilyEvent.bind(null, id)}
         event={event}

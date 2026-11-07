@@ -25,6 +25,7 @@ export type FamilyEvent = {
   memo: string | null;
   created_by: string | null;
   updated_at: string;
+  external_uid: string | null;
   source_id: string | null; // 구글 캘린더에서 가져온 일정이면 원본 id (수정은 구글에서)
 };
 

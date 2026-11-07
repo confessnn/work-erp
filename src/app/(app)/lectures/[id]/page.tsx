@@ -3,6 +3,9 @@ import { deleteLecture, updateLecture } from "@/features/lectures/actions";
 import { DeleteButton } from "@/features/lectures/components/delete-button";
 import { LectureForm } from "@/features/lectures/components/lecture-form";
 import { getLecture, listOrganizations } from "@/features/lectures/queries";
+import { ReminderBell } from "@/features/reminders/components/reminder-bell";
+import { reminderKey } from "@/features/reminders/keys";
+import { listMyReminderKeys } from "@/features/reminders/queries";
 import { SubmissionPanel } from "@/features/documents/components/submission-panel";
 import {
   driveStatus,
@@ -26,9 +29,19 @@ export default async function EditLecturePage({ params }: PageProps<"/lectures/[
   // 이 강의에서 이미 제출한 적이 있으면 그 서류를, 없으면 같은 기관에 냈던 서류 종류를 미리 체크
   const presetTypes = submissions[0]?.doc_types ?? lastTypes;
 
+  const reminderOn = (await listMyReminderKeys()).includes(reminderKey("lecture", id));
+
   return (
     <>
-      <h1 className="page-title">일정 수정</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="page-title">일정 수정</h1>
+        <ReminderBell
+          target={{ kind: "lecture", ref: id, date: lecture.lecture_date }}
+          on={reminderOn}
+          allDay={!lecture.start_time}
+          withLabel
+        />
+      </div>
       <LectureForm
         action={updateLecture.bind(null, id)}
         lecture={lecture}
