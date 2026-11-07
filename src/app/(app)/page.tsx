@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { parsePeriod, PeriodNav } from "@/components/period-nav";
+import { getFamilyRole } from "@/features/family/queries";
 import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
 import { LectureCalendar } from "@/features/lectures/components/lecture-calendar";
@@ -10,6 +12,8 @@ import { requireUser } from "@/lib/supabase/server";
 import { hoursLabel, nowInSeoul, todayInSeoul, won } from "@/lib/format";
 
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
+  // 초대받은 가족의 첫 화면은 가족 달력
+  if ((await getFamilyRole()).role === "member") redirect("/family");
   const now = nowInSeoul();
   const period = parsePeriod(await searchParams, now);
   const [lectures, thisMonth, upcoming, { supabase }] = await Promise.all([

@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/features/family/form";
 
 export type AuthState = { error?: string; message?: string };
 
@@ -19,7 +20,7 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
           : "이메일 또는 비밀번호가 맞지 않습니다.",
     };
   }
-  redirect("/");
+  redirect(safeNext(formData.get("next")) ?? "/");
 }
 
 export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
