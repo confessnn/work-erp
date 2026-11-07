@@ -2,15 +2,22 @@ import Link from "next/link";
 import { parsePeriod, PeriodNav } from "@/components/period-nav";
 import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
+import { LectureCalendar } from "@/features/lectures/components/lecture-calendar";
 import { LectureTable } from "@/features/lectures/components/lecture-table";
 import { listLectures, listUpcoming } from "@/features/lectures/queries";
 import { flushPendingGoogleDeletes } from "@/features/google-calendar/push";
 import { requireUser } from "@/lib/supabase/server";
-import { hoursLabel, nowInSeoul, won } from "@/lib/format";
+import { hoursLabel, nowInSeoul, todayInSeoul, won } from "@/lib/format";
 
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
-  const period = parsePeriod(await searchParams, nowInSeoul());
-  const [lectures, upcoming, { supabase }] = await Promise.all([listLectures(period), listUpcoming(), requireUser()]);
+  const now = nowInSeoul();
+  const period = parsePeriod(await searchParams, now);
+  const [lectures, thisMonth, upcoming, { supabase }] = await Promise.all([
+    listLectures(period),
+    listLectures(now),
+    listUpcoming(),
+    requireUser(),
+  ]);
   await flushPendingGoogleDeletes(supabase);
   const s = summarize(lectures);
   const diff = s.receivedTotal - s.receivedExpected;
@@ -26,6 +33,16 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         <h1 className="page-title">대시보드</h1>
         <Link href="/lectures/new" className="btn-primary">+ 일정 추가</Link>
       </div>
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="section-title">{now.month}월 일정</h2>
+          <Link href="/lectures?view=calendar" className="text-sm text-muted hover:underline">
+            다른 달 보기 ›
+          </Link>
+        </div>
+        <LectureCalendar year={now.year} month={now.month} lectures={thisMonth} today={todayInSeoul()} />
+      </section>
 
       <div className="space-y-2">
         <div className="grid md:grid-cols-2">
