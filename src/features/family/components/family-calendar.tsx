@@ -1,13 +1,24 @@
 import Link from "next/link";
 import { dateLabel, timeLabel } from "@/lib/format";
 import { monthGrid } from "@/features/lectures/month-grid";
+import { ReminderBell } from "@/features/reminders/components/reminder-bell";
+import { familyEventTarget, reminderKey, type ReminderTarget } from "@/features/reminders/keys";
 import { LECTURE_CLS, PERSONS, personOf, type FamilyEvent, type FamilyLecture } from "../types";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-type Item =
-  | { kind: "event"; id: string; date: string; start: string | null; end: string | null; title: string; cls: string; who: string; href: string }
-  | { kind: "lecture"; id: string; date: string; start: string | null; end: string | null; title: string; cls: string; who: string; href: string | null };
+type Item = {
+  kind: "event" | "lecture";
+  id: string;
+  date: string;
+  start: string | null;
+  end: string | null;
+  title: string;
+  cls: string;
+  who: string;
+  href: string | null;
+  target: ReminderTarget;
+};
 
 function merge(events: FamilyEvent[], lectures: FamilyLecture[], lectureHref: boolean): Item[] {
   const items: Item[] = [
@@ -21,6 +32,7 @@ function merge(events: FamilyEvent[], lectures: FamilyLecture[], lectureHref: bo
       cls: personOf(e.person).cls,
       who: personOf(e.person).label,
       href: `/family/${e.id}`,
+      target: familyEventTarget(e),
     })),
     ...lectures.map((l) => ({
       kind: "lecture" as const,
@@ -32,6 +44,7 @@ function merge(events: FamilyEvent[], lectures: FamilyLecture[], lectureHref: bo
       cls: LECTURE_CLS,
       who: "강의",
       href: lectureHref ? `/lectures/${l.id}` : null,
+      target: { kind: "lecture" as const, ref: l.id, date: l.lecture_date },
     })),
   ];
   // 날짜 → 종일 먼저 → 시작 시간
@@ -41,6 +54,7 @@ function merge(events: FamilyEvent[], lectures: FamilyLecture[], lectureHref: bo
 /**
  * 가족 달력. 아빠·엄마·아기·가족 일정을 색으로 나누고, 강의는 회색으로 제목·시간만 보인다.
  * 날짜를 누르면 그날 일정 추가. 접은 폴드처럼 좁은 화면에서는 아래 목록으로 내용을 본다.
+ * 목록의 🔕/🔔로 일정별 휴대폰 알림을 켜고 끈다.
  */
 export function FamilyCalendar({
   year,
@@ -49,6 +63,7 @@ export function FamilyCalendar({
   lectures,
   today,
   lectureHref,
+  reminderKeys = [],
 }: {
   year: number;
   month: number;
@@ -56,8 +71,11 @@ export function FamilyCalendar({
   lectures: FamilyLecture[];
   today: string;
   lectureHref: boolean;
+  /** 내가 알림을 켠 일정 (reminderKey 형식) */
+  reminderKeys?: string[];
 }) {
   const items = merge(events, lectures, lectureHref);
+  const reminded = new Set(reminderKeys);
   const byDate = new Map<string, Item[]>();
   for (const it of items) byDate.set(it.date, [...(byDate.get(it.date) ?? []), it]);
 
@@ -91,9 +109,11 @@ export function FamilyCalendar({
                   </Link>
                   <ul className="space-y-0.5">
                     {(byDate.get(c.date) ?? []).map((it) => {
+                      const on = reminded.has(reminderKey(it.target.kind, it.target.ref));
                       const cls = `block overflow-hidden whitespace-nowrap rounded-md px-1 py-0.5 text-[11px] leading-tight sm:text-ellipsis sm:text-xs ${it.cls}`;
                       const label = (
                         <>
+                          {on && <span aria-label="알림 켜짐">🔔</span>}
                           {it.start && <span className="hidden tabular-nums sm:inline">{timeLabel(it.start)} </span>}
                           {it.title}
                         </>
@@ -127,6 +147,7 @@ export function FamilyCalendar({
 
       <section className="space-y-2">
         <h2 className="section-title">{month}월 일정 목록</h2>
+        <p className="text-xs text-muted">🔕를 누르면 그 일정 1시간 전(종일 일정은 당일 오전 8시)에 이 계정의 휴대폰으로 알림이 와요.</p>
         {items.length === 0 ? (
           <p className="card text-center text-sm text-muted">이번 달 일정이 없어요. 달력의 날짜를 눌러 추가해 보세요.</p>
         ) : (
@@ -144,13 +165,20 @@ export function FamilyCalendar({
                   <span className="min-w-0 flex-1 truncate">{it.title}</span>
                 </>
               );
-              const rowCls = "card flex items-center gap-3 px-4 py-2.5";
+              const rowCls = "flex min-w-0 flex-1 items-center gap-3 py-2.5 pl-4";
               return (
-                <li key={`${it.kind}-${it.id}`}>
+                <li key={`${it.kind}-${it.id}`} className="card flex items-center gap-1 p-0 pr-2">
                   {it.href ? (
-                    <Link href={it.href} className={`${rowCls} hover:bg-accent-soft`}>{body}</Link>
+                    <Link href={it.href} className={`${rowCls} rounded-l-2xl hover:bg-accent-soft`}>{body}</Link>
                   ) : (
                     <div className={rowCls}>{body}</div>
+                  )}
+                  {it.date >= today && (
+                    <ReminderBell
+                      target={it.target}
+                      on={reminded.has(reminderKey(it.target.kind, it.target.ref))}
+                      allDay={!it.start}
+                    />
                   )}
                 </li>
               );

@@ -23,7 +23,7 @@ export async function listFamilyMonth(year: number, month: number) {
   const [ev, lec] = await Promise.all([
     supabase
       .from("family_events")
-      .select("id, family_id, person, title, event_date, start_time, end_time, memo, created_by, updated_at, source_id")
+      .select("id, family_id, person, title, event_date, start_time, end_time, memo, created_by, updated_at, source_id, external_uid")
       .gte("event_date", start)
       .lt("event_date", next)
       .order("event_date")
@@ -39,7 +39,7 @@ export async function getFamilyEvent(id: string): Promise<FamilyEvent | null> {
   const { supabase } = await requireUser();
   const { data } = await supabase
     .from("family_events")
-    .select("id, family_id, person, title, event_date, start_time, end_time, memo, created_by, updated_at, source_id")
+    .select("id, family_id, person, title, event_date, start_time, end_time, memo, created_by, updated_at, source_id, external_uid")
     .eq("id", id)
     .maybeSingle();
   return (data as FamilyEvent | null) ?? null;
