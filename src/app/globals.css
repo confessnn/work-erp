@@ -1,32 +1,24 @@
 @import "tailwindcss";
 
-/* 색상 토큰: 라이트/다크 모드 */
+/* 색상 토큰: 크림색 배경 위에 검은 글자와 버튼을 쓰는 밝은 테마 */
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --fg: #1a1d23;
-  --muted: #6b7280;
-  --line: #e5e7eb;
-  --accent: #2f5bea;
-  --accent-soft: #eaf0ff;
+  color-scheme: light;
+  --bg: #fffaf0;
+  --surface: #fffdf8;
+  --fg: #0a0a0a;
+  --muted: #6a6a6a;
+  --line: #e8e2d2;
+  --accent: #0a0a0a;
+  --accent-soft: #ebe6d6;
+  /* 상태 표시 전용. 글자로 쓰므로 크림색 위에서 읽히는 진한 색을 쓴다 */
   --success: #15803d;
-  --warn: #c2410c;
+  --warn: #b45309;
   --danger: #dc2626;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1115;
-    --surface: #181b21;
-    --fg: #e7e9ee;
-    --muted: #9aa1ad;
-    --line: #2a2f38;
-    --accent: #7c9cff;
-    --accent-soft: #1e2740;
-    --success: #4ade80;
-    --warn: #fb923c;
-    --danger: #f87171;
-  }
+  /* 강조 카드와 구분 배지 전용. 위에 쓰는 글자는 --fg */
+  --lavender: #b8a4ed;
+  --peach: #ffb084;
+  --ochre: #e8b94a;
+  --mint: #a4d4c5;
 }
 
 @theme inline {
@@ -40,21 +32,31 @@
   --color-success: var(--success);
   --color-warn: var(--warn);
   --color-danger: var(--danger);
-  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --color-lavender: var(--lavender);
+  --color-peach: var(--peach);
+  --color-ochre: var(--ochre);
+  --color-mint: var(--mint);
+  --font-sans: "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
 
 body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-sans);
+  /* 한글을 단어 중간에서 끊지 않는다. 긴 공고명·파일명은 넘치지 않게 끊는다 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 @layer components {
   .card {
-    @apply rounded-xl border border-line bg-surface p-4;
+    @apply rounded-2xl border border-line bg-surface p-5;
+  }
+  .page-title {
+    @apply text-[28px] leading-tight font-medium tracking-[-0.5px] sm:text-[32px];
   }
   .section-title {
-    @apply text-base font-semibold;
+    @apply text-lg font-semibold;
   }
   .field {
     @apply flex flex-col gap-1 text-sm;
@@ -63,28 +65,28 @@ body {
     @apply font-medium;
   }
   .input {
-    @apply w-full rounded-lg border border-line bg-bg px-3 py-2 text-base text-fg outline-none focus:border-accent;
+    @apply w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-base text-fg outline-none focus:border-accent;
   }
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 font-semibold text-white hover:opacity-90 disabled:opacity-50;
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:opacity-85 disabled:bg-line disabled:text-muted;
   }
   .btn-ghost {
-    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-lg hover:bg-accent-soft;
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface text-lg hover:bg-accent-soft;
   }
   .choice {
-    @apply cursor-pointer rounded-lg border border-line px-3 py-2 text-center text-sm;
+    @apply cursor-pointer rounded-xl border border-line bg-surface px-3 py-2.5 text-center text-sm;
   }
   .choice-on {
-    @apply border-accent bg-accent-soft font-semibold text-accent;
+    @apply border-accent bg-accent-soft font-semibold;
   }
   .chip {
-    @apply rounded-full border border-line px-3 py-1;
+    @apply rounded-full border border-line bg-surface px-4 py-1.5;
   }
   .chip-on {
-    @apply border-accent bg-accent-soft font-semibold text-accent;
+    @apply border-accent bg-accent-soft font-semibold;
   }
   .badge {
-    @apply shrink-0 rounded-full px-3 py-1 text-sm font-medium;
+    @apply shrink-0 rounded-full px-3 py-1 text-[13px] font-medium;
   }
   .badge-paid {
     @apply bg-success/15 text-success;
@@ -96,7 +98,7 @@ body {
     @apply text-right tabular-nums;
   }
   .calc {
-    @apply space-y-1 rounded-lg bg-bg p-3 text-sm;
+    @apply space-y-1 rounded-xl bg-bg p-3 text-sm;
   }
   .calc > div {
     @apply flex justify-between tabular-nums;

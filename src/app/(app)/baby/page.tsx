@@ -18,7 +18,7 @@ export default async function BabyPage({ searchParams }: PageProps<"/baby">) {
   return (
     <>
       <div>
-        <h1 className="text-2xl font-bold">{title}</h1>
+        <h1 className="page-title">{title}</h1>
         {baby.birthDate && <p className="text-sm text-muted">오늘 {ageLabel(baby.birthDate, today)}</p>}
       </div>
 

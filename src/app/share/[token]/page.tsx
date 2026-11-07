@@ -28,7 +28,7 @@ export default async function SharedPage({ params }: PageProps<"/share/[token]">
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-4 py-6">
       <header>
-        <h1 className="text-2xl font-bold">강의 일정</h1>
+        <h1 className="page-title">강의 일정</h1>
         <p className="text-sm text-muted">{shared.label} · 보기 전용</p>
       </header>
 

@@ -28,7 +28,7 @@ export default async function EditLecturePage({ params }: PageProps<"/lectures/[
 
   return (
     <>
-      <h1 className="text-2xl font-bold">일정 수정</h1>
+      <h1 className="page-title">일정 수정</h1>
       <LectureForm
         action={updateLecture.bind(null, id)}
         lecture={lecture}

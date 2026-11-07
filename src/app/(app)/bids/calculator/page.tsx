@@ -10,7 +10,7 @@ export default async function BidCalculatorPage({ searchParams }: PageProps<"/bi
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">원가 입찰가 계산기</h1>
+        <h1 className="page-title">원가 입찰가 계산기</h1>
         <Link href="/bids?cat=cost" className="chip text-sm">
           공고 수신함으로
         </Link>

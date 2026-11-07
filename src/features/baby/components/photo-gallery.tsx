@@ -43,7 +43,7 @@ export function PhotoGallery({ photos, birthDate }: { photos: BabyPhoto[]; birth
                     setErr(null);
                     setOpen(p);
                   }}
-                  className="block aspect-square w-full overflow-hidden rounded-lg bg-bg"
+                  className="block aspect-square w-full overflow-hidden rounded-xl bg-bg"
                 >
                   {p.thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -63,7 +63,7 @@ export function PhotoGallery({ photos, birthDate }: { photos: BabyPhoto[]; birth
           <div className="card w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
             {open.thumb && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={open.thumb} alt="" className="mx-auto max-h-64 rounded-lg" />
+              <img src={open.thumb} alt="" className="mx-auto max-h-64 rounded-xl" />
             )}
             <p className="text-sm">
               {dayTitle(open.taken_date)} {timeOf(open.taken_at)}

@@ -11,14 +11,14 @@ export function NoticeSummary({ notice }: { notice: BidNotice }) {
 
   if (notice.summary) {
     return (
-      <details className="rounded-lg border border-line p-3 text-sm">
+      <details className="rounded-xl border border-line p-3 text-sm">
         <summary className="cursor-pointer font-medium">공고문 요약 보기</summary>
         <p className="mt-2 whitespace-pre-line">{notice.summary}</p>
         {notice.summary_files && notice.summary_files.length > 0 && (
           <ul className="mt-3 space-y-1 border-t border-line pt-2">
             {notice.summary_files.map((f) => (
               <li key={f.url}>
-                <a href={f.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                <a href={f.url} target="_blank" rel="noreferrer" className="text-accent underline">
                   {f.name}
                 </a>
               </li>
@@ -35,7 +35,7 @@ export function NoticeSummary({ notice }: { notice: BidNotice }) {
       <button type="button" disabled={pending} onClick={summarize} className={`chip ${pending ? "opacity-50" : ""}`}>
         {pending ? "첨부를 읽는 중… (1~2분)" : notice.summary_error ? "요약 다시 시도" : "요약 만들기"}
       </button>
-      {notice.summary_error && !pending && <span className="text-red-600">{notice.summary_error}</span>}
+      {notice.summary_error && !pending && <span className="text-danger">{notice.summary_error}</span>}
     </div>
   );
 }

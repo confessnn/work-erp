@@ -17,14 +17,14 @@ export const NAV = [
 export function AppNav() {
   const path = usePathname();
   return (
-    <nav className="-mx-1 flex min-w-0 gap-1 overflow-x-auto whitespace-nowrap px-1 text-sm">
+    <nav className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 text-sm whitespace-nowrap [scrollbar-width:none]">
       {NAV.map((n) => {
         const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
         return (
           <Link
             key={n.href}
             href={n.href}
-            className={`rounded-md px-3 py-1.5 ${active ? "bg-accent-soft font-semibold text-accent" : "text-muted hover:text-fg"}`}
+            className={`rounded-full px-4 py-2 font-medium ${active ? "bg-accent-soft font-semibold" : "text-muted hover:text-fg"}`}
           >
             {n.label}
           </Link>

@@ -25,7 +25,7 @@ export default async function BidsPage({ searchParams }: PageProps<"/bids">) {
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">공고 수신함</h1>
+        <h1 className="page-title">공고 수신함</h1>
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/bids/calculator" className="chip text-sm">
             입찰가 계산기

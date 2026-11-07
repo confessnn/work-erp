@@ -192,7 +192,7 @@ export function PhotoUploader({ birthDate }: { birthDate: string | null }) {
                 <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                   {rows.map(({ item, index }) => (
                     <li key={item.sha1 + index} className="space-y-1">
-                      <div className="relative aspect-square overflow-hidden rounded-lg bg-bg">
+                      <div className="relative aspect-square overflow-hidden rounded-xl bg-bg">
                         {item.thumb ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={item.thumb} alt="" className="h-full w-full object-cover" />

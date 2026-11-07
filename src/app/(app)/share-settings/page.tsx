@@ -10,7 +10,7 @@ export default async function ShareSettingsPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold">가족 공유</h1>
+      <h1 className="page-title">가족 공유</h1>
       <p className="text-sm text-muted">
         공유 링크로는 <b>날짜 · 시간 · 강의명 · 기관</b>만 보입니다. 강의료 · 세금 · 수령 여부 · 메모는 절대 보이지 않습니다.
         링크를 삭제하면 바로 볼 수 없게 됩니다.

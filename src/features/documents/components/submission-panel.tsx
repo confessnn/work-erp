@@ -220,7 +220,7 @@ export function SubmissionPanel({ lecture, documents, presetTypes, submissions =
 
       {stale.length > 0 && <p className="text-sm text-warn">선택한 서류 중 {stale.length}개가 발급 3개월이 지났습니다.</p>}
 
-      <div className="sticky bottom-3 z-10 flex flex-wrap gap-2 rounded-xl bg-surface/95 py-2 backdrop-blur">
+      <div className="sticky bottom-3 z-10 flex flex-wrap gap-2 rounded-2xl bg-surface/95 py-2 backdrop-blur">
         <button type="button" disabled={!!busy || !chosen.length} onClick={submit} className="btn-primary">
           제출 (압축파일 만들기 · {chosen.length})
         </button>
@@ -235,7 +235,7 @@ export function SubmissionPanel({ lecture, documents, presetTypes, submissions =
       </div>
 
       {shareOpen && (
-        <div className="space-y-3 rounded-lg border border-line p-3">
+        <div className="space-y-3 rounded-xl border border-line p-3">
           <div className="grid grid-cols-2 gap-2">
             <label className={`choice ${shareMode === "link" ? "choice-on" : ""}`}>
               <input type="radio" className="sr-only" checked={shareMode === "link"} onChange={() => setShareMode("link")} />
@@ -287,7 +287,7 @@ export function SubmissionPanel({ lecture, documents, presetTypes, submissions =
           <summary className="cursor-pointer font-medium">제출 기록 {submissions.length}건</summary>
           <ul className="mt-2 space-y-2">
             {submissions.map((s) => (
-              <li key={s.id} className="rounded-lg bg-bg p-2">
+              <li key={s.id} className="rounded-xl bg-bg p-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span>
                     {new Date(s.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
@@ -321,7 +321,7 @@ function SaveBox({ ready }: { ready: { url: string; name: string; file: File } }
     typeof navigator !== "undefined" && typeof navigator.canShare === "function" && navigator.canShare({ files: [ready.file] });
 
   return (
-    <div className="space-y-2 rounded-lg border border-accent p-3">
+    <div className="space-y-2 rounded-xl border border-accent p-3">
       <p className="break-all text-sm font-medium">{ready.name}</p>
       <div className="flex flex-wrap gap-2">
         {/* 사용자가 직접 누르는 진짜 링크라 아이폰 Safari 에서도 저장된다 */}
@@ -358,7 +358,7 @@ function ShareBox({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
   return (
-    <div className="space-y-2 rounded-lg border border-accent p-3">
+    <div className="space-y-2 rounded-xl border border-accent p-3">
       <div className="flex gap-2">
         <input readOnly value={url} className="input text-xs" onFocus={(e) => e.currentTarget.select()} />
         <button

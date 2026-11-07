@@ -5,16 +5,16 @@ import { signOut } from "@/app/login/actions";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <header className="sticky top-0 z-10 border-b border-line bg-surface/90 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center gap-4 px-4 py-3">
-          <span className="hidden font-bold sm:inline">work-erp</span>
+      <header className="sticky top-0 z-10 border-b border-line bg-bg/90 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center min-h-16 gap-4 px-4 py-3">
+          <span className="hidden text-lg font-semibold tracking-tight sm:inline">work-erp</span>
           <AppNav />
           <form action={signOut} className="ml-auto">
             <button type="submit" className="whitespace-nowrap text-sm text-muted hover:underline">로그아웃</button>
           </form>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6">{children}</main>
+      <main className="mx-auto w-full max-w-5xl flex-1 space-y-8 px-4 py-8">{children}</main>
     </>
   );
 }

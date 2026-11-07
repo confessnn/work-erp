@@ -17,7 +17,7 @@ export default async function DocumentsPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold">서류함</h1>
+      <h1 className="page-title">서류함</h1>
       <p className="text-sm text-muted">
         이력서·증명서를 한 번 올려두면, 여기서 바로(또는 강의 일정 화면의 <b>제출 서류</b>에서) 골라 한 번에 압축해 받거나 공유 링크로 보낼 수
         있습니다. 파일은 구글 드라이브 <b>work-erp/서류함</b> 폴더에 저장됩니다.
