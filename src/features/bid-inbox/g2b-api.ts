@@ -8,7 +8,8 @@ const REGION_OPERATION = "getBidPblancListInfoPrtcptPsblRgn02";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
 const REGION_PAGE_SIZE = 999;
-const REGION_MAX_PAGES = 30;
+/** 지역 조회는 하루씩 나눠 받는다. 7일치를 한 번에 넘기면 쪽수가 커져 '입력범위값 초과'가 난다(2026-11-10). */
+const REGION_MAX_PAGES_PER_DAY = 20;
 
 /** 매번 최근 7일을 다시 조회한다. 저장 때 중복을 건너뛰므로 며칠 실패해도 빠지는 공고가 없다. */
 export const FETCH_WINDOW_DAYS = 7;
@@ -115,21 +116,42 @@ export async function callApi(operation: string, params: Record<string, string>)
   return parseResponse(await res.text());
 }
 
-async function fetchSearch(operation: string, search: Record<string, string>, now: Date, pageSize = PAGE_SIZE, maxPages = MAX_PAGES): Promise<ApiItem[]> {
-  const begin = new Date(now.getTime() - FETCH_WINDOW_DAYS * 86_400_000);
+/** [begin, end] 기간을 days 일로 거슬러 올라가며 하루씩 나눈다 (오래된 날부터) */
+export function dayWindows(now: Date, days: number): { begin: Date; end: Date }[] {
+  return Array.from({ length: days }, (_, i) => ({
+    begin: new Date(now.getTime() - (days - i) * 86_400_000),
+    end: new Date(now.getTime() - (days - i - 1) * 86_400_000),
+  }));
+}
+
+async function fetchSearch(
+  operation: string,
+  search: Record<string, string>,
+  now: Date,
+  pageSize = PAGE_SIZE,
+  maxPages = MAX_PAGES,
+  begin = new Date(now.getTime() - FETCH_WINDOW_DAYS * 86_400_000),
+): Promise<ApiItem[]> {
   const all: ApiItem[] = [];
 
   for (let page = 1; page <= maxPages; page++) {
-    const { items, total } = await callApi(operation, {
-      numOfRows: String(pageSize),
-      pageNo: String(page),
-      inqryDiv: "1", // 공고게시일시 기준
-      inqryBgnDt: toApiDate(begin),
-      inqryEndDt: toApiDate(now),
-      ...search,
-    });
-    all.push(...items);
-    if (items.length === 0 || page * pageSize >= total) break;
+    let res: { items: ApiItem[]; total: number };
+    try {
+      res = await callApi(operation, {
+        numOfRows: String(pageSize),
+        pageNo: String(page),
+        inqryDiv: "1", // 공고게시일시 기준
+        inqryBgnDt: toApiDate(begin),
+        inqryEndDt: toApiDate(now),
+        ...search,
+      });
+    } catch (e) {
+      // 어느 조회에서 났는지 남겨 다음에 원인을 바로 찾을 수 있게 한다
+      const msg = e instanceof Error ? e.message : "알 수 없는 오류";
+      throw new Error(`${msg} (${operation === REGION_OPERATION ? "지역" : "공고"} 조회 ${toApiDate(begin).slice(4, 8)}~${toApiDate(now).slice(4, 8)} ${page}쪽)`);
+    }
+    all.push(...res.items);
+    if (res.items.length === 0 || page * pageSize >= res.total) break;
   }
   return all;
 }
@@ -148,7 +170,10 @@ export function groupRegions(items: ApiItem[]): Map<string, string> {
 
 /** 최근 공고의 참가가능지역 (공고 목록에 없어 따로 받는다) */
 export async function fetchRegionLimits(now = new Date()): Promise<Map<string, string>> {
-  return groupRegions(await fetchSearch(REGION_OPERATION, {}, now, REGION_PAGE_SIZE, REGION_MAX_PAGES));
+  const days = await Promise.all(
+    dayWindows(now, FETCH_WINDOW_DAYS).map((w) => fetchSearch(REGION_OPERATION, {}, w.end, REGION_PAGE_SIZE, REGION_MAX_PAGES_PER_DAY, w.begin)),
+  );
+  return groupRegions(days.flat());
 }
 
 type Found = { item: ApiItem; matchedBy: BidMatch; ord: string };
