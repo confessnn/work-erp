@@ -43,3 +43,26 @@ describe("fetchRegionLimits", () => {
     await expect(fetchRegionLimits(NOW)).rejects.toThrow(/입력범위값 초과 에러 \(지역 조회 \d{4}~\d{4} 1쪽\)/);
   });
 });
+
+describe("fetchCategoryNotices", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("공고도 검색마다 하루씩 7번 조회한다", async () => {
+    process.env.BID_API_KEY = "test-key";
+    const { fetchCategoryNotices } = await import("./g2b-api");
+    const { CATEGORIES } = await import("./categories");
+    const urls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        urls.push(url);
+        return new Response(JSON.stringify({ response: { header: { resultCode: "00" }, body: { items: [], totalCount: 0 } } }));
+      }),
+    );
+    const hanil = CATEGORIES.find((c) => c.key === "hanil")!;
+    await fetchCategoryNotices(hanil, new Map(), NOW);
+    expect(urls).toHaveLength(hanil.searches.length * 7);
+    const begins = urls.map((u) => new URL(u).searchParams.get("inqryBgnDt"));
+    expect(new Set(begins).size).toBe(7);
+  });
+});
