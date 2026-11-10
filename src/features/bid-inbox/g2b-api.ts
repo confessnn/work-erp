@@ -8,7 +8,10 @@ const REGION_OPERATION = "getBidPblancListInfoPrtcptPsblRgn02";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 10;
 const REGION_PAGE_SIZE = 999;
-/** 지역 조회는 하루씩 나눠 받는다. 7일치를 한 번에 넘기면 쪽수가 커져 '입력범위값 초과'가 난다(2026-11-10). */
+/**
+ * 나라장터 조회는 하루씩 나눠 받는다. 2026-11-10 밤부터 7일 범위 조회가 첫 쪽부터 '입력범위값 초과 에러'로
+ * 거부되고, 하루 범위는 통과했다. (같은 날 아침 7일 범위는 통과 → 기간 제한이 바뀐 것으로 보임)
+ */
 const REGION_MAX_PAGES_PER_DAY = 20;
 
 /** 매번 최근 7일을 다시 조회한다. 저장 때 중복을 건너뛰므로 며칠 실패해도 빠지는 공고가 없다. */
@@ -156,6 +159,14 @@ async function fetchSearch(
   return all;
 }
 
+/** 최근 7일을 하루씩 나눠 조회해 합친다 */
+async function fetchByDay(operation: string, search: Record<string, string>, now: Date, pageSize = PAGE_SIZE, maxPages = MAX_PAGES) {
+  const days = await Promise.all(
+    dayWindows(now, FETCH_WINDOW_DAYS).map((w) => fetchSearch(operation, search, w.end, pageSize, maxPages, w.begin)),
+  );
+  return days.flat();
+}
+
 /** 참가가능지역 행 → "공고번호-차수"별 지역 목록 */
 export function groupRegions(items: ApiItem[]): Map<string, string> {
   const regions = new Map<string, string[]>();
@@ -170,10 +181,7 @@ export function groupRegions(items: ApiItem[]): Map<string, string> {
 
 /** 최근 공고의 참가가능지역 (공고 목록에 없어 따로 받는다) */
 export async function fetchRegionLimits(now = new Date()): Promise<Map<string, string>> {
-  const days = await Promise.all(
-    dayWindows(now, FETCH_WINDOW_DAYS).map((w) => fetchSearch(REGION_OPERATION, {}, w.end, REGION_PAGE_SIZE, REGION_MAX_PAGES_PER_DAY, w.begin)),
-  );
-  return groupRegions(days.flat());
+  return groupRegions(await fetchByDay(REGION_OPERATION, {}, now, REGION_PAGE_SIZE, REGION_MAX_PAGES_PER_DAY));
 }
 
 type Found = { item: ApiItem; matchedBy: BidMatch; ord: string };
@@ -203,7 +211,7 @@ export function pickOpenNotices(results: { items: ApiItem[]; matchedBy: BidMatch
 /** 한 구분의 최근 공고 */
 export async function fetchCategoryNotices(category: CategoryDef, regions: Map<string, string>, now = new Date()): Promise<BidNoticeInput[]> {
   const results = await Promise.all(
-    category.searches.map(async (s) => ({ items: await fetchSearch(category.operation, s.params, now), matchedBy: s.matchedBy })),
+    category.searches.map(async (s) => ({ items: await fetchByDay(category.operation, s.params, now), matchedBy: s.matchedBy })),
   );
   return pickOpenNotices(results, now).flatMap(({ item, matchedBy, ord }) => {
     const n = toNotice(item, category, matchedBy, regions.get(`${text(item.bidNtceNo)}-${ord}`) ?? null);
