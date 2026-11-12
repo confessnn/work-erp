@@ -44,5 +44,7 @@ describe("safeNext", () => {
     expect(safeNext("https://evil.example")).toBe(null);
     expect(safeNext("//evil.example")).toBe(null);
     expect(safeNext(`/join/${t}/../x`)).toBe(null);
+    expect(safeNext(`/join/bids/${t}`)).toBe(`/join/bids/${t}`);
+    expect(safeNext(`/join/other/${t}`)).toBe(null);
   });
 });
