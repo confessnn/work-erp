@@ -82,3 +82,17 @@ export async function listMyFamilySources(): Promise<FamilySource[]> {
     .order("created_at");
   return (data ?? []) as FamilySource[];
 }
+
+/** 기간 안의 가족 일정 (일정 탭에서 강의와 함께 보여 줄 때) */
+export async function listFamilyEventsBetween(start: string, next: string): Promise<FamilyEvent[]> {
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase
+    .from("family_events")
+    .select("id, family_id, person, title, event_date, start_time, end_time, memo, created_by, updated_at, source_id, external_uid")
+    .gte("event_date", start)
+    .lt("event_date", next)
+    .order("event_date")
+    .order("start_time", { nullsFirst: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as FamilyEvent[];
+}

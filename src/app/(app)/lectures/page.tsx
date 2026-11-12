@@ -5,6 +5,7 @@ import { LectureCalendar } from "@/features/lectures/components/lecture-calendar
 import { LectureTable } from "@/features/lectures/components/lecture-table";
 import { listLectures } from "@/features/lectures/queries";
 import { nowInSeoul, todayInSeoul, won } from "@/lib/format";
+import { listFamilyEventsBetween } from "@/features/family/queries";
 
 const STATUS = [
   { v: undefined, label: "전체" },
@@ -19,7 +20,17 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
   const status = sp.status === "paid" || sp.status === "unpaid" ? sp.status : undefined;
   // 달력은 한 달 단위로만 보여 준다. 연도별에서는 목록으로 둔다.
   const calendar = sp.view === "calendar" && period.month !== undefined;
-  const lectures = await listLectures(period, { status });
+  // 수령 필터를 쓰지 않을 때는 가족 일정(아내·아기 등)도 같이 보여 준다
+  const range = period.month
+    ? {
+        start: `${period.year}-${String(period.month).padStart(2, "0")}-01`,
+        next: period.month === 12 ? `${period.year + 1}-01-01` : `${period.year}-${String(period.month + 1).padStart(2, "0")}-01`,
+      }
+    : { start: `${period.year}-01-01`, next: `${period.year + 1}-01-01` };
+  const [lectures, familyEvents] = await Promise.all([
+    listLectures(period, { status }),
+    status ? Promise.resolve([]) : listFamilyEventsBetween(range.start, range.next),
+  ]);
   const s = summarize(lectures);
 
   const q = (p: { st?: string; view?: string; month?: number }) => {
@@ -65,14 +76,15 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
           </Link>
         ))}
         <span className="ml-auto text-muted">
-          {s.count}건 · 예상 {won(s.expectedNet)}
+          강의 {s.count}건 · 예상 {won(s.expectedNet)}
+          {familyEvents.length > 0 && ` · 가족 ${familyEvents.length}건`}
         </span>
       </div>
 
       {calendar ? (
-        <LectureCalendar year={period.year} month={period.month!} lectures={lectures} today={todayInSeoul()} />
+        <LectureCalendar year={period.year} month={period.month!} lectures={lectures} today={todayInSeoul()} familyEvents={familyEvents} />
       ) : (
-        <LectureTable lectures={lectures} />
+        <LectureTable lectures={lectures} familyEvents={familyEvents} />
       )}
     </>
   );

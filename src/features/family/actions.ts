@@ -25,15 +25,19 @@ export async function saveFamilyEvent(id: string | null, _prev: FamilyFormState,
     : await supabase.from("family_events").insert(parsed.value);
   if (error) return { error: `저장하지 못했어요: ${error.message}` };
   revalidatePath("/family");
+  revalidatePath("/lectures");
   const [y, m] = parsed.value.event_date.split("-");
-  redirect(`/family?y=${Number(y)}&m=${Number(m)}`);
+  // '일정' 탭에서 넣거나 고쳤으면 일정 탭으로 돌아간다
+  const base = fd.get("back") === "lectures" ? "/lectures" : "/family";
+  redirect(`${base}?y=${Number(y)}&m=${Number(m)}`);
 }
 
-export async function deleteFamilyEvent(id: string) {
+export async function deleteFamilyEvent(id: string, back?: "lectures") {
   const { supabase } = await requireUser();
   await supabase.from("family_events").delete().eq("id", id);
   revalidatePath("/family");
-  redirect("/family");
+  revalidatePath("/lectures");
+  redirect(back === "lectures" ? "/lectures" : "/family");
 }
 
 /** 초대 링크 만들기 (가족을 만든 사람만) */
@@ -46,21 +50,21 @@ export async function createFamilyInvite(_prev: FamilyFormState, fd: FormData): 
     .from("family_invites")
     .insert({ token: randomBytes(24).toString("hex"), label });
   if (error) return { error: `초대 링크를 만들지 못했어요: ${error.message}` };
-  revalidatePath("/family/settings");
+  revalidatePath("/share-settings");
   return {};
 }
 
 export async function deleteFamilyInvite(token: string) {
   const { supabase } = await requireUser();
   await supabase.from("family_invites").delete().eq("token", token);
-  revalidatePath("/family/settings");
+  revalidatePath("/share-settings");
 }
 
 /** 가족에서 내보내기 (가족을 만든 사람) */
 export async function removeFamilyMember(memberId: string) {
   const { supabase, userId } = await requireUser();
   await supabase.from("family_members").delete().eq("member_id", memberId).eq("owner_id", userId);
-  revalidatePath("/family/settings");
+  revalidatePath("/share-settings");
 }
 
 /** 초대 수락 */

@@ -1,16 +1,44 @@
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { ViewerAdmin } from "@/features/bid-viewer/components/viewer-admin";
+import { listBidViewerAdmin } from "@/features/bid-viewer/queries";
+import { InviteForm, InviteList, MemberList } from "@/features/family/components/family-admin";
+import { getFamilyRole, listFamilyAdmin } from "@/features/family/queries";
 import { createShareLink, deleteShareLink, setShowOrganization } from "@/features/share/actions";
 import { CopyField } from "@/features/share/components/copy-field";
 import { listShareLinks } from "@/features/share/queries";
 
 export default async function ShareSettingsPage() {
-  const [links, h] = await Promise.all([listShareLinks(), headers()]);
+  if ((await getFamilyRole()).role !== "owner") redirect("/family");
+  const [links, h, family, bidViewers] = await Promise.all([listShareLinks(), headers(), listFamilyAdmin(), listBidViewerAdmin()]);
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${host}`;
 
   return (
     <>
-      <h1 className="page-title">가족 공유</h1>
+      <h1 className="page-title">공유</h1>
+      <p className="text-sm text-muted">누구에게 무엇을 보여 줄지 여기서 한 번에 관리합니다.</p>
+
+      <section id="family" className="card space-y-4">
+        <div>
+          <h2 className="section-title">가족 계정 초대 (아내 등)</h2>
+          <p className="mt-1 text-sm text-muted">
+            초대받은 가족은 본인 이메일로 가입해 <b>가족 달력</b>만 씁니다. 가족 일정은 같이 보고 입력하며, 강의는 제목과 시간만 보입니다.
+            강의료·세금·수령 여부·메모·공고·서류함은 볼 수 없습니다.
+          </p>
+        </div>
+        <MemberList members={family.members} />
+        <InviteList invites={family.invites} origin={origin} />
+        <InviteForm />
+        <p className="text-xs text-muted">링크는 7일 동안, 한 번만 쓸 수 있어요. 카톡으로 보내 주세요.</p>
+      </section>
+
+      <section id="bids" className="card space-y-3">
+        <h2 className="section-title">한일ENG 공고 공유 (동생)</h2>
+        <ViewerAdmin origin={origin} invites={bidViewers.invites} members={bidViewers.members} />
+      </section>
+
+      <h2 className="section-title pt-2">로그인 없이 보는 일정 링크</h2>
       <p className="text-sm text-muted">
         공유 링크로는 <b>날짜 · 시간 · 강의명 · 기관</b>만 보입니다. 강의료 · 세금 · 수령 여부 · 메모는 절대 보이지 않습니다.
         링크를 삭제하면 바로 볼 수 없게 됩니다.

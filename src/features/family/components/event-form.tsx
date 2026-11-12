@@ -10,12 +10,15 @@ export function FamilyEventForm({
   defaultDate,
   defaultPerson,
   submitLabel,
+  back,
 }: {
   action: (prev: FamilyFormState, fd: FormData) => Promise<FamilyFormState>;
   event?: FamilyEvent;
   defaultDate: string;
   defaultPerson: Person;
   submitLabel: string;
+  /** 저장 후 돌아갈 곳: 'lectures' 면 일정 탭 */
+  back?: "lectures";
 }) {
   const [state, formAction, pending] = useActionState(action, {});
   const [person, setPerson] = useState<Person>(event?.person ?? defaultPerson);
@@ -23,6 +26,7 @@ export function FamilyEventForm({
 
   return (
     <form action={formAction} className="card space-y-5">
+      {back && <input type="hidden" name="back" value={back} />}
       <fieldset className="field">
         <span>누구 일정</span>
         <div className="grid grid-cols-4 gap-2">
