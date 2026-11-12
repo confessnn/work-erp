@@ -7,6 +7,7 @@ import { markPaidMany } from "../actions";
 import { monthGrid } from "../month-grid";
 import { datesLabel, unpaidOnDates } from "../paid-selection";
 import type { Lecture } from "../types";
+import { personOf, type FamilyEvent } from "@/features/family/types";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -19,11 +20,14 @@ export function LectureCalendar({
   month,
   lectures,
   today,
+  familyEvents = [],
 }: {
   year: number;
   month: number;
   lectures: Lecture[];
   today: string;
+  /** 같이 보여 줄 가족 일정 (아내·아기 등, 사람별 색) */
+  familyEvents?: FamilyEvent[];
 }) {
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -33,6 +37,8 @@ export function LectureCalendar({
   const byDate = new Map<string, Lecture[]>();
   for (const l of lectures) byDate.set(l.lecture_date, [...(byDate.get(l.lecture_date) ?? []), l]);
   const { ids, total } = unpaidOnDates(lectures, picked);
+  const famByDate = new Map<string, FamilyEvent[]>();
+  for (const e of familyEvents) famByDate.set(e.event_date, [...(famByDate.get(e.event_date) ?? []), e]);
 
   const toggle = (date: string) => {
     if (!byDate.has(date)) return;
@@ -150,6 +156,26 @@ export function LectureCalendar({
                         </li>
                       );
                     })}
+                    {(famByDate.get(c.date) ?? []).map((e) => {
+                      const cls = `block overflow-hidden whitespace-nowrap rounded-md sm:text-ellipsis px-1 py-0.5 text-[11px] leading-tight sm:text-xs ${personOf(e.person).cls}`;
+                      const label = (
+                        <>
+                          {e.start_time && <span className="hidden tabular-nums sm:inline">{timeLabel(e.start_time)} </span>}
+                          {e.title}
+                        </>
+                      );
+                      return (
+                        <li key={`f${e.id}`}>
+                          {selecting ? (
+                            <span className={`${cls} opacity-50`}>{label}</span>
+                          ) : (
+                            <Link href={`/family/${e.id}?back=lectures`} title={`${personOf(e.person).label} · ${e.title}`} className={`${cls} hover:opacity-80`}>
+                              {label}
+                            </Link>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               );
@@ -185,6 +211,7 @@ export function LectureCalendar({
         <div className="flex gap-3 text-xs text-muted">
           <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-peach/45" />미수령</span>
           <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-mint/50" />수령</span>
+          {familyEvents.length > 0 && <span>· 그 밖의 색은 가족 일정</span>}
         </div>
       )}
     </div>

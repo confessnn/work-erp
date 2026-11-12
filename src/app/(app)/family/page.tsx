@@ -32,7 +32,7 @@ export default async function FamilyPage({ searchParams }: PageProps<"/family">)
         <div className="flex flex-wrap gap-2">
           <Link href="/family/calendars" className="chip self-center">구글 캘린더 연결</Link>
           {role.role === "owner" && (
-            <Link href="/family/settings" className="chip self-center">가족 초대</Link>
+            <Link href="/share-settings#family" className="chip self-center">가족 초대</Link>
           )}
           <Link href="/family/new" className="btn-primary">+ 일정 추가</Link>
         </div>

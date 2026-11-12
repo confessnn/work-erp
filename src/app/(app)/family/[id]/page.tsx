@@ -10,8 +10,9 @@ import { familyEventTarget, reminderKey } from "@/features/reminders/keys";
 import { listMyReminderKeys } from "@/features/reminders/queries";
 import { dateLabel, timeLabel, todayInSeoul } from "@/lib/format";
 
-export default async function EditFamilyEventPage({ params }: PageProps<"/family/[id]">) {
+export default async function EditFamilyEventPage({ params, searchParams }: PageProps<"/family/[id]">) {
   const { id } = await params;
+  const back = (await searchParams).back === "lectures" ? ("lectures" as const) : undefined;
   const [event, keys] = await Promise.all([getFamilyEvent(id), listMyReminderKeys()]);
   if (!event) notFound();
 
@@ -58,8 +59,9 @@ export default async function EditFamilyEventPage({ params }: PageProps<"/family
         defaultDate={event.event_date}
         defaultPerson={event.person}
         submitLabel="수정 저장"
+        back={back}
       />
-      <form action={deleteFamilyEvent.bind(null, id)}>
+      <form action={deleteFamilyEvent.bind(null, id, back)}>
         <DeleteButton />
       </form>
     </>

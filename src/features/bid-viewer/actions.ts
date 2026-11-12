@@ -15,21 +15,21 @@ export async function createBidViewerInvite(_prev: ViewerFormState, fd: FormData
   const label = String(fd.get("label") ?? "").trim().slice(0, 30) || "동생";
   const { error } = await supabase.from("bid_viewer_invites").insert({ token: randomBytes(24).toString("hex"), label });
   if (error) return { error: `초대 링크를 만들지 못했어요: ${error.message}` };
-  revalidatePath("/bids");
+  revalidatePath("/share-settings");
   return {};
 }
 
 export async function deleteBidViewerInvite(token: string) {
   const { supabase } = await requireUser();
   await supabase.from("bid_viewer_invites").delete().eq("token", token);
-  revalidatePath("/bids");
+  revalidatePath("/share-settings");
 }
 
 /** 공유 끊기: 그 계정은 즉시 공고를 볼 수 없게 된다 */
 export async function removeBidViewer(memberId: string) {
   const { supabase, userId } = await requireUser();
   await supabase.from("bid_viewers").delete().eq("member_id", memberId).eq("owner_id", userId);
-  revalidatePath("/bids");
+  revalidatePath("/share-settings");
 }
 
 /** 초대 수락 */
@@ -52,5 +52,5 @@ export async function setViewerMark(noticeId: string, status: "new" | "intereste
       .from("bid_viewer_marks")
       .upsert({ member_id: userId, notice_id: noticeId, status, updated_at: new Date().toISOString() });
   }
-  revalidatePath("/bids");
+  revalidatePath("/share-settings");
 }

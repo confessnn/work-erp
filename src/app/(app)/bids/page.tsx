@@ -3,9 +3,7 @@ import { CATEGORIES } from "@/features/bid-inbox/categories";
 import { FetchButton } from "@/features/bid-inbox/components/fetch-button";
 import { NoticeList } from "@/features/bid-inbox/components/notice-list";
 import { getBidSettings, listBidNotices, type BidTab } from "@/features/bid-inbox/queries";
-import { headers } from "next/headers";
-import { ViewerAdmin } from "@/features/bid-viewer/components/viewer-admin";
-import { getBidViewer, listBidViewerAdmin, listViewerNotices } from "@/features/bid-viewer/queries";
+import { getBidViewer, listViewerNotices } from "@/features/bid-viewer/queries";
 import { VIEWER_TABS } from "@/features/bid-viewer/tabs";
 
 // '요약 만들기'가 첨부를 받아 AI 요약까지 기다린다
@@ -27,13 +25,7 @@ export default async function BidsPage({ searchParams }: PageProps<"/bids">) {
   if (viewer) return <ViewerBids tab={VIEWER_TABS.find((t) => t.v === sp.tab)?.v ?? "open"} />;
 
   const category = CATEGORIES.find((c) => c.key === sp.cat)?.key;
-  const [notices, settings, admin, h] = await Promise.all([
-    listBidNotices(tab, category),
-    getBidSettings(),
-    listBidViewerAdmin(),
-    headers(),
-  ]);
-  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host") ?? ""}`;
+  const [notices, settings] = await Promise.all([listBidNotices(tab, category), getBidSettings()]);
 
   const href = (t: BidTab, c?: string) => `/bids?tab=${t}${c ? `&cat=${c}` : ""}`;
 
@@ -83,14 +75,9 @@ export default async function BidsPage({ searchParams }: PageProps<"/bids">) {
 
       <NoticeList notices={notices} />
 
-      <details className="card" open={admin.invites.length > 0}>
-        <summary className="cursor-pointer font-medium">
-          한일ENG 공고 공유 (동생){admin.members.length > 0 ? ` · ${admin.members.map((m) => m.label).join(", ")} 참여 중` : ""}
-        </summary>
-        <div className="mt-3">
-          <ViewerAdmin origin={origin} invites={admin.invites} members={admin.members} />
-        </div>
-      </details>
+      <p className="text-sm text-muted">
+        동생에게 한일ENG 공고만 보여 주려면 <Link href="/share-settings#bids" className="underline">공유</Link> 메뉴에서 초대하세요.
+      </p>
     </>
   );
 }
