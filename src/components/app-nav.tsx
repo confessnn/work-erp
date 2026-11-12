@@ -20,6 +20,9 @@ export const NAV: NavItem[] = [
 /** 초대받은 가족 계정의 메뉴 */
 export const MEMBER_NAV: NavItem[] = [{ href: "/family", label: "가족 달력" }];
 
+/** 초대받은 공고 열람자(동생) 계정의 메뉴 */
+export const BID_VIEWER_NAV: NavItem[] = [{ href: "/bids", label: "한일ENG 공고" }];
+
 export function AppNav({ items = NAV }: { items?: NavItem[] }) {
   const path = usePathname();
   return (

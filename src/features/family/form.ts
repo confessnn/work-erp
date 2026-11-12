@@ -56,5 +56,6 @@ export function monthRange(year: number, month: number) {
 
 /** 로그인 후 돌아갈 주소. 초대 수락 화면만 허용 (다른 사이트로 보내는 것 방지) */
 export function safeNext(v: unknown): string | null {
-  return typeof v === "string" && /^\/join\/[0-9a-f]{48}$/.test(v) ? v : null;
+  // 가족 초대(/join/<토큰>)와 공고 공유 초대(/join/bids/<토큰>)만 허용
+  return typeof v === "string" && /^\/join\/(bids\/)?[0-9a-f]{48}$/.test(v) ? v : null;
 }

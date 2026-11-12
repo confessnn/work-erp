@@ -3,6 +3,10 @@ import { CATEGORIES } from "@/features/bid-inbox/categories";
 import { FetchButton } from "@/features/bid-inbox/components/fetch-button";
 import { NoticeList } from "@/features/bid-inbox/components/notice-list";
 import { getBidSettings, listBidNotices, type BidTab } from "@/features/bid-inbox/queries";
+import { headers } from "next/headers";
+import { ViewerAdmin } from "@/features/bid-viewer/components/viewer-admin";
+import { getBidViewer, listBidViewerAdmin, listViewerNotices } from "@/features/bid-viewer/queries";
+import { VIEWER_TABS } from "@/features/bid-viewer/tabs";
 
 // '요약 만들기'가 첨부를 받아 AI 요약까지 기다린다
 export const maxDuration = 300;
@@ -17,8 +21,19 @@ const TABS: { v: BidTab; label: string }[] = [
 export default async function BidsPage({ searchParams }: PageProps<"/bids">) {
   const sp = await searchParams;
   const tab = TABS.find((t) => t.v === sp.tab)?.v ?? "open";
+
+  // 초대받은 공고 열람자(동생): 나라장터 한일ENG 공고만
+  const viewer = await getBidViewer();
+  if (viewer) return <ViewerBids tab={VIEWER_TABS.find((t) => t.v === sp.tab)?.v ?? "open"} />;
+
   const category = CATEGORIES.find((c) => c.key === sp.cat)?.key;
-  const [notices, settings] = await Promise.all([listBidNotices(tab, category), getBidSettings()]);
+  const [notices, settings, admin, h] = await Promise.all([
+    listBidNotices(tab, category),
+    getBidSettings(),
+    listBidViewerAdmin(),
+    headers(),
+  ]);
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("x-forwarded-host") ?? h.get("host") ?? ""}`;
 
   const href = (t: BidTab, c?: string) => `/bids?tab=${t}${c ? `&cat=${c}` : ""}`;
 
@@ -67,6 +82,38 @@ export default async function BidsPage({ searchParams }: PageProps<"/bids">) {
       </div>
 
       <NoticeList notices={notices} />
+
+      <details className="card" open={admin.invites.length > 0}>
+        <summary className="cursor-pointer font-medium">
+          한일ENG 공고 공유 (동생){admin.members.length > 0 ? ` · ${admin.members.map((m) => m.label).join(", ")} 참여 중` : ""}
+        </summary>
+        <div className="mt-3">
+          <ViewerAdmin origin={origin} invites={admin.invites} members={admin.members} />
+        </div>
+      </details>
+    </>
+  );
+}
+
+/** 공고 열람자 화면: 나라장터 한일ENG 공고 (불가 판정 포함), 관심·제외는 본인 표시 */
+async function ViewerBids({ tab }: { tab: (typeof VIEWER_TABS)[number]["v"] }) {
+  const notices = await listViewerNotices(tab);
+  return (
+    <>
+      <h1 className="page-title">한일ENG 공고 (나라장터)</h1>
+      <p className="text-sm text-muted">
+        나라장터의 한일ENG(도장·습식·방수·석공사업) 공사 공고를 매일 아침 받아 옵니다. 판정은 목록 정보만 본 1차 결과(충남 천안, 7억 원까지
+        기준)이니, 투찰 전에 공고문을 확인하세요. 제목을 누르면 나라장터 공고문이 열립니다.
+      </p>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {VIEWER_TABS.map((t) => (
+          <Link key={t.v} href={`/bids?tab=${t.v}`} className={`chip ${tab === t.v ? "chip-on" : ""}`}>
+            {t.label}
+          </Link>
+        ))}
+        <span className="ml-auto text-muted">{notices.length}건</span>
+      </div>
+      <NoticeList notices={notices} viewer />
     </>
   );
 }

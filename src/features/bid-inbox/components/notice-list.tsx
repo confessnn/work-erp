@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { won } from "@/lib/format";
 import { setBidStatus } from "../actions";
+import { setViewerMark } from "@/features/bid-viewer/actions";
 import { CATEGORY_LABEL } from "../categories";
 import { VERDICT_LABEL } from "../judge";
 import { SubmissionBadge } from "./submission-badge";
@@ -35,14 +36,16 @@ function dDay(iso: string, now: number) {
   return diff === 0 ? "오늘 마감" : `D-${diff}`;
 }
 
-function StatusButton({ id, status, to, label }: { id: string; status: BidStatus; to: BidStatus; label: string }) {
+function StatusButton({ id, status, to, label, viewer }: { id: string; status: BidStatus; to: BidStatus; label: string; viewer?: boolean }) {
   const [pending, start] = useTransition();
   const on = status === to;
+  // 공고 열람자(동생)의 표시는 본인 것만 따로 저장 → 공고함 주인의 상태는 바뀌지 않는다
+  const save = viewer ? setViewerMark : setBidStatus;
   return (
     <button
       type="button"
       disabled={pending}
-      onClick={() => start(() => setBidStatus(id, on ? "new" : to))}
+      onClick={() => start(() => save(id, on ? "new" : to))}
       className={`chip ${on ? "chip-on" : ""} ${pending ? "opacity-50" : ""}`}
     >
       {label}
@@ -50,7 +53,8 @@ function StatusButton({ id, status, to, label }: { id: string; status: BidStatus
   );
 }
 
-export function NoticeList({ notices }: { notices: BidNotice[] }) {
+/** viewer: 초대받은 공고 열람자 화면 (관심·제외는 본인 표시, '새 공고' 표시 없음) */
+export function NoticeList({ notices, viewer = false }: { notices: BidNotice[]; viewer?: boolean }) {
   const [now] = useState(() => Date.now());
 
   if (notices.length === 0) {
@@ -68,7 +72,7 @@ export function NoticeList({ notices }: { notices: BidNotice[] }) {
             </span>
             <SubmissionBadge awardMethod={n.award_method} />
             {n.source === "d2b" && <span className="text-muted">국방부</span>}
-            {n.status === "new" && <span className="badge badge-unpaid">새 공고</span>}
+            {!viewer && n.status === "new" && <span className="badge badge-unpaid">새 공고</span>}
             {n.notice_kind && n.notice_kind !== "등록공고" && <span className="text-muted">{n.notice_kind}</span>}
             {n.closes_at && <span className="ml-auto font-semibold tabular-nums">{dDay(n.closes_at, now)}</span>}
           </div>
@@ -99,8 +103,8 @@ export function NoticeList({ notices }: { notices: BidNotice[] }) {
                   입찰가 계산
                 </Link>
               )}
-              <StatusButton id={n.id} status={n.status} to="interested" label="관심" />
-              <StatusButton id={n.id} status={n.status} to="dismissed" label="제외" />
+              <StatusButton id={n.id} status={n.status} to="interested" label="관심" viewer={viewer} />
+              <StatusButton id={n.id} status={n.status} to="dismissed" label="제외" viewer={viewer} />
             </div>
           </div>
 
