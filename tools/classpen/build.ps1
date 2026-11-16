@@ -1,4 +1,4 @@
-# 수업펜 빌드: 윈도우에 기본으로 있는 .NET Framework 4.x 컴파일러(csc.exe)만 쓴다. 따로 설치할 것 없음.
+﻿# 수업펜 빌드: 윈도우에 기본으로 있는 .NET Framework 4.x 컴파일러(csc.exe)만 쓴다. 따로 설치할 것 없음.
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
