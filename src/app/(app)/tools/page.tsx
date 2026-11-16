@@ -31,7 +31,7 @@ export default function ToolsPage() {
             </p>
           </div>
           <a href="/downloads/ClassPen.exe" download="수업펜.exe" className="btn-primary">
-            내려받기 (Windows, 25KB)
+            내려받기 (Windows, 34KB)
           </a>
         </div>
 
@@ -42,12 +42,16 @@ export default function ToolsPage() {
             처음 실행할 때 <b>“Windows의 PC 보호”</b> 창이 뜨면 <b>추가 정보 → 실행</b>을 눌러 주세요. 직접 만든 프로그램이라 서명이 없어서
             뜨는 안내예요. 학교 PC에서 실행이 막혀 있으면 전산 담당자에게 허용을 요청해야 해요.
           </li>
+          <li>
+            단축키는 작업 표시줄 아이콘을 오른쪽 클릭 → <b>단축키 설정</b>에서 바꿀 수 있어요. 칸을 누르고 원하는 키를 누르면 돼요. 이 PC에
+            저장되고, <b>기본값으로</b> 버튼으로 되돌릴 수 있어요.
+          </li>
           <li>끝낼 때는 작업 표시줄 아이콘을 오른쪽 클릭 → <b>종료</b>.</li>
         </ul>
       </section>
 
       <section className="card space-y-3">
-        <h2 className="section-title">단축키</h2>
+        <h2 className="section-title">기본 단축키</h2>
         <table className="w-full text-sm">
           <tbody>
             {SHORTCUTS.map(([k, v]) => (
@@ -58,7 +62,7 @@ export default function ToolsPage() {
             ))}
           </tbody>
         </table>
-        <p className="text-xs text-muted">판서 화면 위쪽의 도구 막대로도 도구·색·굵기를 바꿀 수 있어요.</p>
+        <p className="text-xs text-muted">판서 화면 위쪽의 도구 막대로도 도구·색·굵기를 바꿀 수 있어요. 도구 막대에는 바꾼 단축키가 표시돼요. Esc·Ctrl+Z·Ctrl+S·Ctrl+C는 바꿀 수 없어요.</p>
       </section>
     </>
   );
