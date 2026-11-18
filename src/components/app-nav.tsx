@@ -13,6 +13,7 @@ export const NAV: NavItem[] = [
   { href: "/documents", label: "서류함" },
   { href: "/baby", label: "아기" },
   { href: "/bids", label: "공고" },
+  { href: "/content", label: "콘텐츠" },
   { href: "/tools", label: "수업도구" },
   { href: "/share-settings", label: "공유" },
   { href: "/integrations", label: "연동" },
