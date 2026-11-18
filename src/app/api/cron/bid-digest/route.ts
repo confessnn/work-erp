@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { fetchProblem, notifiedIds, sendDigest, type DigestNotice, type DigestStatus } from "@/features/bid-inbox/digest";
-import { buildMorning, buildMorningTelegram, MORNING_BUTTONS, nextDay, type AgendaItem } from "@/features/bid-inbox/morning";
+import { buildMorning, buildMorningTelegram, MORNING_BUTTONS, nextDay, type AgendaItem, type MorningTodo } from "@/features/bid-inbox/morning";
 import { sendChunks } from "@/features/telegram/api";
 import { todayInSeoul } from "@/lib/format";
 import { summarizeNotice } from "@/features/bid-inbox/summarize";
@@ -56,10 +56,11 @@ async function sendTelegram(db: SupabaseClient, secret: string, user: string, ch
  */
 async function mailDigest(db: SupabaseClient, secret: string, user: string, summaryProblem: string | null) {
   const today = todayInSeoul();
-  const [notices, status, agenda] = await Promise.all([
+  const [notices, status, agenda, todoRows] = await Promise.all([
     db.rpc("cron_digest_notices", { p_secret: secret, p_user: user }),
     db.rpc("cron_bid_status", { p_secret: secret, p_user: user }),
     db.rpc("cron_morning_agenda", { p_secret: secret, p_user: user, p_from: today, p_to: nextDay(today) }),
+    db.rpc("cron_morning_todos", { p_secret: secret, p_user: user, p_day: today }),
   ]);
   if (notices.error) throw new Error(notices.error.message);
   if (status.error) throw new Error(status.error.message);
@@ -71,16 +72,18 @@ async function mailDigest(db: SupabaseClient, secret: string, user: string, summ
     summaryProblem,
     // 일정을 못 읽어도 공고 메일은 보낸다
     agenda.error ? `일정을 읽지 못했습니다: ${agenda.error.message}` : null,
+    todoRows.error ? `할 일을 읽지 못했습니다: ${todoRows.error.message}` : null,
   ].flatMap((p) => (p ? [p] : []));
   const items = (agenda.data ?? []) as AgendaItem[];
+  const todos = (todoRows.data ?? []) as MorningTodo[];
 
-  const tg = await sendTelegram(db, secret, user, buildMorningTelegram(today, items, rows, problems));
+  const tg = await sendTelegram(db, secret, user, buildMorningTelegram(today, items, rows, problems, todos));
   let via = "텔레그램";
   if (!tg?.sent) {
     const apiKey = process.env.RESEND_API_KEY;
     const to = process.env.BID_NOTIFY_EMAIL;
     if (!apiKey || !to) return tg?.error ?? "보낼 곳 없음 (텔레그램 미연결, 메일 설정 없음)";
-    await sendDigest(apiKey, to, buildMorning(today, items, rows, tg?.error ? [tg.error, ...problems] : problems));
+    await sendDigest(apiKey, to, buildMorning(today, items, rows, tg?.error ? [tg.error, ...problems] : problems, todos));
     via = "메일";
   }
   // 메일을 보낸 뒤에 기록한다. 기록이 실패하면 다음 날 한 번 더 받을 뿐 공고를 놓치지는 않는다
