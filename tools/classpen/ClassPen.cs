@@ -586,7 +586,7 @@ namespace ClassPen
         delegate IntPtr HookProc(int code, IntPtr w, IntPtr l);
 
         const int WH_MOUSE_LL = 14, WM_MOUSEWHEEL = 0x20A, VK_CONTROL = 0x11;
-        const float Follow = 0.5f;     // 한 장면마다 남은 거리의 몇 %를 따라갈지 (클수록 바로, 작을수록 미끄러지듯)
+        const float Follow = 0.8f;     // 한 장면마다 남은 거리의 몇 %를 따라갈지 (클수록 바로, 작을수록 미끄러지듯)
 
         volatile float target = 2f;    // 바라는 배율 (Ctrl+휠)
         public float Zoom { get { return target; } }
@@ -664,7 +664,7 @@ namespace ClassPen
                 while (running)
                 {
                     float t = target;
-                    zoom += (t - zoom) * 0.25f;
+                    zoom += (t - zoom) * 0.35f;
                     if (Math.Abs(t - zoom) < 0.005f) zoom = t;
                     GetCursorPos(out m);
                     PointF want = Offset(screen, m, zoom);
