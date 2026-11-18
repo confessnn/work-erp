@@ -5,7 +5,7 @@ import type { BidCategory, BidVerdict } from "./types";
 
 const INBOX_URL = "https://work-erp-one.vercel.app/bids";
 /** Resend 기본 발신 주소. 도메인 인증 없이 가입한 메일 주소로만 보낼 수 있다 */
-const FROM = "ERP 공고 알림 <onboarding@resend.dev>";
+const FROM = "ERP 아침 알림 <onboarding@resend.dev>";
 /** 수신은 매일 도는데 이보다 오래되면 돌지 않은 것으로 본다 */
 const STALE_FETCH_MS = 26 * 3_600_000;
 
@@ -27,7 +27,7 @@ export type DigestStatus = { last_fetched_at: string | null; last_fetch_result: 
 export type DigestMail = { subject: string; html: string };
 
 /** 공고명·요약은 외부 문서에서 온 글이므로 그대로 HTML에 넣지 않는다 */
-const escapeHtml = (text: string) =>
+export const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 
 const isWebUrl = (url: string) => {
@@ -77,21 +77,32 @@ function noticeHtml(n: DigestNotice) {
   return `<li style="margin-bottom:16px"><strong>${link}</strong><br>${facts.map(escapeHtml).join(" · ")}${reason}${summaryHtml(n)}</li>`;
 }
 
+/** 확인이 필요한 건수 (수신 문제 + 요약 실패) */
+export const needsCheckCount = (notices: DigestNotice[], problems: string[]) =>
+  problems.length + notices.filter((n) => n.summary_error).length;
+
+export const problemsHtml = (problems: string[]) =>
+  problems.map((p) => `<p style="color:#b91c1c"><strong>${escapeHtml(p)}</strong></p>`).join("");
+
+/** 분류(원가·한일ENG)별 공고 목록 */
+export function noticeSectionsHtml(notices: DigestNotice[]) {
+  return (Object.keys(CATEGORY_LABEL) as BidCategory[])
+    .flatMap((category) => {
+      const rows = notices.filter((n) => n.category === category);
+      return rows.length ? [`<h3>${escapeHtml(CATEGORY_LABEL[category])} ${rows.length}건</h3><ul style="padding-left:18px">${rows.map(noticeHtml).join("")}</ul>`] : [];
+    })
+    .join("");
+}
+
+export const DIGEST_FOOTER = `<p><a href="${INBOX_URL}">ERP 공고 수신함 열기</a></p><p style="color:#666;font-size:12px">AI가 쓴 요약이라 틀릴 수 있습니다. 투찰 전에 원문을 확인하세요.</p>`;
+
 /** 알릴 공고도 문제도 없으면 null */
 export function buildDigest(notices: DigestNotice[], problems: string[]): DigestMail | null {
   if (notices.length === 0 && problems.length === 0) return null;
 
-  const needsCheck = problems.length + notices.filter((n) => n.summary_error).length;
+  const needsCheck = needsCheckCount(notices, problems);
   const subject = [`[공고 알림] 새 공고 ${notices.length}건`, ...(needsCheck ? [`확인 필요 ${needsCheck}건`] : [])].join(" · ");
-
-  const problemHtml = problems.map((p) => `<p style="color:#b91c1c"><strong>${escapeHtml(p)}</strong></p>`).join("");
-  const sections = (Object.keys(CATEGORY_LABEL) as BidCategory[]).flatMap((category) => {
-    const rows = notices.filter((n) => n.category === category);
-    return rows.length ? [`<h3>${escapeHtml(CATEGORY_LABEL[category])} ${rows.length}건</h3><ul style="padding-left:18px">${rows.map(noticeHtml).join("")}</ul>`] : [];
-  });
-  const footer = `<p><a href="${INBOX_URL}">ERP 공고 수신함 열기</a></p><p style="color:#666;font-size:12px">AI가 쓴 요약이라 틀릴 수 있습니다. 투찰 전에 원문을 확인하세요.</p>`;
-
-  return { subject, html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.5">${problemHtml}${sections.join("")}${footer}</div>` };
+  return { subject, html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.5">${problemsHtml(problems)}${noticeSectionsHtml(notices)}${DIGEST_FOOTER}</div>` };
 }
 
 /** Resend로 보낸다. 실패하면 throw */

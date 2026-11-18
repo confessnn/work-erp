@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcCost, clearsLowerBound, guessAwardMode, parseRates, plansFromLowerRate, plansFromRates, priceScore, quantile, vatPair } from "./calc";
+import { calcCost, clearsLowerBound, guessAwardMode, hintsToFields, parseRates, plansFromLowerRate, plansFromRates, priceScore, quantile, vatPair } from "./calc";
 
 describe("guessAwardMode", () => {
   it("낙찰 방법 문구로 방식을 고른다", () => {
@@ -93,5 +93,29 @@ describe("vatPair", () => {
   it("부가세 포함·별도 금액을 함께 낸다", () => {
     expect(vatPair(1_000_000, false)).toEqual({ excl: 1_000_000, incl: 1_100_000 });
     expect(vatPair(1_100_000, true)).toEqual({ excl: 1_000_000, incl: 1_100_000 });
+  });
+});
+
+describe("hintsToFields", () => {
+  const hints = {
+    award_mode: "qualified" as const,
+    base_amount: 48_500_000.4,
+    base_kind: "기초금액",
+    includes_vat: true,
+    price_weight: null,
+    floor_rate: null,
+    lower_rate: 87.745,
+    range: 2,
+    notes: [],
+  };
+
+  it("찾은 값만 계산기 칸 글자로 바꾼다", () => {
+    expect(hintsToFields(hints)).toEqual({ mode: "qualified", base: "48500000", includesVat: true, lowerRate: "87.745", range: "2" });
+  });
+
+  it("아무것도 못 찾으면 빈 값을 돌려줘 지금 칸을 그대로 둔다", () => {
+    expect(
+      hintsToFields({ award_mode: null, base_amount: null, base_kind: null, includes_vat: null, price_weight: null, floor_rate: null, lower_rate: 0, range: null, notes: [] }),
+    ).toEqual({});
   });
 });
