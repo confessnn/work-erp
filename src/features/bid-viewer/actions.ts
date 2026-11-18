@@ -52,5 +52,5 @@ export async function setViewerMark(noticeId: string, status: "new" | "intereste
       .from("bid_viewer_marks")
       .upsert({ member_id: userId, notice_id: noticeId, status, updated_at: new Date().toISOString() });
   }
-  revalidatePath("/share-settings");
+  revalidatePath("/bids");
 }
