@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import type { FamilyFormState } from "../actions";
+import { OverlapNotice, submitKeepingInputs } from "./overlap-notice";
 import { PERSONS, type FamilyEvent, type Person } from "../types";
 
 export function FamilyEventForm({
@@ -25,7 +26,11 @@ export function FamilyEventForm({
   const [allDay, setAllDay] = useState(event ? !event.start_time : false);
 
   return (
-    <form action={formAction} className="card space-y-5">
+    <form
+      action={formAction}
+      onSubmit={(e) => submitKeepingInputs(e, (fd) => startTransition(() => formAction(fd)))}
+      className="card space-y-5"
+    >
       {back && <input type="hidden" name="back" value={back} />}
       <fieldset className="field">
         <span>누구 일정</span>
@@ -81,6 +86,7 @@ export function FamilyEventForm({
       </label>
 
       {state.error && <p className="text-sm text-danger">{state.error}</p>}
+      {state.overlaps && <OverlapNotice overlaps={state.overlaps} pending={pending} />}
       <button type="submit" disabled={pending} className="btn-primary w-full">
         {pending ? "저장 중…" : submitLabel}
       </button>
