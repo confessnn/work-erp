@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { parsePeriod, PeriodNav } from "@/components/period-nav";
+import { after } from "next/server";
+import { Suspense } from "react";
+import { parsePeriod, PeriodNav, type PeriodParams } from "@/components/period-nav";
 import { getFamilyRole } from "@/features/family/queries";
 import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
@@ -13,27 +15,19 @@ import { listTodayTodos } from "@/features/todos/queries";
 import { requireUser } from "@/lib/supabase/server";
 import { hoursLabel, nowInSeoul, todayInSeoul, won } from "@/lib/format";
 
+/**
+ * 대시보드. 휴대폰에서 빨리 뜨도록 할 일·이번 달 달력만 먼저 그리고,
+ * 다가오는 일정·API 크레딧·강의료 통계는 준비되는 대로 따로 채운다 (Suspense).
+ */
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   // 초대받은 가족의 첫 화면은 가족 달력
   if ((await getFamilyRole()).role === "member") redirect("/family");
   const now = nowInSeoul();
   const period = parsePeriod(await searchParams, now);
   const today = todayInSeoul();
-  const [lectures, thisMonth, upcoming, todos, { supabase }] = await Promise.all([
-    listLectures(period),
-    listLectures(now),
-    listUpcoming(),
-    listTodayTodos(today),
-    requireUser(),
-  ]);
-  await flushPendingGoogleDeletes(supabase);
-  const s = summarize(lectures);
-  const diff = s.receivedTotal - s.receivedExpected;
-
-  const byType = (["business", "other"] as const).map((t) => ({
-    t,
-    s: summarize(lectures.filter((l) => l.income_type === t)),
-  }));
+  const [thisMonth, todos, { supabase }] = await Promise.all([listLectures(now), listTodayTodos(today), requireUser()]);
+  // 구글 캘린더에서 지울 일정이 남아 있으면 화면을 보낸 뒤에 처리한다
+  after(() => flushPendingGoogleDeletes(supabase).catch(() => {}));
 
   return (
     <>
@@ -56,7 +50,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
 
       <div className="space-y-2">
         <div className="grid md:grid-cols-2">
-          <ApiCreditsSection />
+          <Suspense fallback={<Placeholder className="h-40" />}>
+            <ApiCreditsSection />
+          </Suspense>
         </div>
         <p className="text-xs text-muted">
           API 잔액과 충전 시점은 입력값에서 사용액을 빼 계산한 추정치이고, 사용액은 UTC 날짜 기준입니다. Claude 사용액은 보통 4시간, 길면 24시간 늦게 반영됩니다. 실제 잔액과 다르면 다시 입력하세요.
@@ -65,9 +61,39 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
 
       <section className="space-y-3">
         <h2 className="section-title">다가오는 일정</h2>
-        <LectureTable lectures={upcoming} />
+        <Suspense fallback={<Placeholder className="h-32" />}>
+          <Upcoming />
+        </Suspense>
       </section>
 
+      <Suspense fallback={<Placeholder className="h-48" />}>
+        <FeeStats period={period} />
+      </Suspense>
+    </>
+  );
+}
+
+/** 불러오는 동안 자리만 잡아 두는 회색 칸 */
+function Placeholder({ className = "" }: { className?: string }) {
+  return <div aria-hidden className={`animate-pulse rounded-2xl bg-line/60 ${className}`} />;
+}
+
+async function Upcoming() {
+  return <LectureTable lectures={await listUpcoming()} />;
+}
+
+/** 강의료 통계 (고른 기간) */
+async function FeeStats({ period }: { period: PeriodParams }) {
+  const lectures = await listLectures(period);
+  const s = summarize(lectures);
+  const diff = s.receivedTotal - s.receivedExpected;
+  const byType = (["business", "other"] as const).map((t) => ({
+    t,
+    s: summarize(lectures.filter((l) => l.income_type === t)),
+  }));
+
+  return (
+    <div className="space-y-8">
       <h2 className="section-title">강의료</h2>
 
       <PeriodNav base="/" period={period} />
@@ -140,7 +166,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           </table>
         </section>
       )}
-    </>
+    </div>
   );
 }
 
