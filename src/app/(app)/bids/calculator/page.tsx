@@ -3,6 +3,9 @@ import { guessAwardMode } from "@/features/bid-inbox/calc";
 import { BidCalculator } from "@/features/bid-inbox/components/bid-calculator";
 import { getBidNotice } from "@/features/bid-inbox/queries";
 
+/** '지난 낙찰률 가져오기'는 1년치를 7일씩 받아서 시간이 걸린다 */
+export const maxDuration = 180;
+
 export default async function BidCalculatorPage({ searchParams }: PageProps<"/bids/calculator">) {
   const { notice: id } = await searchParams;
   const notice = typeof id === "string" ? await getBidNotice(id) : null;
