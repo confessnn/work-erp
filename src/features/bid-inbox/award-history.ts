@@ -1,6 +1,7 @@
 // 조달청_나라장터 낙찰정보서비스: 지난 원가 용역의 낙찰금액·낙찰률을 받아 계산기 3안의 근거로 쓴다.
 // 응답에는 낙찰 업체 대표자·전화·주소도 있지만 쓰지 않고 저장하지도 않는다.
-import { parseResponse } from "./g2b-api";
+import type { AwardMode } from "./calc";
+import { callApi, parseResponse } from "./g2b-api";
 
 const BASE_URL = "https://apis.data.go.kr/1230000/as/ScsbidInfoService";
 /** 용역 낙찰 목록 (공고명 검색) */
@@ -24,7 +25,22 @@ export type Award = {
   participants: number | null;
   winner: string | null;
   date: string | null; // YYYY-MM-DD
+  /** 낙찰방법 (입찰공고에서 따로 조회). undefined = 아직 조회 안 함, "" = 조회했지만 없음 */
+  method?: string;
 };
+
+/** 경쟁이 거의 없던 공고 (참여 2곳 이하)는 3안 계산에서 뺀다 */
+export const MIN_COMPETITORS = 3;
+/** 3안 계산에 쓰는 최대 건수 */
+export const MAX_RATES = 12;
+
+/** 낙찰방법 글 → 계산 방식. 모르면 null */
+export function modeOf(method: string | undefined | null): AwardMode | null {
+  if (!method) return null;
+  if (/협상/.test(method)) return "negotiation";
+  if (/적격/.test(method)) return "qualified";
+  return "price";
+}
 
 type ApiItem = Record<string, unknown>;
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -107,6 +123,40 @@ async function fetchWindow(key: string, keyword: string, begin: string, end: str
   return out;
 }
 
+/** 용역 입찰공고를 공고번호로 찾아 낙찰방법을 얻는다 (입찰공고정보서비스, inqryDiv=2) */
+async function lookupMethod(bidNo: string): Promise<string> {
+  const [no] = bidNo.split("-");
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const { items } = await callApi("getBidPblancListInfoServc02", { inqryDiv: "2", bidNtceNo: no, numOfRows: "5", pageNo: "1" });
+      const hit = items.find((i) => typeof i.sucsfbidMthdNm === "string" && i.sucsfbidMthdNm.trim());
+      return hit ? String(hit.sucsfbidMthdNm).trim() : "";
+    } catch (e) {
+      if (attempt < 2 && e instanceof Error && e.message.includes("초당")) await sleep(RETRY_WAIT_MS * (attempt + 1));
+      else throw e;
+    }
+  }
+}
+
+/**
+ * 아직 낙찰방법을 모르는 결과만 하나씩 조회해 채운다. deadline(ms 시각)이 지나면 멈추고,
+ * 남은 것은 다음에 채운다. 바뀐 배열을 돌려준다.
+ */
+export async function fillMethods(awards: Award[], deadline: number): Promise<Award[]> {
+  const out = [...awards];
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].method !== undefined) continue;
+    if (Date.now() > deadline) break;
+    try {
+      out[i] = { ...out[i], method: await lookupMethod(out[i].bidNo) };
+    } catch {
+      // 이번에 못 찾으면 다음에 다시 찾는다
+    }
+    await sleep(GAP_MS);
+  }
+  return out;
+}
+
 /** 최근 days일 동안 공고명에 keyword가 들어간 용역 낙찰 결과. 몇 주가 실패해도 나머지는 돌려준다 */
 export async function fetchAwards(keyword: string, days: number, now = new Date()): Promise<{ awards: Award[]; failedWeeks: number }> {
   const key = process.env.BID_API_KEY;
@@ -144,14 +194,18 @@ export const titleCore = (t: string) =>
     .replace(/\d{4}\s*년도?|제?\s*\d+\s*차|재공고|긴급/g, " ")
     .replace(/\s+/g, "");
 
-export type Similar = Award & { sameOrg: boolean; sameWork: boolean };
+/** use: 3안 계산에 씀. skip: 빼는 이유 */
+export type Similar = Award & { sameOrg: boolean; sameWork: boolean; use: boolean; skip: string | null };
 
 /**
  * 계산기에 쓸 비슷한 낙찰 결과.
  * - 같은 발주기관이거나 공고명이 거의 같은 지난 용역은 금액과 관계없이 넣는다
  * - 그 밖에는 낙찰금액이 기준금액의 40%~160% 안인 원가 용역만 넣는다
  */
-export function pickSimilar(awards: Award[], notice: { title: string; org: string | null; base: number | null; bidNo?: string | null }): Similar[] {
+export function pickSimilar(
+  awards: Award[],
+  notice: { title: string; org: string | null; base: number | null; bidNo?: string | null; mode?: AwardMode | null },
+): Similar[] {
   const org = norm(notice.org);
   const core = titleCore(notice.title);
   const base = notice.base && notice.base > 0 ? notice.base : null;
@@ -160,16 +214,33 @@ export function pickSimilar(awards: Award[], notice: { title: string; org: strin
     .map((a) => {
       const sameOrg = !!org && norm(a.org) === org;
       const sameWork = core.length >= 6 && titleCore(a.title) === core;
-      return { ...a, sameOrg, sameWork };
+      const mode = modeOf(a.method);
+      const skip =
+        a.participants !== null && a.participants < MIN_COMPETITORS
+          ? `경쟁 적음 (${a.participants}곳 참여)`
+          : notice.mode && mode && mode !== notice.mode
+            ? `다른 방식 (${MODE_LABEL[mode]})`
+            : null;
+      return { ...a, sameOrg, sameWork, use: skip === null, skip };
     })
     .filter((a) => a.sameOrg || a.sameWork || (base !== null && a.amount >= base * 0.4 && a.amount <= base * 1.6) || base === null)
-    .sort((a, b) => Number(b.sameWork) - Number(a.sameWork) || Number(b.sameOrg) - Number(a.sameOrg) || (b.date ?? "").localeCompare(a.date ?? ""));
+    .sort(
+      (a, b) =>
+        Number(b.use) - Number(a.use) ||
+        Number(b.sameWork) - Number(a.sameWork) ||
+        Number(b.sameOrg) - Number(a.sameOrg) ||
+        (b.date ?? "").localeCompare(a.date ?? ""),
+    )
+    .map((a, i, all) => (a.use && all.slice(0, i).filter((x) => x.use).length >= MAX_RATES ? { ...a, use: false, skip: "12건 초과" } : a));
 }
+
+const MODE_LABEL: Record<AwardMode, string> = { negotiation: "협상", qualified: "적격심사", price: "최저가 등" };
 
 /** 예전에 받은 결과에 새로 받은 결과를 합친다 (같은 공고는 새 것으로). days일보다 오래된 것은 뺀다 */
 export function mergeAwards(old: Award[], fresh: Award[], days: number, now = new Date()): Award[] {
   const cutoff = new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
   const map = new Map<string, Award>();
-  for (const a of [...old, ...fresh]) map.set(a.bidNo, a);
+  // 새로 받은 결과에는 낙찰방법이 없으므로 예전에 찾아 둔 값을 이어 쓴다
+  for (const a of [...old, ...fresh]) map.set(a.bidNo, { ...a, method: a.method ?? map.get(a.bidNo)?.method });
   return [...map.values()].filter((a) => !a.date || a.date >= cutoff);
 }
