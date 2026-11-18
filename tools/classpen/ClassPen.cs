@@ -1,6 +1,6 @@
 // 수업펜 (ClassPen) - 수업용 화면 판서·확대 도구
 // 빌드: build.ps1 (윈도우 기본 .NET Framework 4.x 의 csc.exe, C# 5)
-// 기본 단축키: Ctrl+Shift+1 확대 / Ctrl+Shift+2 판서 / Ctrl+Shift+3 칠판 (아이콘 메뉴 '단축키 설정'에서 변경)
+// 기본 단축키: Ctrl+Shift+1 확대 / Ctrl+Shift+2 판서 / Ctrl+Shift+3 칠판 / Ctrl+Shift+4 라이브 줌 (아이콘 메뉴 '단축키 설정'에서 변경)
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -57,6 +57,7 @@ namespace ClassPen
             new KeyAction("draw", "판서 시작", Keys.Control | Keys.Shift | Keys.D2, true),
             new KeyAction("zoom", "확대 시작", Keys.Control | Keys.Shift | Keys.D1, true),
             new KeyAction("board", "칠판 열기", Keys.Control | Keys.Shift | Keys.D3, true),
+            new KeyAction("live", "라이브 줌", Keys.Control | Keys.Shift | Keys.D4, true),
             new KeyAction("pen", "펜", Keys.P, false),
             new KeyAction("marker", "형광펜", Keys.H, false),
             new KeyAction("rect", "네모", Keys.R, false),
@@ -315,11 +316,12 @@ namespace ClassPen
         [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hWnd, int id, int mods, int vk);
         [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
-        static readonly string[] GlobalIds = { "zoom", "draw", "board" }; // 등록 id 1, 2, 3
+        static readonly string[] GlobalIds = { "zoom", "draw", "board", "live" }; // 등록 id 1, 2, 3, 4
         readonly NotifyIcon tray;
         readonly HotkeyWindow hotkeys;
-        readonly ToolStripMenuItem drawItem, zoomItem, boardItem;
+        readonly ToolStripMenuItem drawItem, zoomItem, boardItem, liveItem;
         Overlay current;
+        LiveZoom live;
         SettingsForm settings;
 
         class HotkeyWindow : NativeWindow
@@ -340,8 +342,10 @@ namespace ClassPen
             drawItem = new ToolStripMenuItem("판서 시작", null, delegate { Open(StartMode.Draw); });
             zoomItem = new ToolStripMenuItem("확대 시작", null, delegate { Open(StartMode.Zoom); });
             boardItem = new ToolStripMenuItem("칠판 열기", null, delegate { Open(StartMode.Board); });
+            liveItem = new ToolStripMenuItem("라이브 줌", null, delegate { ToggleLive(); });
             menu.Items.Add(drawItem);
             menu.Items.Add(zoomItem);
+            menu.Items.Add(liveItem);
             menu.Items.Add(boardItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("단축키 설정", null, delegate { ShowSettings(); });
@@ -360,6 +364,7 @@ namespace ClassPen
                 if (id == 1) Open(StartMode.Zoom);
                 else if (id == 2) Open(StartMode.Draw);
                 else if (id == 3) Open(StartMode.Board);
+                else if (id == 4) ToggleLive();
             };
             var failed = RegisterAll();
             string msg = failed.Count == 0
@@ -392,6 +397,7 @@ namespace ClassPen
             drawItem.Text = "판서 시작 (" + Hotkeys.Text(Hotkeys.Get("draw")) + ")";
             zoomItem.Text = "확대 시작 (" + Hotkeys.Text(Hotkeys.Get("zoom")) + ")";
             boardItem.Text = "칠판 열기 (" + Hotkeys.Text(Hotkeys.Get("board")) + ")";
+            liveItem.Text = "라이브 줌 (" + Hotkeys.Text(Hotkeys.Get("live")) + ")";
             string tip = "수업펜 - " + Hotkeys.Text(Hotkeys.Get("draw")) + " 판서 / " + Hotkeys.Text(Hotkeys.Get("zoom")) + " 확대";
             tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
             return failed;
@@ -399,6 +405,7 @@ namespace ClassPen
 
         void ShowSettings()
         {
+            CloseLive();
             if (current != null && !current.IsDisposed) current.Close();
             if (settings != null && !settings.IsDisposed) { settings.Activate(); return; }
             var form = new SettingsForm();
@@ -415,11 +422,37 @@ namespace ClassPen
             form.Activate();
         }
 
+        bool LiveOpen { get { return live != null && !live.IsDisposed; } }
+        void CloseLive() { if (LiveOpen) live.Close(); live = null; }
+
+        /// <summary>라이브 줌 켜고 끄기</summary>
+        void ToggleLive()
+        {
+            if (LiveOpen) { CloseLive(); return; }
+            if (current != null && !current.IsDisposed) current.Close();
+            var z = new LiveZoom(Screen.FromPoint(Cursor.Position));
+            live = z;
+            z.FormClosed += delegate { if (live == z) live = null; };
+            z.Show();
+            if (z.Failed)
+            {
+                CloseLive();
+                tray.ShowBalloonTip(4000, "수업펜", "이 Windows에서는 라이브 줌을 쓸 수 없어요 (Windows 10 2004 이상 필요). 일반 확대를 써 주세요.", ToolTipIcon.Warning);
+            }
+        }
+
         void Open(StartMode mode)
         {
+            // 라이브 줌 중에 판서를 누르면 지금 확대된 화면을 멈추고 그 위에 판서한다
+            float frozen = 0f;
+            if (LiveOpen)
+            {
+                if (mode == StartMode.Draw) frozen = live.Zoom;
+                CloseLive();
+            }
             // 열려 있으면 같은 단축키로 닫는다
-            if (current != null && !current.IsDisposed) { current.Close(); return; }
-            current = new Overlay(Screen.FromPoint(Cursor.Position), mode);
+            else if (current != null && !current.IsDisposed) { current.Close(); return; }
+            current = new Overlay(Screen.FromPoint(Cursor.Position), frozen > 0f ? StartMode.Zoom : mode, frozen);
             current.FormClosed += delegate { current = null; };
             current.Show();
             current.Activate();
@@ -432,6 +465,8 @@ namespace ClassPen
                 "■ 시작\n" +
                 "  " + k("draw") + "  판서 (지금 화면 위에 쓰기)\n" +
                 "  " + k("zoom") + "  확대 (휠로 배율, 클릭하면 멈추고 판서)\n" +
+                "  " + k("live") + "  라이브 줌 (움직이는 화면 그대로 확대, 클릭·입력도 그대로 돼요)\n" +
+                "        Ctrl+휠 배율, " + k("draw") + " 멈추고 판서, " + k("live") + " 끝내기\n" +
                 "  " + k("board") + "  칠판 (흰 화면에 쓰기)\n\n" +
                 "■ 판서 중\n" +
                 "  " + k("pen") + " 펜   " + k("marker") + " 형광펜   " + k("rect") + " 네모   " + k("line") + " 직선(Shift: 수평·수직)   " + k("text") + " 글자\n" +
@@ -445,6 +480,7 @@ namespace ClassPen
 
         protected override void ExitThreadCore()
         {
+            CloseLive();
             if (current != null && !current.IsDisposed) current.Close();
             for (int i = 1; i <= GlobalIds.Length; i++) UnregisterHotKey(hotkeys.Handle, i);
             hotkeys.DestroyHandle();
@@ -527,6 +563,218 @@ namespace ClassPen
     }
 
     /// <summary>화면을 덮는 판서·확대 창. 화면을 찍어 두고 그 위에 그린다.</summary>
+    /// <summary>
+    /// 라이브 줌: 화면을 계속 새로 그리며 확대한다. 동영상·프로그램이 움직이는 그대로 보이고,
+    /// 클릭·입력은 아래 프로그램으로 그대로 간다 (창이 클릭을 통과시킴).
+    /// 마우스 아래의 점이 확대해도 마우스 아래에 있도록 맞춰서, 확대된 화면을 그대로 눌러도 정확한 곳이 눌린다.
+    /// 그리기는 따로 도는 작업(스레드)에서 해서, 화면이 넓어도 단축키·마우스가 느려지지 않는다.
+    /// </summary>
+    class LiveZoom : Form
+    {
+        [DllImport("user32.dll")] static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
+        [DllImport("user32.dll")] static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint key, byte alpha, uint flags);
+        [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr hWnd);
+        [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr hWnd, IntPtr dc);
+        [DllImport("user32.dll")] static extern bool GetCursorPos(out Point p);
+        [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr dc);
+        [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleBitmap(IntPtr dc, int w, int h);
+        [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr dc, IntPtr obj);
+        [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr obj);
+        [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr dc);
+        [DllImport("gdi32.dll")] static extern bool BitBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, int rop);
+        [DllImport("gdi32.dll")] static extern bool StretchBlt(IntPtr dst, int x, int y, int w, int h, IntPtr src, int sx, int sy, int sw, int sh, int rop);
+        [DllImport("gdi32.dll")] static extern int SetStretchBltMode(IntPtr dc, int mode);
+        [DllImport("gdi32.dll")] static extern bool SetBrushOrgEx(IntPtr dc, int x, int y, IntPtr old);
+        [DllImport("user32.dll")] static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr mod, uint thread);
+        [DllImport("user32.dll")] static extern bool UnhookWindowsHookEx(IntPtr hook);
+        [DllImport("user32.dll")] static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr w, IntPtr l);
+        [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
+        [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
+        delegate IntPtr HookProc(int code, IntPtr w, IntPtr l);
+
+        const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
+        const int WS_EX_LAYERED = 0x80000, WS_EX_TRANSPARENT = 0x20, WS_EX_TOOLWINDOW = 0x80, WS_EX_NOACTIVATE = 0x8000000, WS_EX_TOPMOST = 0x8;
+        const int SRCCOPY = 0xCC0020, HALFTONE = 4, COLORONCOLOR = 3, WH_MOUSE_LL = 14, WM_MOUSEWHEEL = 0x20A, VK_CONTROL = 0x11;
+
+        volatile float zoom = 2f;
+        public float Zoom { get { return zoom; } }
+        public bool Failed;
+        readonly Rectangle screen;
+        readonly HookProc hookProc;    // 가비지 수집되지 않게 붙잡아 둔다
+        readonly string hintKeys;
+        IntPtr hook;
+        long hintUntil;                // DateTime.Ticks
+        Thread renderThread;
+        volatile bool running;
+        readonly int stretchMode;
+        readonly string debugPath;     // 시험용: 환경 변수 CLASSPEN_DEBUG 에 파일 경로를 주면 속도와 한 장면을 저장
+
+        public LiveZoom(Screen s)
+        {
+            screen = s.Bounds;
+            FormBorderStyle = FormBorderStyle.None;
+            StartPosition = FormStartPosition.Manual;
+            Bounds = screen;
+            TopMost = true;
+            ShowInTaskbar = false;
+            Text = "수업펜 라이브 줌";
+            BackColor = Color.Black;
+            hookProc = OnMouseHook;
+            Keys live = Hotkeys.Get("live");
+            hintKeys = " · Ctrl+휠 배율 · " + Hotkeys.Text(Hotkeys.Get("draw")) + " 멈추고 판서" + (live == Keys.None ? "" : " · " + Hotkeys.Text(live) + " 끝내기");
+            hintUntil = DateTime.Now.AddSeconds(3).Ticks;
+            stretchMode = Environment.GetEnvironmentVariable("CLASSPEN_STRETCH") == "fast" ? COLORONCOLOR : HALFTONE;
+            debugPath = Environment.GetEnvironmentVariable("CLASSPEN_DEBUG");
+        }
+
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                var cp = base.CreateParams;
+                cp.ExStyle |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST;
+                return cp;
+            }
+        }
+        protected override bool ShowWithoutActivation { get { return true; } }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            SetLayeredWindowAttributes(Handle, 0, 255, 2 /* LWA_ALPHA */);
+            // 화면을 찍을 때 이 창은 빼고 찍히게 한다 (Windows 10 2004 이상). 안 되면 거울 속 거울처럼 되므로 쓰지 않는다.
+            if (!SetWindowDisplayAffinity(Handle, WDA_EXCLUDEFROMCAPTURE)) Failed = true;
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            if (Failed) return;
+            hook = SetWindowsHookEx(WH_MOUSE_LL, hookProc, GetModuleHandle(null), 0);
+            running = true;
+            IntPtr hwnd = Handle;
+            renderThread = new Thread(delegate () { RenderLoop(hwnd); });
+            renderThread.IsBackground = true;
+            renderThread.Start();
+        }
+
+        /// <summary>Ctrl+휠: 배율 바꾸기 (아래 프로그램으로는 보내지 않음). 그냥 휠은 아래 프로그램 스크롤.</summary>
+        IntPtr OnMouseHook(int code, IntPtr w, IntPtr l)
+        {
+            if (code >= 0 && w.ToInt32() == WM_MOUSEWHEEL && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)
+            {
+                int delta = (short)(Marshal.ReadInt32(l, 8) >> 16);
+                zoom = Math.Max(1.25f, Math.Min(8f, zoom * (delta > 0 ? 1.25f : 0.8f)));
+                hintUntil = DateTime.Now.AddSeconds(1.5).Ticks;
+                return (IntPtr)1;
+            }
+            return CallNextHookEx(hook, code, w, l);
+        }
+
+        /// <summary>마우스 위치에서 확대해 보여 줄 원본 영역 (화면 안 좌표)</summary>
+        RectangleF SourceRect(float z)
+        {
+            Point m;
+            GetCursorPos(out m);
+            float mx = Math.Max(0, Math.Min(screen.Width - 1, m.X - screen.X));
+            float my = Math.Max(0, Math.Min(screen.Height - 1, m.Y - screen.Y));
+            return new RectangleF(mx - mx / z, my - my / z, screen.Width / z, screen.Height / z);
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e) { }
+        protected override void OnPaint(PaintEventArgs e) { }
+
+        void RenderLoop(IntPtr hwnd)
+        {
+            int w = screen.Width, h = screen.Height;
+            IntPtr winDc = GetDC(hwnd);
+            IntPtr memDc = CreateCompatibleDC(winDc);
+            IntPtr bmp = CreateCompatibleBitmap(winDc, w, h);
+            IntPtr oldBmp = SelectObject(memDc, bmp);
+            int mode = stretchMode;
+            SetStretchBltMode(memDc, mode);
+            SetBrushOrgEx(memDc, 0, 0, IntPtr.Zero);
+            var watch = new System.Diagnostics.Stopwatch();
+            int frames = 0;
+            double total = 0;
+            try
+            {
+                using (var border = new Pen(Color.FromArgb(232, 185, 74), 4f))
+                using (var font = new Font("맑은 고딕", 15f, FontStyle.Bold, GraphicsUnit.Pixel))
+                using (var bg = new SolidBrush(Color.FromArgb(255, 250, 240)))
+                using (var fg = new SolidBrush(Color.FromArgb(40, 40, 40)))
+                {
+                    while (running)
+                    {
+                        watch.Restart();
+                        float z = zoom;
+                        RectangleF src = SourceRect(z);
+                        IntPtr screenDc = GetDC(IntPtr.Zero);
+                        StretchBlt(memDc, 0, 0, w, h, screenDc,
+                            screen.X + (int)Math.Round(src.X), screen.Y + (int)Math.Round(src.Y), (int)Math.Round(src.Width), (int)Math.Round(src.Height), SRCCOPY);
+                        ReleaseDC(IntPtr.Zero, screenDc);
+                        using (var g = Graphics.FromHdc(memDc))
+                        {
+                            g.DrawRectangle(border, 2, 2, w - 4, h - 4);
+                            if (DateTime.Now.Ticks < hintUntil)
+                            {
+                                string text = "라이브 줌 " + z.ToString("0.0") + "배" + hintKeys;
+                                SizeF size = g.MeasureString(text, font);
+                                var box = new RectangleF((w - size.Width) / 2 - 12, 14, size.Width + 24, size.Height + 12);
+                                g.FillRectangle(bg, box);
+                                g.DrawString(text, font, fg, box.X + 12, box.Y + 6);
+                            }
+                        }
+                        BitBlt(winDc, 0, 0, w, h, memDc, 0, 0, SRCCOPY);
+                        double ms = watch.Elapsed.TotalMilliseconds;
+                        frames++;
+                        total += ms;
+                        // 화면이 아주 넓어 부드럽게 늘리기가 느리면(한 장면 28ms 넘게) 빠른 방식으로 바꾼다
+                        if (frames == 10 && mode == HALFTONE && total / frames > 28) { mode = COLORONCOLOR; SetStretchBltMode(memDc, mode); }
+                        if (debugPath != null && frames % 60 == 0) WriteDebug(memDc, total / frames, mode);
+                        int wait = 16 - (int)ms;
+                        Thread.Sleep(wait > 1 ? wait : 1);
+                    }
+                }
+            }
+            finally
+            {
+                SelectObject(memDc, oldBmp);
+                DeleteObject(bmp);
+                DeleteDC(memDc);
+                ReleaseDC(hwnd, winDc);
+            }
+        }
+
+        void WriteDebug(IntPtr memDc, double avgMs, int mode)
+        {
+            try
+            {
+                File.WriteAllText(debugPath, "avg_ms=" + avgMs.ToString("0.0") + " mode=" + mode + " zoom=" + zoom.ToString("0.00") + " size=" + screen.Width + "x" + screen.Height);
+                using (var img = new Bitmap(screen.Width, screen.Height))
+                {
+                    using (var g = Graphics.FromImage(img))
+                    {
+                        IntPtr d = g.GetHdc();
+                        BitBlt(d, 0, 0, screen.Width, screen.Height, memDc, 0, 0, SRCCOPY);
+                        g.ReleaseHdc(d);
+                    }
+                    img.Save(Path.ChangeExtension(debugPath, ".png"), ImageFormat.Png);
+                }
+            }
+            catch { }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            running = false;
+            if (renderThread != null) renderThread.Join(500);
+            if (hook != IntPtr.Zero) UnhookWindowsHookEx(hook);
+            hook = IntPtr.Zero;
+            base.OnFormClosing(e);
+        }
+    }
+
     class Overlay : Form
     {
         static readonly Color[] Palette = { Color.FromArgb(230, 30, 40), Color.FromArgb(20, 90, 230), Color.FromArgb(20, 160, 60), Color.FromArgb(250, 200, 0), Color.Black, Color.White };
@@ -552,7 +800,7 @@ namespace ClassPen
         readonly List<Button> colorButtons = new List<Button>();
         TextBox textBox;
 
-        public Overlay(Screen screen, StartMode mode)
+        public Overlay(Screen screen, StartMode mode, float frozenZoom = 0f)
         {
             Rectangle b = screen.Bounds;
             shot = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb);
@@ -602,6 +850,7 @@ namespace ClassPen
 
             if (mode == StartMode.Board) { board = 1; color = Color.Black; }
             if (mode == StartMode.Zoom) { zoom = 2f; zoomLive = true; }
+            if (frozenZoom > 0f) { zoom = frozenZoom; zoomLive = false; } // 라이브 줌에서 넘어옴: 확대된 채 바로 판서
             UpdateZoomSrc(PointToClientSafe(Cursor.Position));
             Rebuild();
             RefreshBar();

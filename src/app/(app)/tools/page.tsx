@@ -6,6 +6,9 @@ const SHORTCUTS: [string, string][] = [
   ["Ctrl+Shift+2", "판서 시작 (지금 화면 위에 쓰기)"],
   ["Ctrl+Shift+1", "확대 시작 (휠로 배율, 클릭하면 멈추고 판서)"],
   ["Ctrl+Shift+3", "칠판 (흰 화면에 쓰기)"],
+  ["Ctrl+Shift+4", "라이브 줌 (움직이는 화면 그대로 확대, 클릭·입력도 그대로 돼요)"],
+  ["Ctrl+휠 (라이브 줌 중)", "라이브 줌 배율"],
+  ["판서 키 (라이브 줌 중)", "확대된 화면을 멈추고 그 위에 판서"],
   ["P / H / R / L / T", "펜 / 형광펜 / 네모 / 직선 / 글자"],
   ["Shift + 직선", "수평·수직 밑줄"],
   ["휠 또는 [ ]", "굵기"],
@@ -27,11 +30,11 @@ export default function ToolsPage() {
           <div>
             <h2 className="section-title">수업펜</h2>
             <p className="text-sm text-muted">
-              엑셀·PPT·한글 등 어떤 화면 위에든 펜·형광펜·네모·밑줄·글자를 쓰고, 화면을 확대해 그 위에 판서하는 프로그램이에요.
+              엑셀·PPT·한글 등 어떤 화면 위에든 펜·형광펜·네모·밑줄·글자를 쓰고, 화면을 확대해 그 위에 판서하는 프로그램이에요. 라이브 줌으로 동영상·프로그램이 움직이는 그대로 확대해서 보여 줄 수도 있어요.
             </p>
           </div>
           <a href="/downloads/ClassPen.exe" download="수업펜.exe" className="btn-primary">
-            내려받기 (Windows, 34KB)
+            내려받기 (Windows, 40KB)
           </a>
         </div>
 
