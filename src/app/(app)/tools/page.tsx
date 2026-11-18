@@ -34,7 +34,7 @@ export default function ToolsPage() {
             </p>
           </div>
           <a href="/downloads/ClassPen.exe" download="수업펜.exe" className="btn-primary">
-            내려받기 (Windows, 37KB)
+            내려받기 (Windows, 38KB)
           </a>
         </div>
 

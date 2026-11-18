@@ -565,9 +565,10 @@ namespace ClassPen
     /// <summary>화면을 덮는 판서·확대 창. 화면을 찍어 두고 그 위에 그린다.</summary>
     /// <summary>
     /// 라이브 줌: Windows 돋보기와 같은 '화면 전체 확대'(Magnification API)를 쓴다.
-    /// 확대는 그래픽 카드(DWM)가 하므로 동영상·프로그램이 움직이는 그대로 부드럽게 보이고,
-    /// 마우스가 움직일 때마다(저수준 마우스 훅) 바로 확대 위치를 옮긴다.
-    /// 마우스 아래의 점이 확대해도 마우스 아래에 있도록 맞춰서, 확대된 화면을 그대로 눌러도 정확한 곳이 눌린다.
+    /// 확대는 그래픽 카드(DWM)가 하므로 동영상·프로그램이 움직이는 그대로 보인다.
+    /// 확대 위치는 따로 도는 작업(스레드)에서 화면이 새로 그려지는 박자(DwmFlush)마다 한 번씩,
+    /// 마우스 쪽으로 미끄러지듯 옮겨서 좌우로 움직일 때 덜컥거리지 않는다.
+    /// 마우스가 멈추면 마우스 아래의 점이 확대해도 마우스 아래에 오므로, 확대된 화면을 그대로 눌러도 정확한 곳이 눌린다.
     /// 화면에 보이는 창은 없다.
     /// </summary>
     class LiveZoom
@@ -575,6 +576,7 @@ namespace ClassPen
         [DllImport("Magnification.dll")] static extern bool MagInitialize();
         [DllImport("Magnification.dll")] static extern bool MagUninitialize();
         [DllImport("Magnification.dll")] static extern bool MagSetFullscreenTransform(float level, int xOffset, int yOffset);
+        [DllImport("dwmapi.dll")] static extern int DwmFlush();
         [DllImport("user32.dll")] static extern bool GetCursorPos(out Point p);
         [DllImport("user32.dll")] static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr mod, uint thread);
         [DllImport("user32.dll")] static extern bool UnhookWindowsHookEx(IntPtr hook);
@@ -583,70 +585,50 @@ namespace ClassPen
         [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
         delegate IntPtr HookProc(int code, IntPtr w, IntPtr l);
 
-        const int WH_MOUSE_LL = 14, WM_MOUSEMOVE = 0x200, WM_MOUSEWHEEL = 0x20A, VK_CONTROL = 0x11;
+        const int WH_MOUSE_LL = 14, WM_MOUSEWHEEL = 0x20A, VK_CONTROL = 0x11;
+        const float Follow = 0.5f;     // 한 장면마다 남은 거리의 몇 %를 따라갈지 (클수록 바로, 작을수록 미끄러지듯)
 
-        float zoom = 1f;               // 지금 보이는 배율 (target 쪽으로 부드럽게 움직임)
-        float target = 2f;             // 바라는 배율
+        volatile float target = 2f;    // 바라는 배율 (Ctrl+휠)
         public float Zoom { get { return target; } }
         readonly Rectangle screen;
         readonly HookProc hookProc;    // 가비지 수집되지 않게 붙잡아 둔다
-        readonly System.Windows.Forms.Timer anim;
+        readonly string debugPath;     // 시험용: 환경 변수 CLASSPEN_DEBUG 에 파일 경로를 주면 움직임 기록을 적는다
         IntPtr hook;
-        bool magOn;
-        Point mouse;
-        readonly string debugPath;     // 시험용: 환경 변수 CLASSPEN_DEBUG 에 파일 경로를 주면 마지막 확대 상태를 적는다
-        int updates;
+        Thread thread;
+        volatile bool running;
+        bool started;
+        readonly ManualResetEvent ready = new ManualResetEvent(false);
 
         public LiveZoom(Screen s)
         {
             screen = s.Bounds;
             hookProc = OnMouseHook;
             debugPath = Environment.GetEnvironmentVariable("CLASSPEN_DEBUG");
-            anim = new System.Windows.Forms.Timer();
-            anim.Interval = 10;
-            anim.Tick += delegate { Animate(); };
         }
 
         /// <summary>확대를 시작한다. 이 PC에서 쓸 수 없으면 false.</summary>
         public bool Start()
         {
-            try { magOn = MagInitialize(); } catch { magOn = false; }
-            GetCursorPos(out mouse);
-            if (!magOn || !Apply()) { Stop(); return false; }
+            running = true;
+            thread = new Thread(Loop);
+            thread.IsBackground = true;
+            thread.Start();
+            ready.WaitOne(2000);
+            if (!started) { Stop(); return false; }
             hook = SetWindowsHookEx(WH_MOUSE_LL, hookProc, GetModuleHandle(null), 0);
-            anim.Start();              // 1배 → 2배로 부드럽게 들어간다
             return true;
         }
 
-        /// <summary>마우스가 움직이면 바로 확대 위치를 옮긴다. Ctrl+휠은 배율 (아래 프로그램으로는 보내지 않음).</summary>
+        /// <summary>Ctrl+휠: 배율 바꾸기 (아래 프로그램으로는 보내지 않음). 그냥 휠은 아래 프로그램 스크롤.</summary>
         IntPtr OnMouseHook(int code, IntPtr w, IntPtr l)
         {
-            if (code >= 0 && magOn)
+            if (code >= 0 && w.ToInt32() == WM_MOUSEWHEEL && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)
             {
-                int msg = w.ToInt32();
-                if (msg == WM_MOUSEMOVE)
-                {
-                    mouse = new Point(Marshal.ReadInt32(l, 0), Marshal.ReadInt32(l, 4));
-                    Apply();
-                }
-                else if (msg == WM_MOUSEWHEEL && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)
-                {
-                    int delta = (short)(Marshal.ReadInt32(l, 8) >> 16);
-                    target = Math.Max(1.25f, Math.Min(8f, target * (delta > 0 ? 1.25f : 0.8f)));
-                    anim.Start();
-                    return (IntPtr)1;
-                }
+                int delta = (short)(Marshal.ReadInt32(l, 8) >> 16);
+                target = Math.Max(1.25f, Math.Min(8f, target * (delta > 0 ? 1.25f : 0.8f)));
+                return (IntPtr)1;
             }
             return CallNextHookEx(hook, code, w, l);
-        }
-
-        void Animate()
-        {
-            float diff = target - zoom;
-            if (Math.Abs(diff) < 0.01f) { zoom = target; anim.Stop(); }
-            else zoom += diff * 0.25f;
-            GetCursorPos(out mouse);
-            Apply();
         }
 
         /// <summary>마우스 아래 점이 그대로 마우스 아래에 오도록 확대 위치를 정한다 (화면 밖으로는 안 나감)</summary>
@@ -660,31 +642,69 @@ namespace ClassPen
             return new PointF(screen.X + x, screen.Y + y);
         }
 
-        bool Apply()
+        /// <summary>확대를 맡는 작업. 화면이 한 번 그려질 때마다 배율과 위치를 한 번씩 정한다.</summary>
+        void Loop()
         {
-            PointF o = Offset(screen, mouse, zoom);
-            bool ok = MagSetFullscreenTransform(zoom, (int)Math.Round(o.X), (int)Math.Round(o.Y));
-            updates++;
-            if (debugPath != null && (updates % 20 == 0 || !ok))
+            bool init = false;
+            try { init = MagInitialize(); } catch { }
+            float zoom = 1f;
+            Point m;
+            GetCursorPos(out m);
+            PointF cur = Offset(screen, m, zoom);
+            if (init && MagSetFullscreenTransform(zoom, (int)cur.X, (int)cur.Y)) started = true;
+            ready.Set();
+            if (!started) { if (init) MagUninitialize(); return; }
+
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            int frames = 0, sets = 0, lastX = int.MinValue, lastY = int.MinValue;
+            float lastZoom = -1f;
+            double maxGap = 0, prev = 0;
+            try
             {
-                try { File.WriteAllText(debugPath, "ok=" + ok + " zoom=" + zoom.ToString("0.00") + " target=" + target.ToString("0.00") + " offset=" + (int)o.X + "," + (int)o.Y + " mouse=" + mouse.X + "," + mouse.Y + " updates=" + updates); } catch { }
+                while (running)
+                {
+                    float t = target;
+                    zoom += (t - zoom) * 0.25f;
+                    if (Math.Abs(t - zoom) < 0.005f) zoom = t;
+                    GetCursorPos(out m);
+                    PointF want = Offset(screen, m, zoom);
+                    cur = new PointF(cur.X + (want.X - cur.X) * Follow, cur.Y + (want.Y - cur.Y) * Follow);
+                    if (Math.Abs(want.X - cur.X) < 0.5f) cur.X = want.X;
+                    if (Math.Abs(want.Y - cur.Y) < 0.5f) cur.Y = want.Y;
+                    int x = (int)Math.Round(cur.X), y = (int)Math.Round(cur.Y);
+                    if (x != lastX || y != lastY || zoom != lastZoom)
+                    {
+                        MagSetFullscreenTransform(zoom, x, y);
+                        lastX = x; lastY = y; lastZoom = zoom;
+                        sets++;
+                    }
+                    // 다음 화면이 그려질 때까지 기다린다 (모니터 주사율에 맞춤). 안 되면 약 8ms 쉰다.
+                    if (DwmFlush() != 0) Thread.Sleep(8);
+                    frames++;
+                    double now = watch.Elapsed.TotalMilliseconds;
+                    if (frames > 1) maxGap = Math.Max(maxGap, now - prev);
+                    prev = now;
+                    if (debugPath != null && frames % 30 == 0)
+                    {
+                        try { File.WriteAllText(debugPath, "frames=" + frames + " avg_ms=" + (now / frames).ToString("0.0") + " max_gap_ms=" + maxGap.ToString("0.0") + " sets=" + sets + " zoom=" + zoom.ToString("0.00") + " offset=" + x + "," + y + " mouse=" + m.X + "," + m.Y); } catch { }
+                    }
+                }
             }
-            return ok;
+            finally
+            {
+                MagSetFullscreenTransform(1f, 0, 0);
+                MagUninitialize();
+            }
         }
 
         /// <summary>확대를 끝내고 화면을 원래대로 돌린다</summary>
         public void Stop()
         {
-            anim.Stop();
             if (hook != IntPtr.Zero) UnhookWindowsHookEx(hook);
             hook = IntPtr.Zero;
-            if (magOn)
-            {
-                MagSetFullscreenTransform(1f, 0, 0);
-                MagUninitialize();
-                magOn = false;
-            }
-            anim.Dispose();
+            running = false;
+            if (thread != null && thread != Thread.CurrentThread) thread.Join(1000);
+            thread = null;
         }
     }
 
