@@ -8,4 +8,4 @@
 
 단축키: Ctrl+Shift+2 판서, Ctrl+Shift+1 확대, Ctrl+Shift+3 칠판, Ctrl+Shift+4 라이브 줌, Esc 끝내기.
 
-라이브 줌은 화면을 계속 새로 찍어 확대하는 클릭 통과 창이다. `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`로 자기 창을 화면 찍기에서 빼므로 Windows 10 2004 이상이 필요하다. 그리기는 별도 스레드에서 하고, 한 장면이 28ms를 넘으면 빠른 늘리기(COLORONCOLOR)로 바꾼다. 시험할 때 환경 변수 `CLASSPEN_DEBUG`에 파일 경로를 주면 평균 속도와 확대 화면 한 장을 저장한다.
+라이브 줌은 Windows 돋보기와 같은 화면 전체 확대(Magnification API, `MagSetFullscreenTransform`)를 쓴다. 확대는 DWM이 하므로 끊기지 않는다. 저수준 마우스 훅으로 마우스가 움직일 때마다 확대 위치를 옮기고(마우스 아래 점이 그대로 마우스 아래에 오게), Ctrl+휠로 배율을 부드럽게 바꾼다. 프로그램이 강제로 꺼져도 Windows가 확대를 풀어 준다. 시험할 때 환경 변수 `CLASSPEN_DEBUG`에 파일 경로를 주면 마지막 확대 상태를 적는다.
