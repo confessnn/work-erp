@@ -35,6 +35,8 @@ export function AppNav({ items = NAV }: { items?: NavItem[] }) {
           <Link
             key={n.href}
             href={n.href}
+            // 메뉴 화면을 미리 만들지 않는다: 첫 화면을 열 때 서버가 메뉴 수만큼 화면을 더 만들어 휴대폰에서 느려진다
+            prefetch={false}
             className={`rounded-full px-4 py-2 font-medium ${active ? "bg-accent-soft font-semibold" : "text-muted hover:text-fg"}`}
           >
             {n.label}
