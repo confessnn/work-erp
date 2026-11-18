@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addedReply, toQuickEvent, weekdayOf, whenLabel, type Parsed } from "./quick-add";
+import { addedReply, overlapReply, parseCallback, toQuickEvent, weekdayOf, whenLabel, type Parsed } from "./quick-add";
 
 const base: Parsed = { is_event: true, person: "dad", title: "치과", date: "2026-11-19", start_time: "15:00", end_time: null, memo: null };
 const today = "2026-11-18";
@@ -35,5 +35,26 @@ describe("표시", () => {
     expect(r.html).toContain("예방&lt;접종&gt;");
     expect(r.html).toContain("아기 · 가족 달력");
     expect(r.buttons[0]).toEqual({ text: "되돌리기", callback_data: "undo:11111111-2222-3333-4444-555555555555" });
+  });
+});
+
+describe("시간 겹침 묻기", () => {
+  const ev = { person: "dad" as const, title: "치과 <예약>", date: "2026-11-20", start: "15:00", end: null, memo: null };
+  const id = "12345678-1234-1234-1234-123456789abc";
+  it("overlapReply", () => {
+    const r = overlapReply(ev, id, ["14:30~16:00 특강 (강의)"]);
+    expect(r.html).toContain("넣으려는 일정: 11월 20일(금) 15:00 치과 &lt;예약&gt; (아빠)");
+    expect(r.html).toContain("· 14:30~16:00 특강 (강의)");
+    expect(r.buttons).toEqual([
+      { text: "그래도 넣기", callback_data: `add:${id}` },
+      { text: "넣지 않기", callback_data: `skip:${id}` },
+    ]);
+    expect(`add:${id}`.length).toBeLessThanOrEqual(64);
+  });
+  it("parseCallback", () => {
+    expect(parseCallback(`skip:${id}`)).toEqual({ kind: "skip", id });
+    expect(parseCallback(`undo:${id}`)).toEqual({ kind: "undo", id });
+    expect(parseCallback("add:nope")).toBeNull();
+    expect(parseCallback(undefined)).toBeNull();
   });
 });

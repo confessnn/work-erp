@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { answerCallback, editMessageText, escapeTg, sendMessage } from "@/features/telegram/api";
-import { addedReply, HELP_TEXT, parseQuickAdd, toQuickEvent, whenLabel } from "@/features/telegram/quick-add";
+import { overlapLabel, type Overlap } from "@/features/family/overlap";
+import { addedReply, HELP_TEXT, overlapReply, parseCallback, parseQuickAdd, toQuickEvent, whenLabel, type QuickEvent } from "@/features/telegram/quick-add";
 import { todayInSeoul } from "@/lib/format";
 
 export const maxDuration = 60;
@@ -33,18 +34,37 @@ export async function POST(request: Request) {
     const cb = update?.callback_query;
     if (cb) {
       if (cb.message?.chat.id !== chatId) return Response.json({ ok: true });
-      const id = /^undo:([0-9a-f-]{36})$/.exec(cb.data ?? "")?.[1];
-      if (!id) {
+      const act = parseCallback(cb.data);
+      if (!act) {
         await answerCallback(token, cb.id);
         return Response.json({ ok: true });
       }
-      const { data: undone, error: e2 } = await db.rpc("tg_undo_event", { p_hook: hook, p_event: id });
-      if (e2 || !undone) {
-        await answerCallback(token, cb.id, "되돌릴 수 없어요 (하루가 지났거나 이미 지운 일정).");
+      if (act.kind === "undo") {
+        const { data: undone, error: e2 } = await db.rpc("tg_undo_event", { p_hook: hook, p_event: act.id });
+        if (e2 || !undone) {
+          await answerCallback(token, cb.id, "되돌릴 수 없어요 (하루가 지났거나 이미 지운 일정).");
+          return Response.json({ ok: true });
+        }
+        await answerCallback(token, cb.id, "지웠어요.");
+        await editMessageText(token, chatId, cb.message.message_id, `↩️ <s>${escapeTg(cb.message.text ?? "일정")}</s>\n되돌렸어요 (일정을 지웠어요).`);
         return Response.json({ ok: true });
       }
-      await answerCallback(token, cb.id, "지웠어요.");
-      await editMessageText(token, chatId, cb.message.message_id, `↩️ <s>${escapeTg(cb.message.text ?? "일정")}</s>\n되돌렸어요 (일정을 지웠어요).`);
+      // 시간이 겹쳐서 물어본 일정: [그래도 넣기] / [넣지 않기]
+      const { data: held, error: e4 } = await db.rpc("tg_release_event", { p_hook: hook, p_pending: act.id, p_add: act.kind === "add" });
+      const ev = held as (QuickEvent & { id: string | null }) | null;
+      if (e4 || !ev) {
+        await answerCallback(token, cb.id, "이미 처리했거나 하루가 지난 일정이에요.");
+        await editMessageText(token, chatId, cb.message.message_id, escapeTg(cb.message.text ?? "일정")).catch(() => {});
+        return Response.json({ ok: true });
+      }
+      if (act.kind === "skip" || !ev.id) {
+        await answerCallback(token, cb.id, "넣지 않았어요.");
+        await editMessageText(token, chatId, cb.message.message_id, `🚫 넣지 않았어요: ${whenLabel(ev)} ${escapeTg(ev.title)}`);
+        return Response.json({ ok: true });
+      }
+      await answerCallback(token, cb.id, "넣었어요.");
+      const reply = addedReply(ev, ev.id);
+      await editMessageText(token, chatId, cb.message.message_id, reply.html, reply.buttons);
       return Response.json({ ok: true });
     }
 
@@ -63,6 +83,24 @@ export async function POST(request: Request) {
       return Response.json({ ok: true });
     }
     const e = parsed.event;
+    // 시간이 겹치는 일정이 있으면 바로 넣지 않고 물어본다
+    const { data: ov } = await db.rpc("tg_overlaps", { p_hook: hook, p_date: e.date, p_start: e.start, p_end: e.end });
+    const overlaps = (ov ?? []) as Overlap[];
+    if (overlaps.length) {
+      const { data: pendingId, error: e5 } = await db.rpc("tg_hold_event", {
+        p_hook: hook,
+        p_person: e.person,
+        p_title: e.title,
+        p_date: e.date,
+        p_start: e.start,
+        p_end: e.end,
+        p_memo: e.memo,
+      });
+      if (e5 || !pendingId) throw new Error(`저장하지 못했어요 (${whenLabel(e)} ${e.title})`);
+      const ask = overlapReply(e, pendingId as string, overlaps.map(overlapLabel));
+      await sendMessage(token, chatId, ask.html, ask.buttons);
+      return Response.json({ ok: true });
+    }
     const { data: id, error: e3 } = await db.rpc("tg_add_event", {
       p_hook: hook,
       p_person: e.person,

@@ -114,6 +114,32 @@ export function addedReply(e: QuickEvent, id: string): { html: string; buttons: 
   };
 }
 
+/** 시간이 겹쳐서 넣기 전에 묻는 답장. overlaps 는 "15:00~16:00 강의명 (강의)" 같은 한 줄들 */
+export function overlapReply(e: QuickEvent, pendingId: string, overlaps: string[]): { html: string; buttons: InlineButton[] } {
+  const lines = [
+    "⚠️ <b>시간이 겹치는 일정이 있어요</b>",
+    `넣으려는 일정: ${whenLabel(e)} ${escapeTg(e.title)} (${PERSON_LABEL[e.person]})`,
+    "",
+    "겹치는 일정",
+    ...overlaps.map((o) => `· ${escapeTg(o)}`),
+    "",
+    "그래도 넣을까요?",
+  ];
+  return {
+    html: lines.join("\n"),
+    buttons: [
+      { text: "그래도 넣기", callback_data: `add:${pendingId}` },
+      { text: "넣지 않기", callback_data: `skip:${pendingId}` },
+    ],
+  };
+}
+
+/** [그래도 넣기]/[넣지 않기] 버튼 값 읽기 */
+export function parseCallback(data: string | undefined): { kind: "undo" | "add" | "skip"; id: string } | null {
+  const m = /^(undo|add|skip):([0-9a-f-]{36})$/.exec(data ?? "");
+  return m ? { kind: m[1] as "undo" | "add" | "skip", id: m[2] } : null;
+}
+
 export const HELP_TEXT = [
   "📝 <b>일정 넣기</b>",
   "이 대화방에 일정을 한 줄로 보내면 ERP 가족 달력에 넣어요.",
@@ -122,5 +148,6 @@ export const HELP_TEXT = [
   "예) 다음 주 화요일 오전 10시 아기 예방접종",
   "예) 12월 24일 가족 외식",
   "",
+  "시간이 겹치는 일정이 있으면 넣기 전에 물어봐요.",
   "잘못 들어가면 답장의 [되돌리기]를 눌러 주세요.",
 ].join("\n");

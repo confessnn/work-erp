@@ -8,15 +8,22 @@ import { normalizeIcsUrl } from "@/features/calendar-import/ics";
 import { todayInSeoul } from "@/lib/format";
 import { parseEventInput } from "./form";
 import { fetchImportRows } from "./import";
+import { findMyOverlaps, overlapLabel } from "./overlap";
 import { getFamilyRole } from "./queries";
 
-export type FamilyFormState = { error?: string };
+/** overlaps: 시간이 겹치는 일정 (있으면 저장하지 않고 다시 묻는다) */
+export type FamilyFormState = { error?: string; overlaps?: string[] };
 
 /** 가족 일정 추가(id 없음) / 수정 */
 export async function saveFamilyEvent(id: string | null, _prev: FamilyFormState, fd: FormData): Promise<FamilyFormState> {
   const parsed = parseEventInput((k) => fd.get(k));
   if (!parsed.ok) return { error: parsed.error };
   const { supabase } = await requireUser();
+  if (fd.get("allow_overlap") !== "on") {
+    const v = parsed.value;
+    const overlaps = await findMyOverlaps(supabase, v.event_date, v.start_time, v.end_time, id);
+    if (overlaps.length) return { overlaps: overlaps.map(overlapLabel) };
+  }
   const { error } = id
     ? await supabase
         .from("family_events")

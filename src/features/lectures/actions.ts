@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
 import { schedulePush } from "@/features/google-calendar/push";
+import { findMyOverlaps, overlapLabel } from "@/features/family/overlap";
 import { feeFields, feeFrom, isBlankFee, titleKey, type FeeRecord } from "./fee-memory";
 import { calculateWithholding, grossFrom, hoursBetween, type IncomeType } from "./tax";
 
-export type FormState = { error?: string; duplicate?: boolean };
+/** overlaps: 시간이 겹치는 일정 (있으면 저장하지 않고 다시 묻는다) */
+export type FormState = { error?: string; overlaps?: string[] };
 
 const str = (fd: FormData, k: string) => {
   const v = fd.get(k);
@@ -93,26 +95,25 @@ async function applyFeeToSameTitle(supabase: Db, row: FeeRecord, overwrite: bool
   if (failed) console.error("같은 제목 강의료 저장 실패", failed.error?.message);
 }
 
+async function checkOverlaps(
+  supabase: Db,
+  row: { lecture_date: string; start_time: string | null; end_time: string | null },
+  fd: FormData,
+  skip: string | null,
+): Promise<string[] | null> {
+  if (fd.get("allow_overlap") === "on") return null;
+  const list = await findMyOverlaps(supabase, row.lecture_date, row.start_time, row.end_time, skip);
+  return list.length ? list.map(overlapLabel) : null;
+}
+
 export async function createLecture(_prev: FormState, fd: FormData): Promise<FormState> {
   const { supabase, userId } = await requireUser();
   const parsed = toRow(fd);
   if ("error" in parsed) return { error: parsed.error };
 
-  // 같은 날짜·시작 시각에 이미 일정이 있으면 한 번 확인 (구글에서 불러온 같은 강의를 또 입력하는 경우 방지)
-  if (parsed.row.start_time && fd.get("allow_duplicate") !== "on") {
-    const { data: same } = await supabase
-      .from("lectures")
-      .select("title")
-      .eq("lecture_date", parsed.row.lecture_date)
-      .eq("start_time", parsed.row.start_time)
-      .limit(1);
-    if (same?.length) {
-      return {
-        error: `같은 날짜·시각에 이미 '${same[0].title}' 일정이 있습니다. 같은 강의라면 그 일정을 수정해주세요.`,
-        duplicate: true,
-      };
-    }
-  }
+  // 시간이 겹치는 일정(가족 일정·다른 강의)이 있으면 한 번 확인. 구글에서 불러온 같은 강의를 또 입력하는 경우도 여기서 걸린다
+  const overlaps = await checkOverlaps(supabase, parsed.row, fd, null);
+  if (overlaps) return { overlaps };
   const { data: created, error } = await supabase.from("lectures").insert({ ...parsed.row, user_id: userId }).select("id").single();
   if (error) return { error: `저장 실패: ${error.message}` };
   await applyFeeToSameTitle(supabase, parsed.row, false, created.id);
@@ -125,6 +126,8 @@ export async function updateLecture(id: string, _prev: FormState, fd: FormData):
   const { supabase } = await requireUser();
   const parsed = toRow(fd);
   if ("error" in parsed) return { error: parsed.error };
+  const overlaps = await checkOverlaps(supabase, parsed.row, fd, id);
+  if (overlaps) return { overlaps };
   const { error } = await supabase.from("lectures").update(parsed.row).eq("id", id);
   if (error) return { error: `저장 실패: ${error.message}` };
   await applyFeeToSameTitle(supabase, parsed.row, fd.get("apply_same_title") === "on", id);

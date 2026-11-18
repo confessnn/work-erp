@@ -3,6 +3,7 @@
 import { startTransition, useActionState, useState } from "react";
 import { won } from "@/lib/format";
 import type { FormState } from "../actions";
+import { OverlapNotice, submitKeepingInputs } from "@/features/family/components/overlap-notice";
 import { calculateWithholding, grossFrom, hoursBetween, INCOME_TYPE_LABEL, type IncomeType } from "../tax";
 import type { Lecture } from "../types";
 
@@ -38,12 +39,8 @@ export function LectureForm({ action, lecture, organizations, defaultDate, submi
   return (
     <form
       action={formAction}
-      onSubmit={(e) => {
-        // 기본 form action 은 제출 후 입력칸을 비운다 → 오류가 나도 입력한 내용이 남도록 직접 제출
-        e.preventDefault();
-        const fd = new FormData(e.currentTarget);
-        startTransition(() => formAction(fd));
-      }}
+      // 기본 form action 은 제출 후 입력칸을 비운다 → 오류가 나도 입력한 내용이 남도록 직접 제출
+      onSubmit={(e) => submitKeepingInputs(e, (fd) => startTransition(() => formAction(fd)))}
       className="space-y-6"
     >
       <section className="card space-y-4">
@@ -211,11 +208,7 @@ export function LectureForm({ action, lecture, organizations, defaultDate, submi
       </section>
 
       {state.error && <p className="text-sm text-danger">{state.error}</p>}
-      {state.duplicate && (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" name="allow_duplicate" /> 다른 강의가 맞습니다. 그래도 저장
-        </label>
-      )}
+      {state.overlaps && <OverlapNotice overlaps={state.overlaps} pending={pending} />}
       <button type="submit" disabled={pending} className="btn-primary w-full sm:w-auto">
         {pending ? "저장 중…" : submitLabel}
       </button>

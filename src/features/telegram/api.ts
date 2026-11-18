@@ -77,9 +77,16 @@ export function packChunks(blocks: string[], max = MAX_MESSAGE): string[] {
 }
 
 /** 토큰이 맞는지 확인하고 봇 아이디(@없이)를 돌려준다 */
-/** 이미 보낸 메시지 글자 바꾸기 (버튼은 없앤다) */
-export const editMessageText = (token: string, chatId: number, messageId: number, html: string) =>
-  call(token, "editMessageText", { chat_id: chatId, message_id: messageId, text: html, parse_mode: "HTML", disable_web_page_preview: true });
+/** 이미 보낸 메시지 글자 바꾸기. buttons 를 주지 않으면 버튼은 없앤다 */
+export const editMessageText = (token: string, chatId: number, messageId: number, html: string, buttons: InlineButton[] = []) =>
+  call(token, "editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text: html,
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    ...(buttons.length ? { reply_markup: { inline_keyboard: [buttons] } } : {}),
+  });
 
 /** 버튼 누름에 답하기 (버튼의 '불러오는 중' 표시를 끈다) */
 export const answerCallback = (token: string, id: string, text?: string) => call(token, "answerCallbackQuery", { callback_query_id: id, ...(text ? { text } : {}) });
