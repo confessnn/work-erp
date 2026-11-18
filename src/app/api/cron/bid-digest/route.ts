@@ -3,6 +3,8 @@ import { fetchProblem, notifiedIds, sendDigest, type DigestNotice, type DigestSt
 import { buildMorning, nextDay, type AgendaItem } from "@/features/bid-inbox/morning";
 import { todayInSeoul } from "@/lib/format";
 import { summarizeNotice } from "@/features/bid-inbox/summarize";
+import { sendTelegram } from "@/features/telegram/api";
+import { buildMorningTelegram } from "@/features/telegram/format";
 
 export const maxDuration = 300;
 
@@ -32,11 +34,16 @@ async function summarizePending(db: SupabaseClient, secret: string, user: string
   return done;
 }
 
-/** 아침 '오늘 할 일' 메일: 오늘·내일 일정과 아직 알리지 않은 공고, 수신 문제를 매일 한 통 보낸다 */
+/**
+ * 아침 '오늘 할 일': 오늘·내일 일정과 아직 알리지 않은 공고, 수신 문제를 매일 한 번 보낸다.
+ * 메일(설정돼 있으면)과 텔레그램(연결돼 있으면)으로 같은 내용을 보낸다.
+ */
 async function mailDigest(db: SupabaseClient, secret: string, user: string, summaryProblem: string | null) {
   const apiKey = process.env.RESEND_API_KEY;
   const to = process.env.BID_NOTIFY_EMAIL;
-  if (!apiKey || !to) return "메일 설정 없음";
+  const { data: chatId, error: e0 } = await db.rpc("cron_telegram_chat", { p_secret: secret, p_user: user });
+  const telegramChat = !e0 && chatId ? (chatId as number) : null;
+  if ((!apiKey || !to) && !telegramChat) return "알림 설정 없음";
 
   const today = todayInSeoul();
   const [notices, status, agenda] = await Promise.all([
@@ -52,16 +59,44 @@ async function mailDigest(db: SupabaseClient, secret: string, user: string, summ
   const problems = [
     fetchProblem(latest ?? null, new Date()),
     summaryProblem,
-    // 일정을 못 읽어도 공고 메일은 보낸다
+    // 일정을 못 읽어도 공고 알림은 보낸다
     agenda.error ? `일정을 읽지 못했습니다: ${agenda.error.message}` : null,
   ].flatMap((p) => (p ? [p] : []));
-  const mail = buildMorning(today, (agenda.data ?? []) as AgendaItem[], rows, problems);
+  const items = (agenda.data ?? []) as AgendaItem[];
 
-  await sendDigest(apiKey, to, mail);
-  // 메일을 보낸 뒤에 기록한다. 기록이 실패하면 다음 날 한 번 더 받을 뿐 공고를 놓치지는 않는다
+  const results: string[] = [];
+  let delivered = false;
+  if (apiKey && to) {
+    try {
+      await sendDigest(apiKey, to, buildMorning(today, items, rows, problems));
+      results.push("메일 발송");
+      delivered = true;
+    } catch (e) {
+      results.push(e instanceof Error ? e.message : "메일 실패");
+    }
+  }
+  if (telegramChat) {
+    let ok = true;
+    for (const text of buildMorningTelegram(today, nextDay(today), items, rows, problems)) {
+      const r = await sendTelegram(telegramChat, text);
+      if (!r.ok) {
+        ok = false;
+        results.push(r.error ?? "텔레그램 실패");
+        if (r.gone) await db.rpc("cron_telegram_unlink", { p_secret: secret, p_chat_id: telegramChat });
+        break;
+      }
+    }
+    if (ok) {
+      results.push("텔레그램 발송");
+      delivered = true;
+    }
+  }
+  if (!delivered) throw new Error(results.join(" / "));
+
+  // 보낸 뒤에 기록한다. 기록이 실패하면 다음 날 한 번 더 받을 뿐 공고를 놓치지는 않는다
   const { error } = await db.rpc("cron_mark_notified", { p_secret: secret, p_user: user, p_ids: notifiedIds(rows) });
   if (error) throw new Error(error.message);
-  return `${rows.length}건 발송`;
+  return `${rows.length}건 · ${results.join(" · ")}`;
 }
 
 /**

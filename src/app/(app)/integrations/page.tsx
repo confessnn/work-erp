@@ -1,6 +1,8 @@
 import { GooglePanel } from "@/features/google-calendar/components/google-panel";
 import { DRIVE_SCOPE, hasScope, isGoogleConfigured } from "@/features/google-calendar/google-api";
 import { requireUser } from "@/lib/supabase/server";
+import { TelegramPanel } from "@/features/telegram/components/telegram-panel";
+import { getTelegramLink } from "@/features/telegram/queries";
 
 const MSG: Record<string, { text: string; ok?: boolean }> = {
   connected: { text: "구글에 연결했습니다. 캘린더 일정을 '강의 일정(ERP)'에 반영했고, 서류함(드라이브)도 쓸 수 있습니다.", ok: true },
@@ -21,11 +23,17 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
     .maybeSingle();
   const msg = typeof sp.google === "string" ? MSG[sp.google] : undefined;
   const configured = isGoogleConfigured();
+  const telegram = await getTelegramLink();
 
   return (
     <>
       <h1 className="page-title">연동</h1>
       {msg && <p className={`card text-sm ${msg.ok ? "text-success" : "text-danger"}`}>{msg.text}</p>}
+
+      <section className="card space-y-3">
+        <h2 className="section-title">텔레그램 알림</h2>
+        <TelegramPanel link={telegram} />
+      </section>
 
       <section className="card space-y-4">
         <div>
