@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcCost, clearsLowerBound, guessAwardMode, hintsToFields, parseRates, plansFromLowerRate, plansFromRates, priceScore, quantile, vatPair } from "./calc";
+import { bidHistogram, calcCost, clearsLowerBound, guessAwardMode, hintsToFields, parseRates, plansFromLowerRate, plansFromRates, priceScore, quantile, vatPair, weightedQuantile } from "./calc";
 
 describe("guessAwardMode", () => {
   it("낙찰 방법 문구로 방식을 고른다", () => {
@@ -117,5 +117,25 @@ describe("hintsToFields", () => {
     expect(
       hintsToFields({ award_mode: null, base_amount: null, base_kind: null, includes_vat: null, price_weight: null, floor_rate: null, lower_rate: 0, range: null, notes: [] }),
     ).toEqual({});
+  });
+});
+
+describe("weightedQuantile · bidHistogram", () => {
+  it("무게가 같으면 보통 사분위수와 비슷하고, 무게가 큰 값 쪽으로 당겨진다", () => {
+    const rates = [70, 72, 86];
+    expect(weightedQuantile(rates, [1, 1, 1], 0.5)).toBeCloseTo(72, 5);
+    expect(weightedQuantile(rates, [1, 1, 6], 0.5)).toBeGreaterThan(80);
+    expect(weightedQuantile(rates, [6, 1, 1], 0.5)).toBeLessThan(71);
+  });
+  it("plansFromRates에 무게를 주면 3안이 무거운 사례 쪽으로 간다", () => {
+    const plain = plansFromRates(100_000_000, [70, 72, 86]);
+    const weighted = plansFromRates(100_000_000, [70, 72, 86], [1, 1, 6]);
+    expect(weighted[1].rate).toBeGreaterThan(plain[1].rate);
+  });
+  it("0.1%p 구간으로 세고 가장 많은 구간을 찾는다", () => {
+    const { bins, top } = bidHistogram([86.29, 86.37, 86.38, 86.41, 86.95]);
+    expect(top).toEqual({ from: 86.3, count: 2 });
+    expect(bins[0].from).toBe(86.2);
+    expect(bins.at(-1)?.from).toBe(86.9);
   });
 });

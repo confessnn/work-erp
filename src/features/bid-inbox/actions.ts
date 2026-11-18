@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { fetchAllNotices } from "./fetch-all";
-import { fetchAwards, fillMethods, mergeAwards, pickSimilar, type Award, type Similar } from "./award-history";
+import { fetchAwards, fetchOpening, fillBids, fillMethods, mergeAwards, pickSimilar, type Award, type Similar } from "./award-history";
 import { guessAwardMode, type CalcHints } from "./calc";
 import { extractCalcHints } from "./calc-hints";
+import { matchOpening, type Submission, type SubmissionPlan, type SubmissionResult } from "./submissions";
 import { summarizeNotice } from "./summarize";
 import type { BidStatus } from "./types";
 
@@ -112,6 +113,8 @@ const AWARD_DAYS = 365;
 const AWARD_CACHE_MS = 24 * 3_600_000;
 /** 화면 요청 한 번(최대 180초) 안에서 낙찰방법 조회를 멈추는 시각 (요청 시작부터) */
 const METHOD_DEADLINE_MS = 165_000;
+/** 경쟁사 투찰 분포에 쓰는 비슷한 적격심사 사례 수 */
+const DIST_CASES = 6;
 
 export type SimilarAwards = { rows: Similar[]; total: number; fetchedAt: string; failedWeeks: number };
 
@@ -159,12 +162,115 @@ export async function loadSimilarAwards(id: string, again = false): Promise<{ da
     const byNo = new Map(filled.map((a) => [a.bidNo, a]));
     awards = awards.map((a) => byNo.get(a.bidNo) ?? a);
   }
-  if (fetchedAt && (needs.length || fetchedAt !== cache?.fetched_at)) {
+  const mode = n.award_method ? guessAwardMode(n.award_method) : null;
+  // 적격심사 공고: 계산에 쓰는 비슷한 적격심사 사례(최대 6건)의 개찰 순위를 받아 경쟁사 투찰 분포를 만든다
+  let bidsFilled = 0;
+  if (mode === "qualified") {
+    const targets = new Set(pickSimilar(awards, { ...notice, mode }).filter((a) => a.use).slice(0, DIST_CASES).map((a) => a.bidNo));
+    const want = awards.filter((a) => targets.has(a.bidNo) && a.bids === undefined);
+    if (want.length) {
+      const filled = await fillBids(want, started + METHOD_DEADLINE_MS);
+      bidsFilled = filled.filter((a) => a.bids !== undefined).length;
+      const byNo = new Map(filled.map((a) => [a.bidNo, a]));
+      awards = awards.map((a) => byNo.get(a.bidNo) ?? a);
+    }
+  }
+  if (fetchedAt && (needs.length || bidsFilled || fetchedAt !== cache?.fetched_at)) {
     await supabase
       .from("bid_award_cache")
       .upsert({ user_id: userId, keyword: AWARD_KEYWORD, fetched_at: fetchedAt, failed_weeks: failedWeeks, awards }, { onConflict: "user_id,keyword" });
   }
 
-  const rows = pickSimilar(awards, { ...notice, mode: n.award_method ? guessAwardMode(n.award_method) : null });
+  const rows = pickSimilar(awards, { ...notice, mode });
   return { data: { rows: rows.slice(0, 30), total: awards.length, fetchedAt: fetchedAt!, failedWeeks } };
+}
+
+// ---------- 내 투찰 기록 ----------
+
+/** 이 공고의 투찰 기록과 우리 사업자번호 */
+export async function listSubmissions(noticeId: string): Promise<{ list: Submission[]; bizno: string | null }> {
+  const { supabase } = await requireUser();
+  const [{ data }, { data: settings }] = await Promise.all([
+    supabase.from("bid_submissions").select("*").eq("notice_id", noticeId).order("created_at", { ascending: false }),
+    supabase.from("bid_settings").select("my_bizno").maybeSingle(),
+  ]);
+  return { list: (data ?? []) as Submission[], bizno: (settings?.my_bizno as string | null) ?? null };
+}
+
+export async function saveSubmission(input: {
+  noticeId: string;
+  plan: SubmissionPlan;
+  amount: number;
+  base: number | null;
+  submittedOn: string;
+  memo: string;
+}): Promise<{ error?: string }> {
+  const { supabase } = await requireUser();
+  if (!(input.amount > 0)) return { error: "투찰 금액을 넣어 주세요." };
+  const rate = input.base && input.base > 0 ? Math.round((input.amount / input.base) * 100_000) / 1000 : null;
+  const { error } = await supabase.from("bid_submissions").insert({
+    notice_id: input.noticeId,
+    plan: input.plan,
+    amount: Math.round(input.amount),
+    base_amount: input.base && input.base > 0 ? Math.round(input.base) : null,
+    rate,
+    ...(input.submittedOn ? { submitted_on: input.submittedOn } : {}),
+    memo: input.memo.trim() || null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/bids/records");
+  return {};
+}
+
+export async function setSubmissionResult(id: string, result: SubmissionResult): Promise<{ error?: string }> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("bid_submissions").update({ result }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/bids/records");
+  return {};
+}
+
+export async function deleteSubmission(id: string): Promise<{ error?: string }> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("bid_submissions").delete().eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/bids/records");
+  return {};
+}
+
+export async function saveMyBizno(bizno: string): Promise<{ error?: string }> {
+  const digits = bizno.replace(/\D/g, "");
+  if (digits.length !== 10) return { error: "사업자번호 10자리를 넣어 주세요." };
+  const { supabase, userId } = await requireUser();
+  const { error } = await supabase.from("bid_settings").upsert({ user_id: userId, my_bizno: digits }, { onConflict: "user_id" });
+  return error ? { error: error.message } : {};
+}
+
+/** 나라장터 개찰 순위에서 우리 업체를 찾아 순위·1등 투찰률·결과를 채운다 */
+export async function checkSubmissionOpening(id: string): Promise<{ message: string; ok: boolean }> {
+  const { supabase } = await requireUser();
+  const { data: s, error } = await supabase.from("bid_submissions").select("notice_id").eq("id", id).single();
+  if (error) return { ok: false, message: error.message };
+  const [{ data: n }, { data: settings }] = await Promise.all([
+    supabase.from("bid_notices").select("bid_no, bid_ord, award_method, source").eq("id", s.notice_id).single(),
+    supabase.from("bid_settings").select("my_bizno").maybeSingle(),
+  ]);
+  if (!n) return { ok: false, message: "공고를 찾지 못했습니다." };
+  if (n.source !== "g2b") return { ok: false, message: "나라장터 공고만 개찰 결과를 확인할 수 있습니다." };
+  if (!settings?.my_bizno) return { ok: false, message: "먼저 우리 사업자번호를 저장해 주세요." };
+  try {
+    const rows = await fetchOpening(n.bid_no, n.bid_ord ?? "000");
+    if (rows.length === 0) return { ok: false, message: "아직 개찰 결과가 없습니다. 개찰 뒤 다시 눌러 주세요." };
+    const m = matchOpening(rows, settings.my_bizno as string, guessAwardMode(n.award_method) === "negotiation");
+    if (!m) return { ok: false, message: `개찰 결과 ${rows.length}곳 중 우리 사업자번호를 찾지 못했습니다. 번호를 확인해 주세요.` };
+    const { error: e2 } = await supabase.from("bid_submissions").update({ ...m, checked_at: new Date().toISOString() }).eq("id", id);
+    if (e2) return { ok: false, message: e2.message };
+    revalidatePath("/bids/records");
+    const where = `${rows.length}곳 중 ${m.rank ?? "?"}위`;
+    if (m.result === "won") return { ok: true, message: `낙찰 (${where})` };
+    if (m.result === "lost") return { ok: true, message: `탈락 (${where})` };
+    return { ok: true, message: `가격 순위 ${where}. 협상은 기술평가 뒤 결과를 직접 골라 주세요.` };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "알 수 없는 오류" };
+  }
 }

@@ -3,7 +3,10 @@
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { won } from "@/lib/format";
 import { loadCalcHints, loadSimilarAwards, type SimilarAwards } from "../actions";
+import { SubmissionPanel } from "./submission-panel";
+import type { Similar } from "../award-history";
 import {
+  bidHistogram,
   calcCost,
   hintsToFields,
   clearsLowerBound,
@@ -33,6 +36,9 @@ const blankDraft = (mode: AwardMode, base: string) => ({
   lowerRate: "",
   range: "2",
   rates: "",
+  /** '지난 낙찰률 가져오기'가 채운 칸 글과 각 사례의 무게. 칸을 고치면 무게 없이(똑같이) 센다 */
+  weightedFor: "",
+  rateWeights: [] as number[],
   manual: "",
   staff: ["책임연구원", "연구원", "연구보조원", "보조원"].map((label) => ({ label, people: "", months: "", monthlyPay: "" })),
   expenses: "",
@@ -75,7 +81,52 @@ const FIELD_NAMES: Record<string, string> = {
 const RATE_ROWS = 12;
 
 /** 나라장터 낙찰정보에서 지난 원가 용역 낙찰률을 가져와 '유사 용역 낙찰률' 칸을 채운다 */
-function AwardPicker({ noticeId, onRates }: { noticeId: string; onRates: (rates: string) => void }) {
+/** 적격심사: 비슷한 공고에서 업체들이 낸 투찰률이 어디에 몰렸는지 */
+function BidDistribution({ rows, lowerRate }: { rows: Similar[]; lowerRate: number }) {
+  const cases = rows.filter((a) => a.use && a.bids && a.bids.length > 0);
+  if (cases.length === 0) return null;
+  const all = cases.flatMap((a) => a.bids ?? []);
+  const sorted = [...all].sort((x, y) => x - y);
+  const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * (sorted.length - 1)))];
+  // 너무 멀리 떨어진 값은 그래프를 넓게만 만들어서, 가운데 90%만 그린다
+  const core = all.filter((r) => r >= at(0.05) && r <= at(0.95));
+  const outside = all.length - core.length;
+  const { bins, top } = bidHistogram(core);
+  const max = Math.max(...bins.map((b) => b.count), 1);
+  const below = lowerRate > 0 ? all.filter((r) => r < lowerRate).length : 0;
+  const winners = cases.map((a) => a.rate);
+  return (
+    <div className="space-y-2 rounded-lg bg-accent-soft p-3">
+      <p className="font-semibold">경쟁사 투찰 분포 (비슷한 적격심사 {cases.length}건, 업체 {all.length}곳이 낸 투찰률)</p>
+      <p>
+        가장 많이 몰린 구간: <b>{top!.from.toFixed(1)}~{(top!.from + 0.1).toFixed(1)}%</b> ({top!.count}곳) · 가운데 50%: {at(0.25).toFixed(3)}~{at(0.75).toFixed(3)}% · 1등(낙찰) 투찰률: {winners.map((w) => w.toFixed(3)).join(", ")}%
+      </p>
+      {lowerRate > 0 && (
+        <p className="text-muted">
+          낙찰하한율 {lowerRate}% 미만으로 낸 곳: {below}곳 ({Math.round((below / all.length) * 100)}%)
+        </p>
+      )}
+      <div className="flex h-28 items-end gap-px overflow-x-auto" aria-label="투찰률 분포 막대그래프">
+        {bins.map((b) => (
+          <div key={b.from} className="flex min-w-[10px] flex-1 flex-col items-center justify-end" title={`${b.from.toFixed(1)}~${(b.from + 0.1).toFixed(1)}%: ${b.count}곳`}>
+            <div
+              className={`w-full rounded-t ${lowerRate > 0 && b.from + 0.1 <= lowerRate ? "bg-line" : b === top ? "bg-accent" : "bg-ochre"}`}
+              style={{ height: `${(b.count / max) * 100}%`, minHeight: b.count ? 2 : 0 }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between text-xs text-muted tabular-nums">
+        <span>{bins[0].from.toFixed(1)}%</span>
+        <span>{(bins[bins.length - 1].from + 0.1).toFixed(1)}%</span>
+      </div>
+      {outside > 0 && <p className="text-xs text-muted">그래프 밖(아주 낮거나 높게 낸 곳) {outside}곳 · 전체 범위 {sorted[0].toFixed(3)}~{sorted[sorted.length - 1].toFixed(3)}%</p>}
+      <p className="text-xs text-muted">투찰률은 각 공고의 예정가격 대비입니다. 이번 공고의 예정가격은 기초금액의 일정 범위 안에서 추첨으로 정해지므로, 구간을 참고만 하세요. 업체 이름은 저장하지 않습니다.</p>
+    </div>
+  );
+}
+
+function AwardPicker({ noticeId, onRates, lowerRate }: { noticeId: string; onRates: (rates: string, weights: number[]) => void; lowerRate: number }) {
   const [pending, start] = useTransition();
   const [result, setResult] = useState<{ data?: SimilarAwards; error?: string } | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -85,7 +136,7 @@ function AwardPicker({ noticeId, onRates }: { noticeId: string; onRates: (rates:
       const r = await loadSimilarAwards(noticeId, again);
       setResult(r);
       const used = r.data?.rows.filter((a) => a.use) ?? [];
-      if (used.length) onRates(used.map((a) => a.rate.toFixed(3)).join(", "));
+      if (used.length) onRates(used.map((a) => a.rate.toFixed(3)).join(", "), used.map((a) => a.weight));
     });
 
   const rows = result?.data?.rows ?? [];
@@ -146,7 +197,7 @@ function AwardPicker({ noticeId, onRates }: { noticeId: string; onRates: (rates:
                           <span className="text-muted"> · {a.org ?? "기관 미상"}{a.method ? ` · ${a.method}` : ""}{a.winner ? ` · 낙찰 ${a.winner}` : ""}</span>
                         </td>
                         <td className="py-1 pr-2 text-right tabular-nums">{won(a.amount)}</td>
-                        <td className="py-1 pr-2 text-right tabular-nums">{a.rate.toFixed(3)}%</td>
+                        <td className="py-1 pr-2 text-right tabular-nums">{a.rate.toFixed(3)}%{a.use && a.weight !== 1 ? <span className="text-muted"> ×{Number(a.weight.toFixed(2))}</span> : null}</td>
                         <td className="py-1 text-right tabular-nums">{a.participants ?? "-"}</td>
                       </tr>
                     ))}
@@ -158,6 +209,7 @@ function AwardPicker({ noticeId, onRates }: { noticeId: string; onRates: (rates:
                   {showAll ? "접기" : `${rows.length - RATE_ROWS}건 더 보기`}
                 </button>
               )}
+              <BidDistribution rows={rows} lowerRate={lowerRate} />
               <p className="text-xs text-muted">낙찰률은 예정가격 대비 비율입니다. 기준금액(추정가격)과 기준이 다를 수 있으니 공고문 산식을 확인하세요.</p>
             </>
           )}
@@ -249,7 +301,8 @@ function Form({ draftKey, initial, noticeId }: { draftKey: string; initial: Draf
     profitRate: num(d.profitRate),
   });
 
-  const plans = d.mode === "qualified" ? plansFromLowerRate(base, lowerRate) : plansFromRates(base, rates);
+  const weights = d.weightedFor && d.weightedFor === d.rates && d.rateWeights.length === rates.length ? d.rateWeights : undefined;
+  const plans = d.mode === "qualified" ? plansFromLowerRate(base, lowerRate) : plansFromRates(base, rates, weights);
   const manual = num(d.manual);
   const rows: (Pick<Plan, "label" | "price"> & { rate: number })[] = [
     ...plans,
@@ -296,7 +349,18 @@ function Form({ draftKey, initial, noticeId }: { draftKey: string; initial: Draf
             <small className="text-muted">아래 버튼으로 가져오거나 직접 붙여 넣으세요. 읽은 값 {rates.length}개로 3안을 만듭니다.</small>
           </label>
         )}
-        {noticeId && <AwardPicker noticeId={noticeId} onRates={(r) => set("rates", r)} />}
+        {noticeId && (
+          <AwardPicker
+            noticeId={noticeId}
+            lowerRate={lowerRate}
+            onRates={(r, w) => setD((prev) => ({ ...prev, rates: r, weightedFor: r, rateWeights: w }))}
+          />
+        )}
+        {weights && d.mode !== "qualified" && (
+          <p className="text-xs text-muted">
+            3안은 가까운 사례를 더 크게 세서 계산했어요 (같은 용역 ×3, 같은 기관 ×2, 최근 6개월 ×1.5, 비슷한 금액 ×1.5). 칸의 숫자를 고치면 모두 똑같이 셉니다.
+          </p>
+        )}
       </section>
 
       <section className="card space-y-3">
@@ -378,6 +442,8 @@ function Form({ draftKey, initial, noticeId }: { draftKey: string; initial: Draf
         )}
         <p className="text-xs text-muted">1차 계산입니다. 산식·하한율은 공고문이 우선하고, 투찰 금액은 직접 결정하세요. 입력값은 이 브라우저에만 임시로 남습니다.</p>
       </section>
+
+      {noticeId && <SubmissionPanel noticeId={noticeId} base={base} plans={plans.map((p) => ({ key: p.key, price: p.price }))} />}
     </div>
   );
 }

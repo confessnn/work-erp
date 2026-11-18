@@ -37,6 +37,9 @@ export default async function BidsPage({ searchParams }: PageProps<"/bids">) {
           <Link href="/bids/calculator" className="chip text-sm">
             입찰가 계산기
           </Link>
+          <Link href="/bids/records" className="chip text-sm">
+            투찰 기록
+          </Link>
           <FetchButton />
         </div>
       </div>
