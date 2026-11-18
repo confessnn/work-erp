@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { confirmTelegram, disconnectTelegram, saveTelegramToken, testTelegram } from "../actions";
+import { confirmTelegram, disconnectTelegram, saveTelegramToken, setTelegramEvents, testTelegram } from "../actions";
+import { TELEGRAM_EVENT_OPTIONS, type TelegramEvents } from "../reminder";
 
 export type TelegramState = {
   bot_username: string | null;
@@ -10,6 +11,7 @@ export type TelegramState = {
   linked_at: string | null;
   last_sent_at: string | null;
   last_error: string | null;
+  notify_events?: TelegramEvents;
 } | null;
 
 const when = (at: string | null) =>
@@ -33,6 +35,22 @@ export function TelegramPanel({ state }: { state: TelegramState }) {
             {state?.last_sent_at && ` · 마지막 발송 ${when(state.last_sent_at)}`}
           </p>
           {state?.last_error && <p className="text-danger">최근 발송 실패: {state.last_error} (실패한 날은 메일로 대신 보냅니다)</p>}
+          <fieldset className="space-y-1 rounded-xl border border-line p-3">
+            <legend className="px-1 font-medium">일정 알림 (시작 1시간 전, 종일 일정은 오전 8시)</legend>
+            {TELEGRAM_EVENT_OPTIONS.map((o) => (
+              <label key={o.v} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="notify_events"
+                  value={o.v}
+                  defaultChecked={(state?.notify_events ?? "all") === o.v}
+                  disabled={pending}
+                  onChange={() => run(() => setTelegramEvents(o.v))}
+                />
+                {o.label}
+              </label>
+            ))}
+          </fieldset>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-primary" disabled={pending} onClick={() => run(testTelegram)}>
               시험 메시지 보내기

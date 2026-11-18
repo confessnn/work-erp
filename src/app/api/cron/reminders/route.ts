@@ -1,5 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
+import { sendMessage } from "@/features/telegram/api";
+import { reminderTelegram } from "@/features/telegram/reminder";
 
 export const maxDuration = 60;
 
@@ -62,7 +64,41 @@ async function handle(request: Request) {
 
   const { error: e2 } = await db.rpc("cron_finish_reminders", { p_secret: secret, p_sent: [...sent], p_gone: gone });
   if (e2) return Response.json({ ok: false, error: e2.message }, { status: 500 });
-  return Response.json({ ok: true, due: (due ?? []).length, sent: sent.size, gone: gone.length, failed });
+
+  const telegram = await sendTelegramReminders(db, secret);
+  return Response.json({ ok: true, due: (due ?? []).length, sent: sent.size, gone: gone.length, failed, telegram });
+}
+
+type TgDue = { user_id: string; token: string | null; chat_id: number; item_key: string; title: string; body: string; url: string };
+
+/**
+ * 텔레그램 일정 알림 (봇을 연결한 사람만). 웹 푸시와 따로 기록해서 푸시를 안 쓰는 사람도 받는다.
+ * 실패해도 웹 푸시 결과에는 영향을 주지 않고, 실패 이유는 연동 화면에 보인다.
+ */
+async function sendTelegramReminders(db: SupabaseClient, secret: string) {
+  const { data, error } = await db.rpc("cron_due_telegram", { p_secret: secret });
+  if (error) return `조회 실패: ${error.message}`;
+  const due = (data ?? []) as TgDue[];
+  if (!due.length) return "보낼 것 없음";
+
+  const sent: { user_id: string; item_key: string }[] = [];
+  const errors = new Map<string, string>();
+  for (const d of due) {
+    if (!d.token || errors.has(d.user_id)) continue;
+    const m = reminderTelegram(d.title, d.body, d.url);
+    try {
+      await sendMessage(d.token, d.chat_id, m.html, m.buttons);
+      sent.push({ user_id: d.user_id, item_key: d.item_key });
+    } catch (e) {
+      errors.set(d.user_id, `일정 알림: ${e instanceof Error ? e.message : "보내지 못했습니다."}`);
+    }
+  }
+  const { error: e2 } = await db.rpc("cron_finish_telegram", {
+    p_secret: secret,
+    p_sent: sent,
+    p_errors: [...errors].map(([user_id, error]) => ({ user_id, error })),
+  });
+  return e2 ? `기록 실패: ${e2.message}` : `${sent.length}/${due.length}건 발송`;
 }
 
 export const GET = handle;
