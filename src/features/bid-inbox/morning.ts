@@ -18,7 +18,12 @@ export type AgendaItem = {
   person: string | null;
 };
 
+/** 그날까지 안 끝낸 할 일 (cron_morning_todos) */
+export type MorningTodo = { title: string; due_date: string };
+
 const ERP_URL = "https://work-erp-one.vercel.app";
+
+const lateTag = (t: MorningTodo, today: string) => (t.due_date < today ? ` (밀림 · ${dateLabel(t.due_date)})` : "");
 
 /** "2026-11-18" 다음 날 */
 export function nextDay(day: string) {
@@ -43,7 +48,7 @@ function dayHtml(heading: string, items: AgendaItem[]) {
 }
 
 /** 매일 보낸다. 일정도 새 공고도 없으면 '없음'이라고 쓴다 */
-export function buildMorning(today: string, agenda: AgendaItem[], notices: DigestNotice[], problems: string[]): DigestMail {
+export function buildMorning(today: string, agenda: AgendaItem[], notices: DigestNotice[], problems: string[], todos: MorningTodo[] = []): DigestMail {
   const tomorrow = nextDay(today);
   const todays = agenda.filter((a) => a.event_date === today);
   const tomorrows = agenda.filter((a) => a.event_date === tomorrow);
@@ -55,6 +60,7 @@ export function buildMorning(today: string, agenda: AgendaItem[], notices: Diges
     `[오늘 할 일] ${dateLabel(today)}`,
     lectures ? `강의 ${lectures}건` : "강의 없음",
     ...(family ? [`가족 ${family}건`] : []),
+    ...(todos.length ? [`할 일 ${todos.length}개`] : []),
     `새 공고 ${notices.length}건`,
     ...(needsCheck ? [`확인 필요 ${needsCheck}건`] : []),
   ].join(" · ");
@@ -64,6 +70,9 @@ export function buildMorning(today: string, agenda: AgendaItem[], notices: Diges
     `<div style="font-family:sans-serif;font-size:14px;line-height:1.5">`,
     problemsHtml(problems),
     dayHtml(`오늘 ${dateLabel(today)}`, todays),
+    ...(todos.length
+      ? [`<h3>할 일 ${todos.length}개</h3><ul style="padding-left:18px">${todos.map((t) => `<li>☐ ${escapeHtml(t.title)}<span style="color:#b45309">${lateTag(t, today)}</span></li>`).join("")}</ul>`]
+      : []),
     dayHtml(`내일 ${dateLabel(tomorrow)}`, tomorrows),
     `<p><a href="${ERP_URL}/lectures?view=calendar">ERP 달력 열기</a></p>`,
     `<h2 style="font-size:16px;margin-top:20px">새 입찰 공고</h2>`,
@@ -109,12 +118,13 @@ function tgNotice(n: DigestNotice) {
 }
 
 /** 텔레그램 메시지 조각들 (한 조각 4천 자 이하). 일정·공고가 없어도 보낸다 */
-export function buildMorningTelegram(today: string, agenda: AgendaItem[], notices: DigestNotice[], problems: string[]): string[] {
+export function buildMorningTelegram(today: string, agenda: AgendaItem[], notices: DigestNotice[], problems: string[], todos: MorningTodo[] = []): string[] {
   const tomorrow = nextDay(today);
   const head = [`📋 <b>${dateLabel(today)} 오늘 할 일</b>`, ...problems.map((p) => `⚠️ ${escapeTg(p)}`)].join("\n");
   const blocks = [
     head,
     tgDay("오늘", agenda.filter((a) => a.event_date === today)),
+    ...(todos.length ? [[`<b>할 일 ${todos.length}개</b>`, ...todos.map((t) => `☐ ${escapeTg(t.title)}${lateTag(t, today)}`)].join("\n")] : []),
     tgDay(`내일 ${dateLabel(tomorrow)}`, agenda.filter((a) => a.event_date === tomorrow)),
   ];
   if (notices.length === 0) blocks.push("<b>새 입찰 공고</b>\n새 공고 없음");
@@ -129,6 +139,7 @@ export function buildMorningTelegram(today: string, agenda: AgendaItem[], notice
 }
 
 export const MORNING_BUTTONS = [
+  { text: "할 일 체크", url: `${ERP_URL}/` },
   { text: "달력 열기", url: `${ERP_URL}/lectures?view=calendar` },
   { text: "공고 수신함", url: `${ERP_URL}/bids` },
 ];
