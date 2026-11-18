@@ -1,6 +1,6 @@
 // 수업펜 (ClassPen) - 수업용 화면 판서·확대 도구
 // 빌드: build.ps1 (윈도우 기본 .NET Framework 4.x 의 csc.exe, C# 5)
-// 기본 단축키: Ctrl+Shift+1 확대 / Ctrl+Shift+2 판서 / Ctrl+Shift+3 칠판 (아이콘 메뉴 '단축키 설정'에서 변경)
+// 기본 단축키: Ctrl+Shift+1 확대 / Ctrl+Shift+2 판서 / Ctrl+Shift+3 칠판 / Ctrl+Shift+4 라이브 줌 (아이콘 메뉴 '단축키 설정'에서 변경)
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -57,11 +57,14 @@ namespace ClassPen
             new KeyAction("draw", "판서 시작", Keys.Control | Keys.Shift | Keys.D2, true),
             new KeyAction("zoom", "확대 시작", Keys.Control | Keys.Shift | Keys.D1, true),
             new KeyAction("board", "칠판 열기", Keys.Control | Keys.Shift | Keys.D3, true),
+            new KeyAction("live", "라이브 줌", Keys.Control | Keys.Shift | Keys.D4, true),
             new KeyAction("pen", "펜", Keys.P, false),
             new KeyAction("marker", "형광펜", Keys.H, false),
             new KeyAction("rect", "네모", Keys.R, false),
             new KeyAction("line", "직선", Keys.L, false),
             new KeyAction("text", "글자", Keys.T, false),
+            new KeyAction("holdrect", "누른 채 끌면 네모", Keys.Control, false),
+            new KeyAction("holdline", "누른 채 끌면 직선", Keys.Shift, false),
             new KeyAction("thinner", "가늘게", Keys.OemOpenBrackets, false),
             new KeyAction("thicker", "굵게", Keys.OemCloseBrackets, false),
             new KeyAction("clear", "모두 지우기", Keys.E, false),
@@ -144,6 +147,9 @@ namespace ClassPen
             return string.Join("+", parts.ToArray());
         }
 
+        /// <summary>Ctrl·Shift·Alt만으로 지정하는 '누른 채 끌기' 단축키인가</summary>
+        public static bool IsHold(string id) { return id == "holdrect" || id == "holdline"; }
+
         public static bool IsModifierOnly(Keys code)
         {
             return code == Keys.ControlKey || code == Keys.ShiftKey || code == Keys.Menu || code == Keys.LWin || code == Keys.RWin || code == Keys.None;
@@ -183,6 +189,7 @@ namespace ClassPen
             guide.AutoSize = true;
             guide.MaximumSize = new Size(460, 0);
             guide.Text = "바꿀 칸을 누른 뒤 원하는 키를 그대로 누르세요. Backspace는 그 단축키 끄기예요.\n" +
+                         "'누른 채 끌면 네모·직선'은 Ctrl·Shift·Alt만 눌렀다 떼면 돼요 (ZoomIt처럼 그 키를 누른 채 끌면 그 모양이 그려져요).\n" +
                          "시작 단축키는 다른 프로그램을 쓰는 중에도 동작해서 Ctrl 또는 Alt를 꼭 함께 눌러야 해요.";
             guide.Margin = new Padding(0, 0, 0, 10);
             root.Controls.Add(guide);
@@ -257,16 +264,47 @@ namespace ClassPen
                 tb.Text = Hotkeys.Text(working[a.Id]);
                 tb.Cursor = Cursors.Hand;
                 string id = a.Id;
+                Keys pendingMods = Keys.None; // Ctrl·Shift·Alt만 누르고 있는 중
                 tb.PreviewKeyDown += delegate (object s, PreviewKeyDownEventArgs e) { e.IsInputKey = true; };
                 tb.KeyDown += delegate (object s, KeyEventArgs e)
                 {
                     e.SuppressKeyPress = true;
                     e.Handled = true;
-                    if (e.KeyCode == Keys.Back) { working[id] = Keys.None; tb.Text = Hotkeys.Text(Keys.None); return; }
-                    if (Hotkeys.IsModifierOnly(e.KeyCode)) { tb.Text = Hotkeys.Text(e.Modifiers) + "+…"; return; }
+                    if (e.KeyCode == Keys.Back) { pendingMods = Keys.None; working[id] = Keys.None; tb.Text = Hotkeys.Text(Keys.None); return; }
+                    if (Hotkeys.IsModifierOnly(e.KeyCode))
+                    {
+                        pendingMods |= e.Modifiers;
+                        tb.Text = Hotkeys.IsHold(id) ? Hotkeys.Text(pendingMods) : Hotkeys.Text(pendingMods) + "+…";
+                        return;
+                    }
+                    pendingMods = Keys.None;
+                    if (Hotkeys.IsHold(id))
+                    {
+                        message.Text = "'" + Hotkeys.All[Array.FindIndex(Hotkeys.All, x => x.Id == id)].Label + "'에는 Ctrl·Shift·Alt만 눌러 주세요.";
+                        tb.Text = Hotkeys.Text(working[id]);
+                        return;
+                    }
                     working[id] = e.KeyData;
                     tb.Text = Hotkeys.Text(e.KeyData);
                     message.Text = "";
+                };
+                // Ctrl·Shift·Alt만 눌렀다 떼면: '누른 채 끌기' 칸은 그 키로 지정, 다른 칸은 안내
+                tb.KeyUp += delegate (object s, KeyEventArgs e)
+                {
+                    if (pendingMods == Keys.None || !Hotkeys.IsModifierOnly(e.KeyCode)) return;
+                    Keys mods = pendingMods;
+                    pendingMods = Keys.None;
+                    if (Hotkeys.IsHold(id))
+                    {
+                        working[id] = mods;
+                        tb.Text = Hotkeys.Text(mods);
+                        message.Text = "";
+                    }
+                    else
+                    {
+                        tb.Text = Hotkeys.Text(working[id]);
+                        message.Text = "Ctrl·Shift·Alt만으로는 '누른 채 끌면 …' 칸에만 지정할 수 있어요. 다른 칸은 글자나 숫자 키를 함께 눌러 주세요.";
+                    }
                 };
                 tb.Leave += delegate { tb.Text = Hotkeys.Text(working[id]); };
                 boxes[id] = tb;
@@ -284,6 +322,11 @@ namespace ClassPen
             {
                 Keys k = working[a.Id];
                 if (k == Keys.None) continue;
+                if (Hotkeys.IsHold(a.Id) && (k & Keys.KeyCode) != Keys.None)
+                {
+                    message.Text = "'" + a.Label + "'에는 Ctrl·Shift·Alt만 쓸 수 있어요.";
+                    return;
+                }
                 if (a.Global && (k & (Keys.Control | Keys.Alt)) == 0)
                 {
                     message.Text = "'" + a.Label + "'은(는) Ctrl 또는 Alt를 함께 눌러야 해요. 아니면 글자를 칠 때마다 판서가 켜져요.";
@@ -315,11 +358,12 @@ namespace ClassPen
         [DllImport("user32.dll")] static extern bool RegisterHotKey(IntPtr hWnd, int id, int mods, int vk);
         [DllImport("user32.dll")] static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
-        static readonly string[] GlobalIds = { "zoom", "draw", "board" }; // 등록 id 1, 2, 3
+        static readonly string[] GlobalIds = { "zoom", "draw", "board", "live" }; // 등록 id 1, 2, 3, 4
         readonly NotifyIcon tray;
         readonly HotkeyWindow hotkeys;
-        readonly ToolStripMenuItem drawItem, zoomItem, boardItem;
+        readonly ToolStripMenuItem drawItem, zoomItem, boardItem, liveItem;
         Overlay current;
+        LiveZoom live;
         SettingsForm settings;
 
         class HotkeyWindow : NativeWindow
@@ -340,8 +384,10 @@ namespace ClassPen
             drawItem = new ToolStripMenuItem("판서 시작", null, delegate { Open(StartMode.Draw); });
             zoomItem = new ToolStripMenuItem("확대 시작", null, delegate { Open(StartMode.Zoom); });
             boardItem = new ToolStripMenuItem("칠판 열기", null, delegate { Open(StartMode.Board); });
+            liveItem = new ToolStripMenuItem("라이브 줌", null, delegate { ToggleLive(); });
             menu.Items.Add(drawItem);
             menu.Items.Add(zoomItem);
+            menu.Items.Add(liveItem);
             menu.Items.Add(boardItem);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("단축키 설정", null, delegate { ShowSettings(); });
@@ -360,6 +406,7 @@ namespace ClassPen
                 if (id == 1) Open(StartMode.Zoom);
                 else if (id == 2) Open(StartMode.Draw);
                 else if (id == 3) Open(StartMode.Board);
+                else if (id == 4) ToggleLive();
             };
             var failed = RegisterAll();
             string msg = failed.Count == 0
@@ -392,6 +439,7 @@ namespace ClassPen
             drawItem.Text = "판서 시작 (" + Hotkeys.Text(Hotkeys.Get("draw")) + ")";
             zoomItem.Text = "확대 시작 (" + Hotkeys.Text(Hotkeys.Get("zoom")) + ")";
             boardItem.Text = "칠판 열기 (" + Hotkeys.Text(Hotkeys.Get("board")) + ")";
+            liveItem.Text = "라이브 줌 (" + Hotkeys.Text(Hotkeys.Get("live")) + ")";
             string tip = "수업펜 - " + Hotkeys.Text(Hotkeys.Get("draw")) + " 판서 / " + Hotkeys.Text(Hotkeys.Get("zoom")) + " 확대";
             tray.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
             return failed;
@@ -399,6 +447,7 @@ namespace ClassPen
 
         void ShowSettings()
         {
+            CloseLive();
             if (current != null && !current.IsDisposed) current.Close();
             if (settings != null && !settings.IsDisposed) { settings.Activate(); return; }
             var form = new SettingsForm();
@@ -415,10 +464,57 @@ namespace ClassPen
             form.Activate();
         }
 
+        bool LiveOpen { get { return live != null; } }
+        void CloseLive() { if (live != null) live.Stop(); live = null; }
+
+        /// <summary>라이브 줌 켜고 끄기</summary>
+        void ToggleLive()
+        {
+            if (LiveOpen) { CloseLive(); return; }
+            if (current != null && !current.IsDisposed) current.Close();
+            var z = new LiveZoom(Screen.FromPoint(Cursor.Position));
+            if (!z.Start())
+            {
+                tray.ShowBalloonTip(4000, "수업펜", "이 PC에서는 라이브 줌을 켤 수 없어요. 일반 확대를 써 주세요.", ToolTipIcon.Warning);
+                return;
+            }
+            live = z;
+            z.Clicked = delegate { if (live == z) Open(StartMode.Draw); };
+        }
+
         void Open(StartMode mode)
         {
+            // 라이브 줌 중에 판서(클릭)하면: 지금 보이는 확대 화면을 그대로 찍어 판서 창을 미리 만들고,
+            // 확대를 푸는 바로 그 장면에 판서 창을 띄운다. 그래서 중간에 다른 화면이 보이지 않는다.
+            if (LiveOpen && mode == StartMode.Draw)
+            {
+                Screen scr = Screen.FromPoint(Cursor.Position);
+                Rectangle b = scr.Bounds;
+                var seen = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(seen)) g.CopyFromScreen(b.Location, Point.Empty, b.Size); // 확대된 모습 그대로 찍힌다
+                var ov = new Overlay(scr, StartMode.Draw, 0f, RectangleF.Empty, seen);
+                ov.FormClosed += delegate { if (current == ov) current = null; };
+                current = ov;
+                // 판서 창을 화면 밖에 먼저 띄워 다 그려 둔다 (확대 중이라도 안 보임)
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                ov.Location = new Point(b.X + 60000, b.Y);
+                ov.Show();
+                ov.Refresh();
+                double tReady = watch.Elapsed.TotalMilliseconds;
+                live.ReleaseInSync();
+                double tRelease = watch.Elapsed.TotalMilliseconds;
+                // 확대가 풀리는 장면에 맞춰 제자리로 옮긴다 (이미 그려 둔 그림이라 바로 보임)
+                ov.Location = b.Location;
+                double tShown = watch.Elapsed.TotalMilliseconds;
+                ov.Activate();
+                CloseLive();
+                string dbg = Environment.GetEnvironmentVariable("CLASSPEN_DEBUG");
+                if (dbg != null) { try { File.WriteAllText(Path.ChangeExtension(dbg, ".freeze.txt"), "ready_ms=" + tReady.ToString("0.0") + " release_ms=" + tRelease.ToString("0.0") + " shown_after_release_ms=" + (tShown - tRelease).ToString("0.0")); } catch { } }
+                return;
+            }
+            if (LiveOpen) CloseLive();
             // 열려 있으면 같은 단축키로 닫는다
-            if (current != null && !current.IsDisposed) { current.Close(); return; }
+            else if (current != null && !current.IsDisposed) { current.Close(); return; }
             current = new Overlay(Screen.FromPoint(Cursor.Position), mode);
             current.FormClosed += delegate { current = null; };
             current.Show();
@@ -432,9 +528,12 @@ namespace ClassPen
                 "■ 시작\n" +
                 "  " + k("draw") + "  판서 (지금 화면 위에 쓰기)\n" +
                 "  " + k("zoom") + "  확대 (휠로 배율, 클릭하면 멈추고 판서)\n" +
+                "  " + k("live") + "  라이브 줌 (움직이는 화면 그대로 확대, 키보드 입력은 그대로 돼요)\n" +
+                "        Ctrl+휠 배율, 왼쪽 클릭 또는 " + k("draw") + " 멈추고 판서, " + k("live") + " 끝내기\n" +
                 "  " + k("board") + "  칠판 (흰 화면에 쓰기)\n\n" +
                 "■ 판서 중\n" +
                 "  " + k("pen") + " 펜   " + k("marker") + " 형광펜   " + k("rect") + " 네모   " + k("line") + " 직선(Shift: 수평·수직)   " + k("text") + " 글자\n" +
+                "  " + k("holdrect") + " 누른 채 끌면 네모,  " + k("holdline") + " 누른 채 끌면 직선 (ZoomIt처럼)\n" +
                 "  휠 / " + k("thinner") + " " + k("thicker") + "  굵기     Ctrl+Z 되돌리기     " + k("clear") + " 모두 지우기\n" +
                 "  " + k("white") + " 흰 칠판   " + k("black") + " 검은 칠판   " + k("zoomback") + " 확대로 돌아가기\n" +
                 "  Ctrl+S 바탕화면에 그림 저장   Ctrl+C 그림 복사\n" +
@@ -445,6 +544,7 @@ namespace ClassPen
 
         protected override void ExitThreadCore()
         {
+            CloseLive();
             if (current != null && !current.IsDisposed) current.Close();
             for (int i = 1; i <= GlobalIds.Length; i++) UnregisterHotKey(hotkeys.Handle, i);
             hotkeys.DestroyHandle();
@@ -463,6 +563,7 @@ namespace ClassPen
         public float Width;
         public List<PointF> Points = new List<PointF>();
         public string Text;
+        public bool ByHold;            // Ctrl·Shift 등을 누른 채 끌어서 잠깐 바꾼 도구
 
         public void Draw(Graphics g)
         {
@@ -527,6 +628,210 @@ namespace ClassPen
     }
 
     /// <summary>화면을 덮는 판서·확대 창. 화면을 찍어 두고 그 위에 그린다.</summary>
+    /// <summary>
+    /// 라이브 줌: Windows 돋보기와 같은 '화면 전체 확대'(Magnification API)를 쓴다.
+    /// 확대는 그래픽 카드(DWM)가 하므로 동영상·프로그램이 움직이는 그대로 보인다.
+    /// 확대 화면은 마우스가 가운데쪽에 있는 동안 가만히 있고, 마우스가 가장자리(1/8 띠)에 닿으면
+    /// 그만큼만 밀려 움직인다 (ZoomIt 라이브 줌과 같은 방식). 확대된 마우스 포인터가 가리키는 곳이 실제로 눌린다.
+    /// 위치는 따로 도는 작업(스레드)에서 화면이 새로 그려지는 박자(DwmFlush)마다 한 번씩 정한다.
+    /// 화면에 보이는 창은 없다.
+    /// </summary>
+    class LiveZoom
+    {
+        [DllImport("Magnification.dll")] static extern bool MagInitialize();
+        [DllImport("Magnification.dll")] static extern bool MagUninitialize();
+        [DllImport("Magnification.dll")] static extern bool MagSetFullscreenTransform(float level, int xOffset, int yOffset);
+        [DllImport("dwmapi.dll")] static extern int DwmFlush();
+        [DllImport("user32.dll")] static extern bool GetCursorPos(out Point p);
+        [DllImport("user32.dll")] static extern IntPtr SetWindowsHookEx(int id, HookProc proc, IntPtr mod, uint thread);
+        [DllImport("user32.dll")] static extern bool UnhookWindowsHookEx(IntPtr hook);
+        [DllImport("user32.dll")] static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr w, IntPtr l);
+        [DllImport("user32.dll")] static extern short GetAsyncKeyState(int vk);
+        [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
+        delegate IntPtr HookProc(int code, IntPtr w, IntPtr l);
+
+        const int WH_MOUSE_LL = 14, WM_LBUTTONDOWN = 0x201, WM_LBUTTONUP = 0x202, WM_MOUSEWHEEL = 0x20A, VK_CONTROL = 0x11;
+
+        /// <summary>왼쪽 클릭하면 부른다 (그 화면을 멈추고 판서). 클릭은 아래 프로그램으로 보내지 않는다.</summary>
+        public Action Clicked;
+        SynchronizationContext ui;
+        bool swallowUp;
+        const float EdgeBand = 8f;     // 보이는 폭의 1/8 띠에 마우스가 닿으면 화면을 민다
+
+        volatile float target = 2f;    // 바라는 배율 (Ctrl+휠)
+        readonly Rectangle screen;
+        readonly HookProc hookProc;    // 가비지 수집되지 않게 붙잡아 둔다
+        readonly string debugPath;     // 시험용: 환경 변수 CLASSPEN_DEBUG 에 파일 경로를 주면 움직임 기록을 적는다
+        readonly object gate = new object();
+        RectangleF source;             // 지금 확대해 보여 주는 원본 영역 (화면 안 좌표)
+        float shownZoom = 1f;
+        IntPtr hook;
+        Thread thread;
+        volatile bool running;
+        volatile bool releaseRequested;
+        readonly ManualResetEvent released = new ManualResetEvent(false);
+        bool started;
+        readonly ManualResetEvent ready = new ManualResetEvent(false);
+
+        public LiveZoom(Screen s)
+        {
+            screen = s.Bounds;
+            hookProc = OnMouseHook;
+            debugPath = Environment.GetEnvironmentVariable("CLASSPEN_DEBUG");
+        }
+
+        /// <summary>지금 보이는 배율</summary>
+        public float Zoom { get { lock (gate) return shownZoom; } }
+        /// <summary>지금 확대해 보여 주는 원본 영역 (판서로 넘어갈 때 같은 화면을 멈추려고 씀)</summary>
+        public RectangleF Source { get { lock (gate) return source; } }
+
+        /// <summary>확대를 시작한다. 이 PC에서 쓸 수 없으면 false.</summary>
+        public bool Start()
+        {
+            running = true;
+            thread = new Thread(Loop);
+            thread.IsBackground = true;
+            thread.Start();
+            ready.WaitOne(2000);
+            if (!started) { Stop(); return false; }
+            ui = SynchronizationContext.Current;
+            hook = SetWindowsHookEx(WH_MOUSE_LL, hookProc, GetModuleHandle(null), 0);
+            return true;
+        }
+
+        /// <summary>
+        /// Ctrl+휠: 배율 바꾸기 (아래 프로그램으로는 보내지 않음). 그냥 휠은 아래 프로그램 스크롤.
+        /// 왼쪽 클릭: 그 화면을 멈추고 판서 (ZoomIt 라이브 줌과 같음). 훅 안에서 오래 걸리면 마우스가 굳으므로 나중에 처리한다.
+        /// </summary>
+        IntPtr OnMouseHook(int code, IntPtr w, IntPtr l)
+        {
+            if (code >= 0 && w.ToInt32() == WM_LBUTTONDOWN && Clicked != null)
+            {
+                swallowUp = true;
+                Action a = Clicked;
+                Clicked = null; // 한 번만
+                if (ui != null) ui.Post(delegate { a(); }, null); else a();
+                return (IntPtr)1;
+            }
+            if (code >= 0 && w.ToInt32() == WM_LBUTTONUP && swallowUp)
+            {
+                swallowUp = false;
+                return (IntPtr)1;
+            }
+            if (code >= 0 && w.ToInt32() == WM_MOUSEWHEEL && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)
+            {
+                int delta = (short)(Marshal.ReadInt32(l, 8) >> 16);
+                target = Math.Max(1.25f, Math.Min(8f, target * (delta > 0 ? 1.25f : 0.8f)));
+                return (IntPtr)1;
+            }
+            return CallNextHookEx(hook, code, w, l);
+        }
+
+        /// <summary>
+        /// 다음 장면의 원본 영역 왼쪽 위를 정한다 (화면 안 좌표, 마우스 m 도 화면 안 좌표).
+        /// 배율이 바뀌는 중이면 마우스가 화면에서 같은 자리에 머물도록 하고,
+        /// 그다음 마우스가 가장자리 띠 안에 들어가 있으면 그만큼만 민다.
+        /// </summary>
+        public static PointF NextOrigin(PointF origin, float oldZoom, float zoom, PointF m, SizeF size)
+        {
+            float w = size.Width / zoom, h = size.Height / zoom;
+            float x = origin.X, y = origin.Y;
+            if (zoom != oldZoom)
+            {
+                x = m.X - (m.X - x) * oldZoom / zoom;
+                y = m.Y - (m.Y - y) * oldZoom / zoom;
+            }
+            float bw = w / EdgeBand, bh = h / EdgeBand;
+            if (m.X - x < bw) x = m.X - bw;
+            else if (x + w - m.X < bw) x = m.X + bw - w;
+            if (m.Y - y < bh) y = m.Y - bh;
+            else if (y + h - m.Y < bh) y = m.Y + bh - h;
+            x = Math.Max(0, Math.Min(size.Width - w, x));
+            y = Math.Max(0, Math.Min(size.Height - h, y));
+            return new PointF(x, y);
+        }
+
+        /// <summary>확대를 맡는 작업. 화면이 한 번 그려질 때마다 배율과 위치를 한 번씩 정한다.</summary>
+        void Loop()
+        {
+            bool init = false;
+            try { init = MagInitialize(); } catch { }
+            if (init && MagSetFullscreenTransform(1f, screen.X, screen.Y)) started = true;
+            ready.Set();
+            if (!started) { if (init) MagUninitialize(); return; }
+
+            var size = new SizeF(screen.Width, screen.Height);
+            float zoom = 1f, oldZoom = 1f;
+            PointF origin = PointF.Empty;
+            Point m;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            int frames = 0, sets = 0, lastX = int.MinValue, lastY = int.MinValue;
+            float lastZoom = -1f;
+            double maxGap = 0, prev = 0;
+            try
+            {
+                while (running)
+                {
+                    // 판서로 넘어갈 때: 화면이 막 그려진 직후에 확대를 풀어서, 판서 창이 같은 장면에 뜨게 한다
+                    if (releaseRequested)
+                    {
+                        MagSetFullscreenTransform(1f, 0, 0);
+                        released.Set();
+                        break;
+                    }
+                    float t = target;
+                    zoom += (t - zoom) * 0.3f;
+                    if (Math.Abs(t - zoom) < 0.005f) zoom = t;
+                    GetCursorPos(out m);
+                    var rel = new PointF(Math.Max(0, Math.Min(size.Width - 1, m.X - screen.X)), Math.Max(0, Math.Min(size.Height - 1, m.Y - screen.Y)));
+                    origin = NextOrigin(origin, oldZoom, zoom, rel, size);
+                    oldZoom = zoom;
+                    lock (gate) { source = new RectangleF(origin.X, origin.Y, size.Width / zoom, size.Height / zoom); shownZoom = zoom; }
+                    int x = screen.X + (int)Math.Round(origin.X), y = screen.Y + (int)Math.Round(origin.Y);
+                    if (x != lastX || y != lastY || zoom != lastZoom)
+                    {
+                        MagSetFullscreenTransform(zoom, x, y);
+                        lastX = x; lastY = y; lastZoom = zoom;
+                        sets++;
+                    }
+                    // 다음 화면이 그려질 때까지 기다린다 (모니터 주사율에 맞춤). 안 되면 약 8ms 쉰다.
+                    if (DwmFlush() != 0) Thread.Sleep(8);
+                    frames++;
+                    double now = watch.Elapsed.TotalMilliseconds;
+                    if (frames > 1) maxGap = Math.Max(maxGap, now - prev);
+                    prev = now;
+                    if (debugPath != null && frames % 30 == 0)
+                    {
+                        try { File.WriteAllText(debugPath, "frames=" + frames + " avg_ms=" + (now / frames).ToString("0.0") + " max_gap_ms=" + maxGap.ToString("0.0") + " sets=" + sets + " zoom=" + zoom.ToString("0.00") + " origin=" + x + "," + y + " mouse=" + m.X + "," + m.Y); } catch { }
+                    }
+                }
+            }
+            finally
+            {
+                MagSetFullscreenTransform(1f, 0, 0);
+                MagUninitialize();
+            }
+        }
+
+        /// <summary>다음 장면 시작에 맞춰 확대를 풀고, 풀릴 때까지 기다린다 (그 직후 판서 창을 띄우면 화면이 튀지 않음)</summary>
+        public void ReleaseInSync()
+        {
+            if (thread == null) return;
+            releaseRequested = true;
+            released.WaitOne(300);
+        }
+
+        /// <summary>확대를 끝내고 화면을 원래대로 돌린다</summary>
+        public void Stop()
+        {
+            if (hook != IntPtr.Zero) UnhookWindowsHookEx(hook);
+            hook = IntPtr.Zero;
+            running = false;
+            if (thread != null && thread != Thread.CurrentThread) thread.Join(1000);
+            thread = null;
+        }
+    }
+
     class Overlay : Form
     {
         static readonly Color[] Palette = { Color.FromArgb(230, 30, 40), Color.FromArgb(20, 90, 230), Color.FromArgb(20, 160, 60), Color.FromArgb(250, 200, 0), Color.Black, Color.White };
@@ -552,11 +857,15 @@ namespace ClassPen
         readonly List<Button> colorButtons = new List<Button>();
         TextBox textBox;
 
-        public Overlay(Screen screen, StartMode mode)
+        public Overlay(Screen screen, StartMode mode, float frozenZoom = 0f, RectangleF frozenSrc = default(RectangleF), Bitmap preShot = null)
         {
             Rectangle b = screen.Bounds;
-            shot = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb);
-            using (var g = Graphics.FromImage(shot)) g.CopyFromScreen(b.Location, Point.Empty, b.Size);
+            if (preShot != null) shot = preShot; // 라이브 줌에서 보던 확대 화면 그대로
+            else
+            {
+                shot = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(shot)) g.CopyFromScreen(b.Location, Point.Empty, b.Size);
+            }
 
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
@@ -602,7 +911,9 @@ namespace ClassPen
 
             if (mode == StartMode.Board) { board = 1; color = Color.Black; }
             if (mode == StartMode.Zoom) { zoom = 2f; zoomLive = true; }
-            UpdateZoomSrc(PointToClientSafe(Cursor.Position));
+            if (frozenZoom > 0f) { zoom = frozenZoom; zoomLive = false; } // 라이브 줌에서 넘어옴: 확대된 채 바로 판서
+            if (frozenZoom > 0f) zoomSrc = frozenSrc; // 라이브 줌에서 보던 그 화면 그대로
+            else UpdateZoomSrc(PointToClientSafe(Cursor.Position));
             Rebuild();
             RefreshBar();
         }
@@ -756,13 +1067,21 @@ namespace ClassPen
             if (e.Button != MouseButtons.Left) return;
             if (zoomLive) { LockZoom(); return; }
             CommitText();
-            if (tool == Tool.Text) { StartText(e.Location); return; }
+            // ZoomIt처럼: 지정한 키(기본 Ctrl·Shift)를 누른 채 끌면 그 동안만 네모·직선
+            Tool use = tool;
+            bool byHold = false;
+            Keys mods = ModifierKeys;
+            Keys hr = Hotkeys.Get("holdrect"), hl = Hotkeys.Get("holdline");
+            if (mods != Keys.None && hr != Keys.None && mods == hr && tool != Tool.Rect) { use = Tool.Rect; byHold = true; }
+            else if (mods != Keys.None && hl != Keys.None && mods == hl && tool != Tool.Line) { use = Tool.Line; byHold = true; }
+            if (use == Tool.Text) { StartText(e.Location); return; }
             drawing = new Shape();
-            drawing.Tool = tool;
+            drawing.Tool = use;
+            drawing.ByHold = byHold;
             drawing.Color = color;
             drawing.Width = Widths[widthIndex];
             drawing.Points.Add(e.Location);
-            if (tool == Tool.Rect || tool == Tool.Line) drawing.Points.Add(e.Location);
+            if (use == Tool.Rect || use == Tool.Line) drawing.Points.Add(e.Location);
             Capture = true;
         }
 
@@ -774,7 +1093,7 @@ namespace ClassPen
             PointF p = e.Location;
             if (drawing.Tool == Tool.Rect || drawing.Tool == Tool.Line)
             {
-                if (drawing.Tool == Tool.Line && (ModifierKeys & Keys.Shift) != 0)
+                if (drawing.Tool == Tool.Line && !drawing.ByHold && (ModifierKeys & Keys.Shift) != 0)
                 {
                     PointF a = drawing.Points[0];
                     if (Math.Abs(p.X - a.X) >= Math.Abs(p.Y - a.Y)) p = new PointF(p.X, a.Y); else p = new PointF(a.X, p.Y);
