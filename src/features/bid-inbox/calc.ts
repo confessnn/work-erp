@@ -36,11 +36,33 @@ export function quantile(values: number[], q: number): number {
 
 export type Plan = { key: "attack" | "balanced" | "safe"; label: string; rate: number; price: number };
 
-/** 협상·가격 순: 유사 낙찰률의 하위 25%·중앙값·상위 25% */
-export function plansFromRates(base: number, rates: number[]): Plan[] {
+/**
+ * 가중 사분위수: 무게가 큰 값이 그만큼 여러 번 있는 것처럼 센다.
+ * 값을 정렬해 누적 무게가 전체의 q에 닿는 곳을 앞뒤 값 사이에서 이어 붙여 구한다.
+ */
+export function weightedQuantile(values: number[], weights: number[], q: number): number {
+  const items = values.map((v, i) => ({ v, w: Math.max(0, weights[i] ?? 1) })).sort((a, b) => a.v - b.v);
+  const total = items.reduce((s, x) => s + x.w, 0);
+  if (items.length === 1 || total === 0) return quantile(values, q);
+  // 각 값의 '가운데' 누적 위치(0~1)를 정하고 그 사이를 잇는다
+  let acc = 0;
+  const pos = items.map((x) => {
+    const p = (acc + x.w / 2) / total;
+    acc += x.w;
+    return p;
+  });
+  if (q <= pos[0]) return items[0].v;
+  for (let i = 1; i < items.length; i++) {
+    if (q <= pos[i]) return items[i - 1].v + ((items[i].v - items[i - 1].v) * (q - pos[i - 1])) / (pos[i] - pos[i - 1]);
+  }
+  return items[items.length - 1].v;
+}
+
+/** 협상·가격 순: 유사 낙찰률의 하위 25%·중앙값·상위 25%. weights를 주면 가까운 사례를 더 크게 센다 */
+export function plansFromRates(base: number, rates: number[], weights?: number[]): Plan[] {
   if (base <= 0 || rates.length === 0) return [];
   const plan = (key: Plan["key"], label: string, q: number): Plan => {
-    const rate = quantile(rates, q);
+    const rate = weights && weights.length === rates.length ? weightedQuantile(rates, weights, q) : quantile(rates, q);
     return { key, label, rate, price: Math.round((base * rate) / 100) };
   };
   return [plan("attack", "공격", 0.25), plan("balanced", "균형", 0.5), plan("safe", "보수", 0.75)];
@@ -104,4 +126,18 @@ export function hintsToFields(h: CalcHints): HintFields {
     range: n(h.range),
   };
   return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined)) as HintFields;
+}
+
+/** 투찰률 묶음을 0.1%p 구간으로 센다 */
+export function bidHistogram(rates: number[], step = 0.1) {
+  if (rates.length === 0) return { bins: [] as { from: number; count: number }[], top: null as { from: number; count: number } | null };
+  const key = (r: number) => Math.floor(r / step + 1e-9) * step;
+  const counts = new Map<number, number>();
+  for (const r of rates) counts.set(Number(key(r).toFixed(3)), (counts.get(Number(key(r).toFixed(3))) ?? 0) + 1);
+  const lo = Math.min(...counts.keys());
+  const hi = Math.max(...counts.keys());
+  const bins: { from: number; count: number }[] = [];
+  for (let f = lo; f <= hi + 1e-9; f = Number((f + step).toFixed(3))) bins.push({ from: f, count: counts.get(f) ?? 0 });
+  const top = bins.reduce((m, b) => (b.count > m.count ? b : m), bins[0]);
+  return { bins, top };
 }

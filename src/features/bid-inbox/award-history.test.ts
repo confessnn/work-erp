@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCostWork, mergeAwards, modeOf, pickSimilar, titleCore, toAward, weekWindows, type Award } from "./award-history";
+import { caseWeight, isCostWork, mergeAwards, modeOf, pickSimilar, titleCore, toAward, weekWindows, type Award } from "./award-history";
 
 describe("toAward", () => {
   const item = {
@@ -130,5 +130,13 @@ describe("경쟁·낙찰 방식 거르기", () => {
   it("다시 받아도 찾아 둔 낙찰방법을 잃지 않는다", () => {
     const merged = mergeAwards([a({ bidNo: "A", method: "협상" })], [a({ bidNo: "A", rate: 90 })], 365, new Date("2026-11-18T00:00:00Z"));
     expect(merged[0]).toMatchObject({ rate: 90, method: "협상" });
+  });
+});
+
+describe("caseWeight", () => {
+  const now = new Date("2026-11-18T00:00:00Z");
+  it("같은 용역·기관·최근·비슷한 금액이면 크게 센다", () => {
+    expect(caseWeight({ amount: 50, date: "2026-10-01" }, { sameWork: true, sameOrg: true }, 50, now)).toBeCloseTo(3 * 2 * 1.5 * 1.5);
+    expect(caseWeight({ amount: 10, date: "2025-12-01" }, { sameWork: false, sameOrg: false }, 50, now)).toBe(1);
   });
 });

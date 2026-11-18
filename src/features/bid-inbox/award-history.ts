@@ -27,6 +27,8 @@ export type Award = {
   date: string | null; // YYYY-MM-DD
   /** 낙찰방법 (입찰공고에서 따로 조회). undefined = 아직 조회 안 함, "" = 조회했지만 없음 */
   method?: string;
+  /** 개찰 때 참여 업체들의 투찰률(예정가격 대비 %). 업체 이름·번호는 저장하지 않는다. undefined = 아직 조회 안 함 */
+  bids?: number[];
 };
 
 /** 경쟁이 거의 없던 공고 (참여 2곳 이하)는 3안 계산에서 뺀다 */
@@ -157,6 +159,63 @@ export async function fillMethods(awards: Award[], deadline: number): Promise<Aw
   return out;
 }
 
+/** 개찰 순위 한 줄 (내 결과 확인용). 사업자번호는 비교에만 쓰고 저장하지 않는다 */
+export type OpeningRow = { rank: number | null; bizno: string; amount: number; rate: number; remark: string | null };
+
+/** 공고 하나의 개찰 순위 전체 (참여 업체별 투찰금액·투찰률) */
+export async function fetchOpening(bidNo: string, bidOrd = "000"): Promise<OpeningRow[]> {
+  const key = process.env.BID_API_KEY;
+  if (!key) throw new Error("BID_API_KEY가 설정되지 않았습니다.");
+  const serviceKey = key.includes("%") ? key : encodeURIComponent(key);
+  const out: OpeningRow[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const params = new URLSearchParams({ type: "json", numOfRows: "100", pageNo: String(page), bidNtceNo: bidNo, bidNtceOrd: bidOrd });
+    let got: { items: ApiItem[]; total: number } | null = null;
+    for (let attempt = 0; !got; attempt++) {
+      const res = await fetch(`${BASE_URL}/getOpengResultListInfoOpengCompt?serviceKey=${serviceKey}&${params}`, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
+      try {
+        got = parseResponse(await res.text());
+      } catch (e) {
+        if (attempt < 2 && e instanceof Error && e.message.includes("초당")) await sleep(RETRY_WAIT_MS * (attempt + 1));
+        else throw e;
+      }
+      await sleep(GAP_MS);
+    }
+    for (const i of got.items) {
+      const rate = num(i.bidprcrt);
+      const amount = num(i.bidprcAmt);
+      if (!(amount > 0)) continue;
+      const rank = num(i.opengRank);
+      out.push({
+        rank: Number.isFinite(rank) ? rank : null,
+        bizno: String(i.prcbdrBizno ?? "").replace(/D/g, ""),
+        amount: Math.round(amount),
+        rate: Number.isFinite(rate) ? rate : NaN,
+        remark: str(i.rmrk),
+      });
+    }
+    if (page * 100 >= got.total) break;
+  }
+  return out;
+}
+
+/** 아직 투찰 분포를 모르는 결과만 개찰 순위를 받아 투찰률만 남긴다. deadline이 지나면 멈춘다 */
+export async function fillBids(awards: Award[], deadline: number): Promise<Award[]> {
+  const out = [...awards];
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].bids !== undefined) continue;
+    if (Date.now() > deadline) break;
+    try {
+      const [no, ord] = out[i].bidNo.split("-");
+      const rows = await fetchOpening(no, ord);
+      out[i] = { ...out[i], bids: rows.map((r) => r.rate).filter((r) => r >= 40 && r <= 120) };
+    } catch {
+      // 다음에 다시 받는다
+    }
+  }
+  return out;
+}
+
 /** 최근 days일 동안 공고명에 keyword가 들어간 용역 낙찰 결과. 몇 주가 실패해도 나머지는 돌려준다 */
 export async function fetchAwards(keyword: string, days: number, now = new Date()): Promise<{ awards: Award[]; failedWeeks: number }> {
   const key = process.env.BID_API_KEY;
@@ -194,8 +253,21 @@ export const titleCore = (t: string) =>
     .replace(/\d{4}\s*년도?|제?\s*\d+\s*차|재공고|긴급/g, " ")
     .replace(/\s+/g, "");
 
-/** use: 3안 계산에 씀. skip: 빼는 이유 */
-export type Similar = Award & { sameOrg: boolean; sameWork: boolean; use: boolean; skip: string | null };
+/** use: 3안 계산에 씀. skip: 빼는 이유. weight: 3안 계산에서 얼마나 크게 셀지 */
+export type Similar = Award & { sameOrg: boolean; sameWork: boolean; use: boolean; skip: string | null; weight: number };
+
+/**
+ * 가까운 사례일수록 크게 센다 (곱해서 씀).
+ * 같은 용역 ×3, 같은 기관 ×2, 최근 6개월 ×1.5, 낙찰금액이 기준금액의 70~130% ×1.5
+ */
+export function caseWeight(a: Pick<Award, "amount" | "date">, flags: { sameWork: boolean; sameOrg: boolean }, base: number | null, now: Date): number {
+  let w = 1;
+  if (flags.sameWork) w *= 3;
+  if (flags.sameOrg) w *= 2;
+  if (a.date && now.getTime() - Date.parse(a.date) <= 183 * 86_400_000) w *= 1.5;
+  if (base && a.amount >= base * 0.7 && a.amount <= base * 1.3) w *= 1.5;
+  return w;
+}
 
 /**
  * 계산기에 쓸 비슷한 낙찰 결과.
@@ -205,6 +277,7 @@ export type Similar = Award & { sameOrg: boolean; sameWork: boolean; use: boolea
 export function pickSimilar(
   awards: Award[],
   notice: { title: string; org: string | null; base: number | null; bidNo?: string | null; mode?: AwardMode | null },
+  now = new Date(),
 ): Similar[] {
   const org = norm(notice.org);
   const core = titleCore(notice.title);
@@ -221,7 +294,7 @@ export function pickSimilar(
           : notice.mode && mode && mode !== notice.mode
             ? `다른 방식 (${MODE_LABEL[mode]})`
             : null;
-      return { ...a, sameOrg, sameWork, use: skip === null, skip };
+      return { ...a, sameOrg, sameWork, use: skip === null, skip, weight: caseWeight(a, { sameWork, sameOrg }, base, now) };
     })
     .filter((a) => a.sameOrg || a.sameWork || (base !== null && a.amount >= base * 0.4 && a.amount <= base * 1.6) || base === null)
     .sort(
@@ -229,6 +302,7 @@ export function pickSimilar(
         Number(b.use) - Number(a.use) ||
         Number(b.sameWork) - Number(a.sameWork) ||
         Number(b.sameOrg) - Number(a.sameOrg) ||
+        b.weight - a.weight ||
         (b.date ?? "").localeCompare(a.date ?? ""),
     )
     .map((a, i, all) => (a.use && all.slice(0, i).filter((x) => x.use).length >= MAX_RATES ? { ...a, use: false, skip: "12건 초과" } : a));
@@ -241,6 +315,9 @@ export function mergeAwards(old: Award[], fresh: Award[], days: number, now = ne
   const cutoff = new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
   const map = new Map<string, Award>();
   // 새로 받은 결과에는 낙찰방법이 없으므로 예전에 찾아 둔 값을 이어 쓴다
-  for (const a of [...old, ...fresh]) map.set(a.bidNo, { ...a, method: a.method ?? map.get(a.bidNo)?.method });
+  for (const a of [...old, ...fresh]) {
+    const prev = map.get(a.bidNo);
+    map.set(a.bidNo, { ...a, method: a.method ?? prev?.method, bids: a.bids ?? prev?.bids });
+  }
   return [...map.values()].filter((a) => !a.date || a.date >= cutoff);
 }
