@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { fetchAllNotices } from "./fetch-all";
+import { fetchAwards, mergeAwards, pickSimilar, type Award, type Similar } from "./award-history";
 import type { CalcHints } from "./calc";
 import { extractCalcHints } from "./calc-hints";
 import { summarizeNotice } from "./summarize";
@@ -104,4 +105,50 @@ export async function loadCalcHints(id: string, again = false): Promise<{ hints?
   } catch (e) {
     return { error: e instanceof Error ? e.message : "알 수 없는 오류" };
   }
+}
+
+const AWARD_KEYWORD = "원가";
+const AWARD_DAYS = 365;
+const AWARD_CACHE_MS = 24 * 3_600_000;
+
+export type SimilarAwards = { rows: Similar[]; total: number; fetchedAt: string; failedWeeks: number };
+
+/**
+ * 계산기의 '지난 낙찰률 가져오기'. 최근 1년 공고명에 '원가'가 들어간 용역 낙찰 결과 중
+ * 같은 기관·같은 용역·비슷한 금액을 골라 돌려준다. 받은 결과는 하루 동안 다시 쓴다 (again=true면 새로 받음).
+ */
+export async function loadSimilarAwards(id: string, again = false): Promise<{ data?: SimilarAwards; error?: string }> {
+  const { supabase, userId } = await requireUser();
+  const { data: n, error } = await supabase
+    .from("bid_notices")
+    .select("title, notice_org, demand_org, presumed_price, bid_no")
+    .eq("id", id)
+    .single();
+  if (error) return { error: error.message };
+
+  const { data: cache } = await supabase.from("bid_award_cache").select("fetched_at, failed_weeks, awards").eq("keyword", AWARD_KEYWORD).maybeSingle();
+  let awards = (cache?.awards as Award[] | undefined) ?? [];
+  let fetchedAt = cache?.fetched_at as string | undefined;
+  let failedWeeks = (cache?.failed_weeks as number | undefined) ?? 0;
+
+  if (again || !fetchedAt || Date.now() - Date.parse(fetchedAt) > AWARD_CACHE_MS) {
+    try {
+      // 처음이거나 지난번에 빠진 주가 있으면 1년 전체, 아니면 지난번 이후 며칠(+7일 겹침)만 더 받는다
+      const full = again || !fetchedAt || failedWeeks > 0;
+      const days = full ? AWARD_DAYS : Math.min(AWARD_DAYS, Math.ceil((Date.now() - Date.parse(fetchedAt!)) / 86_400_000) + 7);
+      const got = await fetchAwards(AWARD_KEYWORD, days);
+      awards = mergeAwards(full ? [] : awards, got.awards, AWARD_DAYS);
+      failedWeeks = got.failedWeeks;
+      fetchedAt = new Date().toISOString();
+      await supabase
+        .from("bid_award_cache")
+        .upsert({ user_id: userId, keyword: AWARD_KEYWORD, fetched_at: fetchedAt, failed_weeks: failedWeeks, awards }, { onConflict: "user_id,keyword" });
+    } catch (e) {
+      if (!fetchedAt) return { error: e instanceof Error ? e.message : "알 수 없는 오류" };
+      // 새로 받기가 실패하면 예전에 받은 결과로 보여 준다
+    }
+  }
+
+  const rows = pickSimilar(awards, { title: n.title, org: n.demand_org ?? n.notice_org, base: n.presumed_price, bidNo: n.bid_no });
+  return { data: { rows: rows.slice(0, 30), total: awards.length, fetchedAt: fetchedAt!, failedWeeks } };
 }

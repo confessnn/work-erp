@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { won } from "@/lib/format";
-import { loadCalcHints } from "../actions";
+import { loadCalcHints, loadSimilarAwards, type SimilarAwards } from "../actions";
 import {
   calcCost,
   hintsToFields,
@@ -71,6 +71,94 @@ const FIELD_NAMES: Record<string, string> = {
   lowerRate: "낙찰하한율",
   range: "복수예비가격 범위",
 };
+
+const RATE_ROWS = 12;
+
+/** 나라장터 낙찰정보에서 지난 원가 용역 낙찰률을 가져와 '유사 용역 낙찰률' 칸을 채운다 */
+function AwardPicker({ noticeId, onRates }: { noticeId: string; onRates: (rates: string) => void }) {
+  const [pending, start] = useTransition();
+  const [result, setResult] = useState<{ data?: SimilarAwards; error?: string } | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  const run = (again: boolean) =>
+    start(async () => {
+      const r = await loadSimilarAwards(noticeId, again);
+      setResult(r);
+      if (r.data?.rows.length) onRates(r.data.rows.slice(0, RATE_ROWS).map((a) => a.rate.toFixed(3)).join(", "));
+    });
+
+  const rows = result?.data?.rows ?? [];
+  const shown = showAll ? rows : rows.slice(0, RATE_ROWS);
+  const when = result?.data ? new Date(result.data.fetchedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+
+  return (
+    <div className="space-y-2 rounded-lg border border-line p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn-primary" disabled={pending} onClick={() => run(false)}>
+          {pending ? "나라장터에서 받는 중… (처음 한 번은 2분쯤)" : "지난 낙찰률 가져오기 (최근 1년)"}
+        </button>
+        {result?.data && (
+          <button type="button" className="chip" disabled={pending} onClick={() => run(true)}>
+            새로 받기
+          </button>
+        )}
+      </div>
+      {result?.error && <p className="text-danger">{result.error}</p>}
+      {result?.data && (
+        <>
+          <p>
+            최근 1년 공고명에 ‘원가’가 들어간 용역 낙찰 {result.data.total}건 중 비슷한 {rows.length}건
+            {rows.length > 0 && ` (같은 용역 ${rows.filter((a) => a.sameWork).length} · 같은 기관 ${rows.filter((a) => a.sameOrg).length})`}
+            <span className="text-muted"> · {when} 기준</span>
+            {result.data.failedWeeks > 0 && <span className="text-warn"> · {result.data.failedWeeks}주는 받지 못함</span>}
+          </p>
+          {rows.length === 0 ? (
+            <p className="text-muted">비슷한 낙찰 결과가 없습니다. 낙찰률을 직접 넣어 주세요.</p>
+          ) : (
+            <>
+              <p className="text-muted">위에서부터 {Math.min(RATE_ROWS, rows.length)}건의 낙찰률을 ‘유사 용역 낙찰률’ 칸에 넣었습니다. 칸에서 빼거나 더할 수 있어요.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-xs">
+                  <thead>
+                    <tr className="text-left text-muted">
+                      <th className="py-1 pr-2">낙찰일</th>
+                      <th className="py-1 pr-2">공고명 · 발주기관</th>
+                      <th className="py-1 pr-2 text-right">낙찰금액</th>
+                      <th className="py-1 pr-2 text-right">낙찰률</th>
+                      <th className="py-1 text-right">참여</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shown.map((a) => (
+                      <tr key={a.bidNo} className="border-t border-line align-top">
+                        <td className="py-1 pr-2 whitespace-nowrap tabular-nums">{a.date ?? "-"}</td>
+                        <td className="py-1 pr-2">
+                          {a.sameWork && <span className="mr-1 rounded bg-accent-soft px-1 font-semibold">같은 용역</span>}
+                          {!a.sameWork && a.sameOrg && <span className="mr-1 rounded bg-mint px-1 font-semibold">같은 기관</span>}
+                          {a.title}
+                          <span className="text-muted"> · {a.org ?? "기관 미상"}{a.winner ? ` · 낙찰 ${a.winner}` : ""}</span>
+                        </td>
+                        <td className="py-1 pr-2 text-right tabular-nums">{won(a.amount)}</td>
+                        <td className="py-1 pr-2 text-right tabular-nums">{a.rate.toFixed(3)}%</td>
+                        <td className="py-1 text-right tabular-nums">{a.participants ?? "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {rows.length > RATE_ROWS && (
+                <button type="button" className="chip" onClick={() => setShowAll((v) => !v)}>
+                  {showAll ? "접기" : `${rows.length - RATE_ROWS}건 더 보기`}
+                </button>
+              )}
+              <p className="text-xs text-muted">낙찰률은 예정가격 대비 비율입니다. 기준금액(추정가격)과 기준이 다를 수 있으니 공고문 산식을 확인하세요.</p>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 /** 공고 요약에서 AI가 읽은 값으로 칸을 채운다. 무엇을 채웠는지와 주의점을 보여 준다 */
 function HintFiller({ noticeId, onFill }: { noticeId: string; onFill: (fields: ReturnType<typeof hintsToFields>) => void }) {
@@ -198,9 +286,10 @@ function Form({ draftKey, initial, noticeId }: { draftKey: string; initial: Draf
           <label className="field">
             <span>유사 용역 낙찰률 (%)</span>
             <textarea className="input" rows={2} placeholder="예: 87.5, 88.2, 90.1, 92" value={d.rates} onChange={(e) => set("rates", e.target.value)} />
-            <small className="text-muted">나라장터에서 찾은 값을 붙여 넣으세요. 읽은 값 {rates.length}개로 3안을 만듭니다.</small>
+            <small className="text-muted">아래 버튼으로 가져오거나 직접 붙여 넣으세요. 읽은 값 {rates.length}개로 3안을 만듭니다.</small>
           </label>
         )}
+        {noticeId && <AwardPicker noticeId={noticeId} onRates={(r) => set("rates", r)} />}
       </section>
 
       <section className="card space-y-3">
