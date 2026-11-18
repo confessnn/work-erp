@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
 import { sendMessage } from "@/features/telegram/api";
 import { reminderTelegram } from "@/features/telegram/reminder";
+import { checkDueOpenings } from "@/features/bid-inbox/opening-alert";
 
 export const maxDuration = 60;
 
@@ -66,7 +67,9 @@ async function handle(request: Request) {
   if (e2) return Response.json({ ok: false, error: e2.message }, { status: 500 });
 
   const telegram = await sendTelegramReminders(db, secret);
-  return Response.json({ ok: true, due: (due ?? []).length, sent: sent.size, gone: gone.length, failed, telegram });
+  // 개찰 결과 자동 확인. 실패해도 일정 알림 결과에는 영향 없음
+  const openings = await checkDueOpenings(db, secret).catch((e) => `오류: ${e instanceof Error ? e.message : "알 수 없음"}`);
+  return Response.json({ ok: true, due: (due ?? []).length, sent: sent.size, gone: gone.length, failed, telegram, openings });
 }
 
 type TgDue = { user_id: string; token: string | null; chat_id: number; item_key: string; title: string; body: string; url: string };

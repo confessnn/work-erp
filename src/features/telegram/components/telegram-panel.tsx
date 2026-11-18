@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { confirmTelegram, disconnectTelegram, saveTelegramToken, setTelegramEvents, testTelegram } from "../actions";
+import { confirmTelegram, disconnectTelegram, saveTelegramToken, setTelegramEvents, setTelegramInbox, testTelegram } from "../actions";
 import { TELEGRAM_EVENT_OPTIONS, type TelegramEvents } from "../reminder";
 
 export type TelegramState = {
@@ -12,6 +12,7 @@ export type TelegramState = {
   last_sent_at: string | null;
   last_error: string | null;
   notify_events?: TelegramEvents;
+  inbox_on?: boolean;
 } | null;
 
 const when = (at: string | null) =>
@@ -51,6 +52,13 @@ export function TelegramPanel({ state }: { state: TelegramState }) {
               </label>
             ))}
           </fieldset>
+          <div className="space-y-1 rounded-xl border border-line p-3">
+            <p className="font-medium">텔레그램으로 일정 넣기 {state?.inbox_on ? <b className="text-success">켜짐</b> : <span className="text-muted">꺼짐</span>}</p>
+            <p className="text-muted">봇에게 &ldquo;내일 3시 치과&rdquo;처럼 보내면 가족 달력에 넣고 답장해 드려요. 잘못 들어가면 답장의 [되돌리기]를 누르세요.</p>
+            <button type="button" className="chip" disabled={pending} onClick={() => run(() => setTelegramInbox(!state?.inbox_on))}>
+              {state?.inbox_on ? "끄기" : "켜기"}
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-primary" disabled={pending} onClick={() => run(testTelegram)}>
               시험 메시지 보내기

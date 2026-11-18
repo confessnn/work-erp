@@ -34,6 +34,7 @@ export default async function BidCalculatorPage({ searchParams }: PageProps<"/bi
         mode={guessAwardMode(notice?.award_method ?? null)}
         base={notice?.presumed_price ?? null}
         noticeId={notice?.id}
+        noticeTitle={notice?.title}
       />
     </>
   );
