@@ -10,7 +10,8 @@ const SHORTCUTS: [string, string][] = [
   ["Ctrl+휠 (라이브 줌 중)", "라이브 줌 배율"],
   ["왼쪽 클릭 (라이브 줌 중)", "확대된 화면을 멈추고 그 위에 판서 (판서 키도 같아요)"],
   ["P / H / R / L / T", "펜 / 형광펜 / 네모 / 직선 / 글자"],
-  ["Shift + 직선", "수평·수직 밑줄"],
+  ["Ctrl 누른 채 끌기", "그 동안만 네모 (ZoomIt처럼)"],
+  ["Shift 누른 채 끌기", "그 동안만 직선 (직선 도구에서는 수평·수직 밑줄)"],
   ["휠 또는 [ ]", "굵기"],
   ["Ctrl+Z / E", "되돌리기 / 모두 지우기"],
   ["W / K", "흰 칠판 / 검은 칠판"],
@@ -34,7 +35,7 @@ export default function ToolsPage() {
             </p>
           </div>
           <a href="/downloads/ClassPen.exe" download="수업펜.exe" className="btn-primary">
-            내려받기 (Windows, 40KB)
+            내려받기 (Windows, 41KB)
           </a>
         </div>
 
@@ -65,7 +66,7 @@ export default function ToolsPage() {
             ))}
           </tbody>
         </table>
-        <p className="text-xs text-muted">판서 화면 위쪽의 도구 막대로도 도구·색·굵기를 바꿀 수 있어요. 도구 막대에는 바꾼 단축키가 표시돼요. Esc·Ctrl+Z·Ctrl+S·Ctrl+C는 바꿀 수 없어요.</p>
+        <p className="text-xs text-muted">판서 화면 위쪽의 도구 막대로도 도구·색·굵기를 바꿀 수 있어요. 도구 막대에는 바꾼 단축키가 표시돼요. Esc·Ctrl+Z·Ctrl+S·Ctrl+C는 바꿀 수 없어요. ‘누른 채 끌면 네모·직선’ 칸에는 Ctrl·Shift·Alt만 눌렀다 떼서 지정해요.</p>
       </section>
     </>
   );

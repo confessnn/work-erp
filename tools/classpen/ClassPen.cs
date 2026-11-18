@@ -63,6 +63,8 @@ namespace ClassPen
             new KeyAction("rect", "네모", Keys.R, false),
             new KeyAction("line", "직선", Keys.L, false),
             new KeyAction("text", "글자", Keys.T, false),
+            new KeyAction("holdrect", "누른 채 끌면 네모", Keys.Control, false),
+            new KeyAction("holdline", "누른 채 끌면 직선", Keys.Shift, false),
             new KeyAction("thinner", "가늘게", Keys.OemOpenBrackets, false),
             new KeyAction("thicker", "굵게", Keys.OemCloseBrackets, false),
             new KeyAction("clear", "모두 지우기", Keys.E, false),
@@ -145,6 +147,9 @@ namespace ClassPen
             return string.Join("+", parts.ToArray());
         }
 
+        /// <summary>Ctrl·Shift·Alt만으로 지정하는 '누른 채 끌기' 단축키인가</summary>
+        public static bool IsHold(string id) { return id == "holdrect" || id == "holdline"; }
+
         public static bool IsModifierOnly(Keys code)
         {
             return code == Keys.ControlKey || code == Keys.ShiftKey || code == Keys.Menu || code == Keys.LWin || code == Keys.RWin || code == Keys.None;
@@ -184,6 +189,7 @@ namespace ClassPen
             guide.AutoSize = true;
             guide.MaximumSize = new Size(460, 0);
             guide.Text = "바꿀 칸을 누른 뒤 원하는 키를 그대로 누르세요. Backspace는 그 단축키 끄기예요.\n" +
+                         "'누른 채 끌면 네모·직선'은 Ctrl·Shift·Alt만 눌렀다 떼면 돼요 (ZoomIt처럼 그 키를 누른 채 끌면 그 모양이 그려져요).\n" +
                          "시작 단축키는 다른 프로그램을 쓰는 중에도 동작해서 Ctrl 또는 Alt를 꼭 함께 눌러야 해요.";
             guide.Margin = new Padding(0, 0, 0, 10);
             root.Controls.Add(guide);
@@ -258,16 +264,47 @@ namespace ClassPen
                 tb.Text = Hotkeys.Text(working[a.Id]);
                 tb.Cursor = Cursors.Hand;
                 string id = a.Id;
+                Keys pendingMods = Keys.None; // Ctrl·Shift·Alt만 누르고 있는 중
                 tb.PreviewKeyDown += delegate (object s, PreviewKeyDownEventArgs e) { e.IsInputKey = true; };
                 tb.KeyDown += delegate (object s, KeyEventArgs e)
                 {
                     e.SuppressKeyPress = true;
                     e.Handled = true;
-                    if (e.KeyCode == Keys.Back) { working[id] = Keys.None; tb.Text = Hotkeys.Text(Keys.None); return; }
-                    if (Hotkeys.IsModifierOnly(e.KeyCode)) { tb.Text = Hotkeys.Text(e.Modifiers) + "+…"; return; }
+                    if (e.KeyCode == Keys.Back) { pendingMods = Keys.None; working[id] = Keys.None; tb.Text = Hotkeys.Text(Keys.None); return; }
+                    if (Hotkeys.IsModifierOnly(e.KeyCode))
+                    {
+                        pendingMods |= e.Modifiers;
+                        tb.Text = Hotkeys.IsHold(id) ? Hotkeys.Text(pendingMods) : Hotkeys.Text(pendingMods) + "+…";
+                        return;
+                    }
+                    pendingMods = Keys.None;
+                    if (Hotkeys.IsHold(id))
+                    {
+                        message.Text = "'" + Hotkeys.All[Array.FindIndex(Hotkeys.All, x => x.Id == id)].Label + "'에는 Ctrl·Shift·Alt만 눌러 주세요.";
+                        tb.Text = Hotkeys.Text(working[id]);
+                        return;
+                    }
                     working[id] = e.KeyData;
                     tb.Text = Hotkeys.Text(e.KeyData);
                     message.Text = "";
+                };
+                // Ctrl·Shift·Alt만 눌렀다 떼면: '누른 채 끌기' 칸은 그 키로 지정, 다른 칸은 안내
+                tb.KeyUp += delegate (object s, KeyEventArgs e)
+                {
+                    if (pendingMods == Keys.None || !Hotkeys.IsModifierOnly(e.KeyCode)) return;
+                    Keys mods = pendingMods;
+                    pendingMods = Keys.None;
+                    if (Hotkeys.IsHold(id))
+                    {
+                        working[id] = mods;
+                        tb.Text = Hotkeys.Text(mods);
+                        message.Text = "";
+                    }
+                    else
+                    {
+                        tb.Text = Hotkeys.Text(working[id]);
+                        message.Text = "Ctrl·Shift·Alt만으로는 '누른 채 끌면 …' 칸에만 지정할 수 있어요. 다른 칸은 글자나 숫자 키를 함께 눌러 주세요.";
+                    }
                 };
                 tb.Leave += delegate { tb.Text = Hotkeys.Text(working[id]); };
                 boxes[id] = tb;
@@ -285,6 +322,11 @@ namespace ClassPen
             {
                 Keys k = working[a.Id];
                 if (k == Keys.None) continue;
+                if (Hotkeys.IsHold(a.Id) && (k & Keys.KeyCode) != Keys.None)
+                {
+                    message.Text = "'" + a.Label + "'에는 Ctrl·Shift·Alt만 쓸 수 있어요.";
+                    return;
+                }
                 if (a.Global && (k & (Keys.Control | Keys.Alt)) == 0)
                 {
                     message.Text = "'" + a.Label + "'은(는) Ctrl 또는 Alt를 함께 눌러야 해요. 아니면 글자를 칠 때마다 판서가 켜져요.";
@@ -472,6 +514,7 @@ namespace ClassPen
                 "  " + k("board") + "  칠판 (흰 화면에 쓰기)\n\n" +
                 "■ 판서 중\n" +
                 "  " + k("pen") + " 펜   " + k("marker") + " 형광펜   " + k("rect") + " 네모   " + k("line") + " 직선(Shift: 수평·수직)   " + k("text") + " 글자\n" +
+                "  " + k("holdrect") + " 누른 채 끌면 네모,  " + k("holdline") + " 누른 채 끌면 직선 (ZoomIt처럼)\n" +
                 "  휠 / " + k("thinner") + " " + k("thicker") + "  굵기     Ctrl+Z 되돌리기     " + k("clear") + " 모두 지우기\n" +
                 "  " + k("white") + " 흰 칠판   " + k("black") + " 검은 칠판   " + k("zoomback") + " 확대로 돌아가기\n" +
                 "  Ctrl+S 바탕화면에 그림 저장   Ctrl+C 그림 복사\n" +
@@ -501,6 +544,7 @@ namespace ClassPen
         public float Width;
         public List<PointF> Points = new List<PointF>();
         public string Text;
+        public bool ByHold;            // Ctrl·Shift 등을 누른 채 끌어서 잠깐 바꾼 도구
 
         public void Draw(Graphics g)
         {
@@ -983,13 +1027,21 @@ namespace ClassPen
             if (e.Button != MouseButtons.Left) return;
             if (zoomLive) { LockZoom(); return; }
             CommitText();
-            if (tool == Tool.Text) { StartText(e.Location); return; }
+            // ZoomIt처럼: 지정한 키(기본 Ctrl·Shift)를 누른 채 끌면 그 동안만 네모·직선
+            Tool use = tool;
+            bool byHold = false;
+            Keys mods = ModifierKeys;
+            Keys hr = Hotkeys.Get("holdrect"), hl = Hotkeys.Get("holdline");
+            if (mods != Keys.None && hr != Keys.None && mods == hr && tool != Tool.Rect) { use = Tool.Rect; byHold = true; }
+            else if (mods != Keys.None && hl != Keys.None && mods == hl && tool != Tool.Line) { use = Tool.Line; byHold = true; }
+            if (use == Tool.Text) { StartText(e.Location); return; }
             drawing = new Shape();
-            drawing.Tool = tool;
+            drawing.Tool = use;
+            drawing.ByHold = byHold;
             drawing.Color = color;
             drawing.Width = Widths[widthIndex];
             drawing.Points.Add(e.Location);
-            if (tool == Tool.Rect || tool == Tool.Line) drawing.Points.Add(e.Location);
+            if (use == Tool.Rect || use == Tool.Line) drawing.Points.Add(e.Location);
             Capture = true;
         }
 
@@ -1001,7 +1053,7 @@ namespace ClassPen
             PointF p = e.Location;
             if (drawing.Tool == Tool.Rect || drawing.Tool == Tool.Line)
             {
-                if (drawing.Tool == Tool.Line && (ModifierKeys & Keys.Shift) != 0)
+                if (drawing.Tool == Tool.Line && !drawing.ByHold && (ModifierKeys & Keys.Shift) != 0)
                 {
                     PointF a = drawing.Points[0];
                     if (Math.Abs(p.X - a.X) >= Math.Abs(p.Y - a.Y)) p = new PointF(p.X, a.Y); else p = new PointF(a.X, p.Y);
