@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { fetchAllNotices } from "./fetch-all";
-import { fetchAwards, mergeAwards, pickSimilar, type Award, type Similar } from "./award-history";
-import type { CalcHints } from "./calc";
+import { fetchAwards, fillMethods, mergeAwards, pickSimilar, type Award, type Similar } from "./award-history";
+import { guessAwardMode, type CalcHints } from "./calc";
 import { extractCalcHints } from "./calc-hints";
 import { summarizeNotice } from "./summarize";
 import type { BidStatus } from "./types";
@@ -110,6 +110,8 @@ export async function loadCalcHints(id: string, again = false): Promise<{ hints?
 const AWARD_KEYWORD = "원가";
 const AWARD_DAYS = 365;
 const AWARD_CACHE_MS = 24 * 3_600_000;
+/** 화면 요청 한 번(최대 180초) 안에서 낙찰방법 조회를 멈추는 시각 (요청 시작부터) */
+const METHOD_DEADLINE_MS = 165_000;
 
 export type SimilarAwards = { rows: Similar[]; total: number; fetchedAt: string; failedWeeks: number };
 
@@ -121,10 +123,11 @@ export async function loadSimilarAwards(id: string, again = false): Promise<{ da
   const { supabase, userId } = await requireUser();
   const { data: n, error } = await supabase
     .from("bid_notices")
-    .select("title, notice_org, demand_org, presumed_price, bid_no")
+    .select("title, notice_org, demand_org, presumed_price, bid_no, award_method")
     .eq("id", id)
     .single();
   if (error) return { error: error.message };
+  const started = Date.now();
 
   const { data: cache } = await supabase.from("bid_award_cache").select("fetched_at, failed_weeks, awards").eq("keyword", AWARD_KEYWORD).maybeSingle();
   let awards = (cache?.awards as Award[] | undefined) ?? [];
@@ -137,18 +140,31 @@ export async function loadSimilarAwards(id: string, again = false): Promise<{ da
       const full = again || !fetchedAt || failedWeeks > 0;
       const days = full ? AWARD_DAYS : Math.min(AWARD_DAYS, Math.ceil((Date.now() - Date.parse(fetchedAt!)) / 86_400_000) + 7);
       const got = await fetchAwards(AWARD_KEYWORD, days);
-      awards = mergeAwards(full ? [] : awards, got.awards, AWARD_DAYS);
+      // 예전에 찾아 둔 낙찰방법을 잃지 않도록 늘 합친다 (1년 넘은 것은 합칠 때 빠진다)
+      awards = mergeAwards(awards, got.awards, AWARD_DAYS);
       failedWeeks = got.failedWeeks;
       fetchedAt = new Date().toISOString();
-      await supabase
-        .from("bid_award_cache")
-        .upsert({ user_id: userId, keyword: AWARD_KEYWORD, fetched_at: fetchedAt, failed_weeks: failedWeeks, awards }, { onConflict: "user_id,keyword" });
     } catch (e) {
       if (!fetchedAt) return { error: e instanceof Error ? e.message : "알 수 없는 오류" };
       // 새로 받기가 실패하면 예전에 받은 결과로 보여 준다
     }
   }
 
-  const rows = pickSimilar(awards, { title: n.title, org: n.demand_org ?? n.notice_org, base: n.presumed_price, bidNo: n.bid_no });
+  // 이번 공고와 비슷한 후보만 낙찰방법(협상·적격심사 등)을 찾아 채운다. 시간이 모자라면 다음에 이어서 찾는다
+  const notice = { title: n.title, org: n.demand_org ?? n.notice_org, base: n.presumed_price, bidNo: n.bid_no };
+  const candidates = new Set(pickSimilar(awards, notice).slice(0, 30).map((a) => a.bidNo));
+  const needs = awards.filter((a) => candidates.has(a.bidNo) && a.method === undefined);
+  if (needs.length) {
+    const filled = await fillMethods(needs, started + METHOD_DEADLINE_MS);
+    const byNo = new Map(filled.map((a) => [a.bidNo, a]));
+    awards = awards.map((a) => byNo.get(a.bidNo) ?? a);
+  }
+  if (fetchedAt && (needs.length || fetchedAt !== cache?.fetched_at)) {
+    await supabase
+      .from("bid_award_cache")
+      .upsert({ user_id: userId, keyword: AWARD_KEYWORD, fetched_at: fetchedAt, failed_weeks: failedWeeks, awards }, { onConflict: "user_id,keyword" });
+  }
+
+  const rows = pickSimilar(awards, { ...notice, mode: n.award_method ? guessAwardMode(n.award_method) : null });
   return { data: { rows: rows.slice(0, 30), total: awards.length, fetchedAt: fetchedAt!, failedWeeks } };
 }

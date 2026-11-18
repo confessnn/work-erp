@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCostWork, mergeAwards, pickSimilar, titleCore, toAward, weekWindows, type Award } from "./award-history";
+import { isCostWork, mergeAwards, modeOf, pickSimilar, titleCore, toAward, weekWindows, type Award } from "./award-history";
 
 describe("toAward", () => {
   const item = {
@@ -89,5 +89,46 @@ describe("mergeAwards", () => {
   it("같은 공고는 새 값으로, 1년 넘은 것은 뺀다", () => {
     const merged = mergeAwards([a("A", "2026-11-01", 80), a("OLD", "2025-10-01")], [a("A", "2026-11-01", 90), a("B", "2026-11-17")], 365, new Date("2026-11-18T00:00:00Z"));
     expect(merged.map((m) => `${m.bidNo}:${m.rate}`).sort()).toEqual(["A:90", "B:88"]);
+  });
+});
+
+describe("경쟁·낙찰 방식 거르기", () => {
+  const a = (over: Partial<Award>): Award => ({ bidNo: "X-000", title: "원가계산 용역", org: "기관", amount: 50_000_000, rate: 88, participants: 5, winner: null, date: "2026-10-01", ...over });
+
+  it("참여 2곳 이하나 다른 방식은 계산에서 빼고 이유를 단다", () => {
+    const rows = pickSimilar(
+      [
+        a({ bidNo: "ONE", participants: 1, rate: 99.9 }),
+        a({ bidNo: "QUAL", method: "적격심사제-용역", rate: 87.7 }),
+        a({ bidNo: "NEGO", method: "협상에의한계약", rate: 85 }),
+        a({ bidNo: "UNKNOWN", rate: 86 }),
+      ],
+      { title: "다른 원가계산 용역", org: null, base: 50_000_000, mode: "negotiation" },
+    );
+    const by = Object.fromEntries(rows.map((r) => [r.bidNo, r]));
+    expect(by.ONE).toMatchObject({ use: false, skip: "경쟁 적음 (1곳 참여)" });
+    expect(by.QUAL).toMatchObject({ use: false, skip: "다른 방식 (적격심사)" });
+    expect(by.NEGO.use).toBe(true);
+    expect(by.UNKNOWN.use).toBe(true); // 방식을 아직 모르면 일단 쓴다
+    expect(rows.slice(0, 2).every((r) => r.use)).toBe(true); // 쓰는 것이 위로
+  });
+
+  it("쓰는 건수는 12건까지", () => {
+    const many = Array.from({ length: 15 }, (_, i) => a({ bidNo: `N${i}`, date: `2026-10-${String(i + 1).padStart(2, "0")}` }));
+    const rows = pickSimilar(many, { title: "다른 원가계산 용역", org: null, base: 50_000_000 });
+    expect(rows.filter((r) => r.use)).toHaveLength(12);
+    expect(rows.find((r) => !r.use)?.skip).toBe("12건 초과");
+  });
+
+  it("modeOf", () => {
+    expect(modeOf("협상에의한계약-협상에 의한 낙찰자 결정")).toBe("negotiation");
+    expect(modeOf("적격심사제-관리규정외 수기심사(총점입력)")).toBe("qualified");
+    expect(modeOf("최저가낙찰제")).toBe("price");
+    expect(modeOf("")).toBeNull();
+  });
+
+  it("다시 받아도 찾아 둔 낙찰방법을 잃지 않는다", () => {
+    const merged = mergeAwards([a({ bidNo: "A", method: "협상" })], [a({ bidNo: "A", rate: 90 })], 365, new Date("2026-11-18T00:00:00Z"));
+    expect(merged[0]).toMatchObject({ rate: 90, method: "협상" });
   });
 });

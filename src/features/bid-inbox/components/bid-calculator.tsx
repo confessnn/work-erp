@@ -84,10 +84,12 @@ function AwardPicker({ noticeId, onRates }: { noticeId: string; onRates: (rates:
     start(async () => {
       const r = await loadSimilarAwards(noticeId, again);
       setResult(r);
-      if (r.data?.rows.length) onRates(r.data.rows.slice(0, RATE_ROWS).map((a) => a.rate.toFixed(3)).join(", "));
+      const used = r.data?.rows.filter((a) => a.use) ?? [];
+      if (used.length) onRates(used.map((a) => a.rate.toFixed(3)).join(", "));
     });
 
   const rows = result?.data?.rows ?? [];
+  const used = rows.filter((a) => a.use).length;
   const shown = showAll ? rows : rows.slice(0, RATE_ROWS);
   const when = result?.data ? new Date(result.data.fetchedAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "";
 
@@ -116,7 +118,11 @@ function AwardPicker({ noticeId, onRates }: { noticeId: string; onRates: (rates:
             <p className="text-muted">비슷한 낙찰 결과가 없습니다. 낙찰률을 직접 넣어 주세요.</p>
           ) : (
             <>
-              <p className="text-muted">위에서부터 {Math.min(RATE_ROWS, rows.length)}건의 낙찰률을 ‘유사 용역 낙찰률’ 칸에 넣었습니다. 칸에서 빼거나 더할 수 있어요.</p>
+              <p className="text-muted">
+                {used > 0
+                  ? `경쟁이 있었고(3곳 이상 참여) 이번 공고와 낙찰 방식이 같은 ${used}건의 낙찰률을 ‘유사 용역 낙찰률’ 칸에 넣었습니다. 흐리게 보이는 줄은 계산에서 뺀 것이에요.`
+                  : "조건(3곳 이상 참여, 같은 낙찰 방식)에 맞는 낙찰 결과가 없어 칸을 채우지 않았습니다. 표를 보고 직접 넣어 주세요."}
+              </p>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-xs">
                   <thead>
@@ -130,13 +136,14 @@ function AwardPicker({ noticeId, onRates }: { noticeId: string; onRates: (rates:
                   </thead>
                   <tbody>
                     {shown.map((a) => (
-                      <tr key={a.bidNo} className="border-t border-line align-top">
+                      <tr key={a.bidNo} className={`border-t border-line align-top ${a.use ? "" : "opacity-50"}`}>
                         <td className="py-1 pr-2 whitespace-nowrap tabular-nums">{a.date ?? "-"}</td>
                         <td className="py-1 pr-2">
                           {a.sameWork && <span className="mr-1 rounded bg-accent-soft px-1 font-semibold">같은 용역</span>}
                           {!a.sameWork && a.sameOrg && <span className="mr-1 rounded bg-mint px-1 font-semibold">같은 기관</span>}
+                          {a.skip && <span className="mr-1 rounded bg-line px-1">{a.skip}</span>}
                           {a.title}
-                          <span className="text-muted"> · {a.org ?? "기관 미상"}{a.winner ? ` · 낙찰 ${a.winner}` : ""}</span>
+                          <span className="text-muted"> · {a.org ?? "기관 미상"}{a.method ? ` · ${a.method}` : ""}{a.winner ? ` · 낙찰 ${a.winner}` : ""}</span>
                         </td>
                         <td className="py-1 pr-2 text-right tabular-nums">{won(a.amount)}</td>
                         <td className="py-1 pr-2 text-right tabular-nums">{a.rate.toFixed(3)}%</td>
