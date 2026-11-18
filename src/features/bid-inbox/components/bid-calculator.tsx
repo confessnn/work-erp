@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { won } from "@/lib/format";
 import { loadCalcHints, loadSimilarAwards, type SimilarAwards } from "../actions";
+import { QuotePanel } from "./quote-panel";
 import { SubmissionPanel } from "./submission-panel";
 import type { Similar } from "../award-history";
 import {
@@ -62,10 +63,10 @@ function loadDraft(key: string, fallback: Draft): Draft {
 const subscribeNothing = () => () => {};
 
 /** 입력값은 이 브라우저에 임시로 기억한다. 서버 화면에는 저장값이 없으므로 브라우저에서만 그린다 */
-export function BidCalculator({ draftKey, mode, base, noticeId }: { draftKey: string; mode: AwardMode; base: number | null; noticeId?: string }) {
+export function BidCalculator({ draftKey, mode, base, noticeId, noticeTitle }: { draftKey: string; mode: AwardMode; base: number | null; noticeId?: string; noticeTitle?: string }) {
   const ready = useSyncExternalStore(subscribeNothing, () => true, () => false);
   if (!ready) return <p className="card text-center text-muted">계산기를 준비하고 있습니다.</p>;
-  return <Form draftKey={draftKey} initial={blankDraft(mode, base ? String(base) : "")} noticeId={noticeId} />;
+  return <Form draftKey={draftKey} initial={blankDraft(mode, base ? String(base) : "")} noticeId={noticeId} noticeTitle={noticeTitle} />;
 }
 
 const FIELD_NAMES: Record<string, string> = {
@@ -276,7 +277,7 @@ function Field({ label, hint, value, onChange }: { label: string; hint?: string;
   );
 }
 
-function Form({ draftKey, initial, noticeId }: { draftKey: string; initial: Draft; noticeId?: string }) {
+function Form({ draftKey, initial, noticeId, noticeTitle }: { draftKey: string; initial: Draft; noticeId?: string; noticeTitle?: string }) {
   const [d, setD] = useState<Draft>(() => loadDraft(draftKey, initial));
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((prev) => ({ ...prev, [k]: v }));
   const setStaff = (i: number, k: "people" | "months" | "monthlyPay", v: string) =>
@@ -444,6 +445,8 @@ function Form({ draftKey, initial, noticeId }: { draftKey: string; initial: Draf
       </section>
 
       {noticeId && <SubmissionPanel noticeId={noticeId} base={base} plans={plans.map((p) => ({ key: p.key, price: p.price }))} />}
+
+      <QuotePanel title={noticeTitle ?? ""} plans={plans.map((p) => ({ key: p.key, price: p.price }))} />
     </div>
   );
 }
