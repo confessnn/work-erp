@@ -484,19 +484,38 @@ namespace ClassPen
 
         void Open(StartMode mode)
         {
-            // 라이브 줌 중에 판서를 누르면 지금 확대된 화면을 멈추고 그 위에 판서한다
-            float frozen = 0f;
-            RectangleF frozenSrc = RectangleF.Empty;
-            if (LiveOpen)
+            // 라이브 줌 중에 판서(클릭)하면: 지금 보이는 확대 화면을 그대로 찍어 판서 창을 미리 만들고,
+            // 확대를 푸는 바로 그 장면에 판서 창을 띄운다. 그래서 중간에 다른 화면이 보이지 않는다.
+            if (LiveOpen && mode == StartMode.Draw)
             {
-                if (mode == StartMode.Draw) { frozen = live.Zoom; frozenSrc = live.Source; }
+                Screen scr = Screen.FromPoint(Cursor.Position);
+                Rectangle b = scr.Bounds;
+                var seen = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(seen)) g.CopyFromScreen(b.Location, Point.Empty, b.Size); // 확대된 모습 그대로 찍힌다
+                var ov = new Overlay(scr, StartMode.Draw, 0f, RectangleF.Empty, seen);
+                ov.FormClosed += delegate { if (current == ov) current = null; };
+                current = ov;
+                // 판서 창을 화면 밖에 먼저 띄워 다 그려 둔다 (확대 중이라도 안 보임)
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                ov.Location = new Point(b.X + 60000, b.Y);
+                ov.Show();
+                ov.Refresh();
+                double tReady = watch.Elapsed.TotalMilliseconds;
+                live.ReleaseInSync();
+                double tRelease = watch.Elapsed.TotalMilliseconds;
+                // 확대가 풀리는 장면에 맞춰 제자리로 옮긴다 (이미 그려 둔 그림이라 바로 보임)
+                ov.Location = b.Location;
+                double tShown = watch.Elapsed.TotalMilliseconds;
+                ov.Activate();
                 CloseLive();
-                // 화면 확대가 풀린 다음 화면을 찍어야 두 번 확대되지 않는다 (한두 장면 기다림)
-                Thread.Sleep(80);
+                string dbg = Environment.GetEnvironmentVariable("CLASSPEN_DEBUG");
+                if (dbg != null) { try { File.WriteAllText(Path.ChangeExtension(dbg, ".freeze.txt"), "ready_ms=" + tReady.ToString("0.0") + " release_ms=" + tRelease.ToString("0.0") + " shown_after_release_ms=" + (tShown - tRelease).ToString("0.0")); } catch { } }
+                return;
             }
+            if (LiveOpen) CloseLive();
             // 열려 있으면 같은 단축키로 닫는다
             else if (current != null && !current.IsDisposed) { current.Close(); return; }
-            current = new Overlay(Screen.FromPoint(Cursor.Position), frozen > 0f ? StartMode.Zoom : mode, frozen, frozenSrc);
+            current = new Overlay(Screen.FromPoint(Cursor.Position), mode);
             current.FormClosed += delegate { current = null; };
             current.Show();
             current.Activate();
@@ -649,6 +668,8 @@ namespace ClassPen
         IntPtr hook;
         Thread thread;
         volatile bool running;
+        volatile bool releaseRequested;
+        readonly ManualResetEvent released = new ManualResetEvent(false);
         bool started;
         readonly ManualResetEvent ready = new ManualResetEvent(false);
 
@@ -751,6 +772,13 @@ namespace ClassPen
             {
                 while (running)
                 {
+                    // 판서로 넘어갈 때: 화면이 막 그려진 직후에 확대를 풀어서, 판서 창이 같은 장면에 뜨게 한다
+                    if (releaseRequested)
+                    {
+                        MagSetFullscreenTransform(1f, 0, 0);
+                        released.Set();
+                        break;
+                    }
                     float t = target;
                     zoom += (t - zoom) * 0.3f;
                     if (Math.Abs(t - zoom) < 0.005f) zoom = t;
@@ -783,6 +811,14 @@ namespace ClassPen
                 MagSetFullscreenTransform(1f, 0, 0);
                 MagUninitialize();
             }
+        }
+
+        /// <summary>다음 장면 시작에 맞춰 확대를 풀고, 풀릴 때까지 기다린다 (그 직후 판서 창을 띄우면 화면이 튀지 않음)</summary>
+        public void ReleaseInSync()
+        {
+            if (thread == null) return;
+            releaseRequested = true;
+            released.WaitOne(300);
         }
 
         /// <summary>확대를 끝내고 화면을 원래대로 돌린다</summary>
@@ -821,11 +857,15 @@ namespace ClassPen
         readonly List<Button> colorButtons = new List<Button>();
         TextBox textBox;
 
-        public Overlay(Screen screen, StartMode mode, float frozenZoom = 0f, RectangleF frozenSrc = default(RectangleF))
+        public Overlay(Screen screen, StartMode mode, float frozenZoom = 0f, RectangleF frozenSrc = default(RectangleF), Bitmap preShot = null)
         {
             Rectangle b = screen.Bounds;
-            shot = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb);
-            using (var g = Graphics.FromImage(shot)) g.CopyFromScreen(b.Location, Point.Empty, b.Size);
+            if (preShot != null) shot = preShot; // 라이브 줌에서 보던 확대 화면 그대로
+            else
+            {
+                shot = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(shot)) g.CopyFromScreen(b.Location, Point.Empty, b.Size);
+            }
 
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
