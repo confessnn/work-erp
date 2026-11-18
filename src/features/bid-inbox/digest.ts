@@ -30,7 +30,7 @@ export type DigestMail = { subject: string; html: string };
 export const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
 
-const isWebUrl = (url: string) => {
+export const isWebUrl = (url: string) => {
   try {
     return ["http:", "https:"].includes(new URL(url).protocol);
   } catch {
@@ -38,7 +38,7 @@ const isWebUrl = (url: string) => {
   }
 };
 
-const closesLabel = (at: string | null) =>
+export const closesLabel = (at: string | null) =>
   at
     ? new Date(at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })
     : "마감일 미상";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DigestNotice } from "./digest";
-import { buildMorning, nextDay, type AgendaItem } from "./morning";
+import { buildMorning, buildMorningTelegram, nextDay, type AgendaItem } from "./morning";
 
 const item = (over: Partial<AgendaItem> = {}): AgendaItem => ({
   kind: "lecture",
@@ -67,5 +67,32 @@ describe("buildMorning", () => {
     const mail = buildMorning("2026-11-19", [], [], ["오늘 공고 수신 기록이 없습니다."]);
     expect(mail.subject).toContain("확인 필요 1건");
     expect(mail.html.indexOf("수신 기록")).toBeLessThan(mail.html.indexOf("오늘 11/19"));
+  });
+});
+
+describe("buildMorningTelegram", () => {
+  it("일정과 공고를 텔레그램 서식으로 쓴다", () => {
+    const [text, ...rest] = buildMorningTelegram("2026-11-19", [item(), item({ kind: "family", person: "mom", title: "<병원>", place: null })], [notice], []);
+    expect(rest).toEqual([]);
+    expect(text).toContain("📋 <b>11/19 (목) 오늘 할 일</b>");
+    expect(text).toContain("• [강의] <b>09:00~12:00</b> 엑셀 실무 · 청주시청");
+    expect(text).toContain("[엄마]");
+    expect(text).toContain("&lt;병원&gt;");
+    expect(text).toContain('<a href="https://www.g2b.go.kr/x">원가계산 용역</a>');
+    expect(text).toContain("<i>요약</i>");
+  });
+
+  it("공고가 많아 길어지면 여러 메시지로 나눈다", () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ ...notice, id: String(i), summary: "가".repeat(340) }));
+    const chunks = buildMorningTelegram("2026-11-19", [], many, []);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((c) => c.length <= 3800)).toBe(true);
+  });
+
+  it("일정도 공고도 없으면 없다고 쓴다", () => {
+    const [text] = buildMorningTelegram("2026-11-19", [], [], ["오늘 공고 수신 기록이 없습니다."]);
+    expect(text).toContain("⚠️ 오늘 공고 수신 기록이 없습니다.");
+    expect(text).toContain("일정 없음");
+    expect(text).toContain("새 공고 없음");
   });
 });

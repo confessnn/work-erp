@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { fetchProblem, notifiedIds, sendDigest, type DigestNotice, type DigestStatus } from "@/features/bid-inbox/digest";
-import { buildMorning, nextDay, type AgendaItem } from "@/features/bid-inbox/morning";
+import { buildMorning, buildMorningTelegram, MORNING_BUTTONS, nextDay, type AgendaItem } from "@/features/bid-inbox/morning";
+import { sendChunks } from "@/features/telegram/api";
 import { todayInSeoul } from "@/lib/format";
 import { summarizeNotice } from "@/features/bid-inbox/summarize";
 
@@ -32,12 +33,28 @@ async function summarizePending(db: SupabaseClient, secret: string, user: string
   return done;
 }
 
-/** 아침 '오늘 할 일' 메일: 오늘·내일 일정과 아직 알리지 않은 공고, 수신 문제를 매일 한 통 보낸다 */
-async function mailDigest(db: SupabaseClient, secret: string, user: string, summaryProblem: string | null) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const to = process.env.BID_NOTIFY_EMAIL;
-  if (!apiKey || !to) return "메일 설정 없음";
+/** 텔레그램이 연결돼 있으면 보낸다. 연결 안 됨 = null, 실패 = 오류 문구 */
+async function sendTelegram(db: SupabaseClient, secret: string, user: string, chunks: string[]): Promise<{ sent: boolean; error?: string } | null> {
+  const { data, error } = await db.rpc("cron_telegram", { p_secret: secret, p_user: user });
+  if (error) return { sent: false, error: `텔레그램 설정을 읽지 못했습니다: ${error.message}` };
+  const [link] = (data ?? []) as { token: string | null; chat_id: number | null }[];
+  if (!link?.token || !link.chat_id) return null;
+  try {
+    await sendChunks(link.token, link.chat_id, chunks, MORNING_BUTTONS);
+    await db.rpc("cron_telegram_result", { p_secret: secret, p_user: user, p_error: null });
+    return { sent: true };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "알 수 없는 오류";
+    await db.rpc("cron_telegram_result", { p_secret: secret, p_user: user, p_error: message });
+    return { sent: false, error: `텔레그램 발송 실패: ${message}` };
+  }
+}
 
+/**
+ * 아침 '오늘 할 일': 오늘·내일 일정과 아직 알리지 않은 공고, 수신 문제를 매일 보낸다.
+ * 텔레그램이 연결돼 있으면 텔레그램으로, 연결이 없거나 실패하면 메일로 보낸다.
+ */
+async function mailDigest(db: SupabaseClient, secret: string, user: string, summaryProblem: string | null) {
   const today = todayInSeoul();
   const [notices, status, agenda] = await Promise.all([
     db.rpc("cron_digest_notices", { p_secret: secret, p_user: user }),
@@ -55,13 +72,21 @@ async function mailDigest(db: SupabaseClient, secret: string, user: string, summ
     // 일정을 못 읽어도 공고 메일은 보낸다
     agenda.error ? `일정을 읽지 못했습니다: ${agenda.error.message}` : null,
   ].flatMap((p) => (p ? [p] : []));
-  const mail = buildMorning(today, (agenda.data ?? []) as AgendaItem[], rows, problems);
+  const items = (agenda.data ?? []) as AgendaItem[];
 
-  await sendDigest(apiKey, to, mail);
+  const tg = await sendTelegram(db, secret, user, buildMorningTelegram(today, items, rows, problems));
+  let via = "텔레그램";
+  if (!tg?.sent) {
+    const apiKey = process.env.RESEND_API_KEY;
+    const to = process.env.BID_NOTIFY_EMAIL;
+    if (!apiKey || !to) return tg?.error ?? "보낼 곳 없음 (텔레그램 미연결, 메일 설정 없음)";
+    await sendDigest(apiKey, to, buildMorning(today, items, rows, tg?.error ? [tg.error, ...problems] : problems));
+    via = "메일";
+  }
   // 메일을 보낸 뒤에 기록한다. 기록이 실패하면 다음 날 한 번 더 받을 뿐 공고를 놓치지는 않는다
   const { error } = await db.rpc("cron_mark_notified", { p_secret: secret, p_user: user, p_ids: notifiedIds(rows) });
   if (error) throw new Error(error.message);
-  return `${rows.length}건 발송`;
+  return `${via} 발송 (공고 ${rows.length}건)`;
 }
 
 /**

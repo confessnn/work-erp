@@ -1,8 +1,12 @@
 // 아침 '오늘 할 일' 메일: 오늘·내일 강의와 가족 일정, 새 입찰 공고를 한 통에 담는다.
 // 강의료 같은 금액은 넣지 않는다 (메일은 휴대폰 알림 미리보기에도 보이므로).
 import { personOf } from "@/features/family/types";
-import { dateLabel, timeLabel } from "@/lib/format";
-import { DIGEST_FOOTER, escapeHtml, needsCheckCount, noticeSectionsHtml, problemsHtml, type DigestMail, type DigestNotice } from "./digest";
+import { escapeTg, packChunks } from "@/features/telegram/api";
+import { dateLabel, timeLabel, won } from "@/lib/format";
+import { CATEGORY_LABEL } from "./categories";
+import { closesLabel, DIGEST_FOOTER, escapeHtml, isWebUrl, needsCheckCount, noticeSectionsHtml, problemsHtml, type DigestMail, type DigestNotice } from "./digest";
+import { VERDICT_LABEL } from "./judge";
+import type { BidCategory } from "./types";
 
 export type AgendaItem = {
   kind: "lecture" | "family";
@@ -68,3 +72,63 @@ export function buildMorning(today: string, agenda: AgendaItem[], notices: Diges
   ].join("");
   return { subject, html };
 }
+
+// ---------- 텔레그램 ----------
+
+const tgItem = (a: AgendaItem) => {
+  const who = a.kind === "lecture" ? "강의" : personOf(a.person ?? "all").label;
+  const place = a.place ? ` · ${escapeTg(a.place)}` : "";
+  return `• [${who}] <b>${timeRange(a)}</b> ${escapeTg(a.title)}${place}`;
+};
+
+const tgDay = (heading: string, items: AgendaItem[]) =>
+  [`<b>${heading}</b>`, ...(items.length ? items.map(tgItem) : ["일정 없음"])].join("\n");
+
+/** 공고 요약은 앞부분만 (자세한 것은 ERP에서) */
+const SUMMARY_PREVIEW = 350;
+
+function tgNotice(n: DigestNotice) {
+  const title = escapeTg(n.title);
+  const link = n.detail_url && isWebUrl(n.detail_url) ? `<a href="${escapeTg(n.detail_url).replace(/"/g, "&quot;")}">${title}</a>` : title;
+  const facts = [
+    VERDICT_LABEL[n.verdict],
+    `마감 ${closesLabel(n.closes_at)}`,
+    ...(n.notice_org ? [n.notice_org] : []),
+    ...(n.presumed_price !== null ? [`추정가격 ${won(Number(n.presumed_price))}`] : []),
+  ];
+  const lines = [`• ${link}`, `  ${escapeTg(facts.join(" · "))}`];
+  if (n.category === "cost") {
+    if (n.summary_error) lines.push(`  ⚠️ 요약 실패: ${escapeTg(n.summary_error)}`);
+    else if (!n.summary) lines.push("  요약 대기: 내일 이어서 요약합니다.");
+    else {
+      const s = n.summary.split(/\n+/).filter((l) => !/^읽(은|지 못한) 문서/.test(l)).join("\n");
+      lines.push(`<i>${escapeTg(s.length > SUMMARY_PREVIEW ? `${s.slice(0, SUMMARY_PREVIEW)}…` : s)}</i>`);
+    }
+  }
+  return lines.join("\n");
+}
+
+/** 텔레그램 메시지 조각들 (한 조각 4천 자 이하). 일정·공고가 없어도 보낸다 */
+export function buildMorningTelegram(today: string, agenda: AgendaItem[], notices: DigestNotice[], problems: string[]): string[] {
+  const tomorrow = nextDay(today);
+  const head = [`📋 <b>${dateLabel(today)} 오늘 할 일</b>`, ...problems.map((p) => `⚠️ ${escapeTg(p)}`)].join("\n");
+  const blocks = [
+    head,
+    tgDay("오늘", agenda.filter((a) => a.event_date === today)),
+    tgDay(`내일 ${dateLabel(tomorrow)}`, agenda.filter((a) => a.event_date === tomorrow)),
+  ];
+  if (notices.length === 0) blocks.push("<b>새 입찰 공고</b>\n새 공고 없음");
+  for (const category of Object.keys(CATEGORY_LABEL) as BidCategory[]) {
+    const rows = notices.filter((n) => n.category === category);
+    if (!rows.length) continue;
+    blocks.push(`<b>새 공고 · ${CATEGORY_LABEL[category]} ${rows.length}건</b>`);
+    blocks.push(...rows.map(tgNotice));
+  }
+  if (notices.length) blocks.push("<i>AI 요약이라 틀릴 수 있어요. 투찰 전에 원문을 확인하세요.</i>");
+  return packChunks(blocks);
+}
+
+export const MORNING_BUTTONS = [
+  { text: "달력 열기", url: `${ERP_URL}/lectures?view=calendar` },
+  { text: "공고 수신함", url: `${ERP_URL}/bids` },
+];
