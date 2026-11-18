@@ -443,16 +443,17 @@ namespace ClassPen
         {
             // 라이브 줌 중에 판서를 누르면 지금 확대된 화면을 멈추고 그 위에 판서한다
             float frozen = 0f;
+            RectangleF frozenSrc = RectangleF.Empty;
             if (LiveOpen)
             {
-                if (mode == StartMode.Draw) frozen = live.Zoom;
+                if (mode == StartMode.Draw) { frozen = live.Zoom; frozenSrc = live.Source; }
                 CloseLive();
                 // 화면 확대가 풀린 다음 화면을 찍어야 두 번 확대되지 않는다 (한두 장면 기다림)
                 Thread.Sleep(80);
             }
             // 열려 있으면 같은 단축키로 닫는다
             else if (current != null && !current.IsDisposed) { current.Close(); return; }
-            current = new Overlay(Screen.FromPoint(Cursor.Position), frozen > 0f ? StartMode.Zoom : mode, frozen);
+            current = new Overlay(Screen.FromPoint(Cursor.Position), frozen > 0f ? StartMode.Zoom : mode, frozen, frozenSrc);
             current.FormClosed += delegate { current = null; };
             current.Show();
             current.Activate();
@@ -566,9 +567,9 @@ namespace ClassPen
     /// <summary>
     /// 라이브 줌: Windows 돋보기와 같은 '화면 전체 확대'(Magnification API)를 쓴다.
     /// 확대는 그래픽 카드(DWM)가 하므로 동영상·프로그램이 움직이는 그대로 보인다.
-    /// 확대 위치는 따로 도는 작업(스레드)에서 화면이 새로 그려지는 박자(DwmFlush)마다 한 번씩,
-    /// 마우스 쪽으로 미끄러지듯 옮겨서 좌우로 움직일 때 덜컥거리지 않는다.
-    /// 마우스가 멈추면 마우스 아래의 점이 확대해도 마우스 아래에 오므로, 확대된 화면을 그대로 눌러도 정확한 곳이 눌린다.
+    /// 확대 화면은 마우스가 가운데쪽에 있는 동안 가만히 있고, 마우스가 가장자리(1/8 띠)에 닿으면
+    /// 그만큼만 밀려 움직인다 (ZoomIt 라이브 줌과 같은 방식). 확대된 마우스 포인터가 가리키는 곳이 실제로 눌린다.
+    /// 위치는 따로 도는 작업(스레드)에서 화면이 새로 그려지는 박자(DwmFlush)마다 한 번씩 정한다.
     /// 화면에 보이는 창은 없다.
     /// </summary>
     class LiveZoom
@@ -586,13 +587,15 @@ namespace ClassPen
         delegate IntPtr HookProc(int code, IntPtr w, IntPtr l);
 
         const int WH_MOUSE_LL = 14, WM_MOUSEWHEEL = 0x20A, VK_CONTROL = 0x11;
-        const float Follow = 0.8f;     // 한 장면마다 남은 거리의 몇 %를 따라갈지 (클수록 바로, 작을수록 미끄러지듯)
+        const float EdgeBand = 8f;     // 보이는 폭의 1/8 띠에 마우스가 닿으면 화면을 민다
 
         volatile float target = 2f;    // 바라는 배율 (Ctrl+휠)
-        public float Zoom { get { return target; } }
         readonly Rectangle screen;
         readonly HookProc hookProc;    // 가비지 수집되지 않게 붙잡아 둔다
         readonly string debugPath;     // 시험용: 환경 변수 CLASSPEN_DEBUG 에 파일 경로를 주면 움직임 기록을 적는다
+        readonly object gate = new object();
+        RectangleF source;             // 지금 확대해 보여 주는 원본 영역 (화면 안 좌표)
+        float shownZoom = 1f;
         IntPtr hook;
         Thread thread;
         volatile bool running;
@@ -605,6 +608,11 @@ namespace ClassPen
             hookProc = OnMouseHook;
             debugPath = Environment.GetEnvironmentVariable("CLASSPEN_DEBUG");
         }
+
+        /// <summary>지금 보이는 배율</summary>
+        public float Zoom { get { lock (gate) return shownZoom; } }
+        /// <summary>지금 확대해 보여 주는 원본 영역 (판서로 넘어갈 때 같은 화면을 멈추려고 씀)</summary>
+        public RectangleF Source { get { lock (gate) return source; } }
 
         /// <summary>확대를 시작한다. 이 PC에서 쓸 수 없으면 false.</summary>
         public bool Start()
@@ -631,15 +639,28 @@ namespace ClassPen
             return CallNextHookEx(hook, code, w, l);
         }
 
-        /// <summary>마우스 아래 점이 그대로 마우스 아래에 오도록 확대 위치를 정한다 (화면 밖으로는 안 나감)</summary>
-        public static PointF Offset(Rectangle screen, Point m, float z)
+        /// <summary>
+        /// 다음 장면의 원본 영역 왼쪽 위를 정한다 (화면 안 좌표, 마우스 m 도 화면 안 좌표).
+        /// 배율이 바뀌는 중이면 마우스가 화면에서 같은 자리에 머물도록 하고,
+        /// 그다음 마우스가 가장자리 띠 안에 들어가 있으면 그만큼만 민다.
+        /// </summary>
+        public static PointF NextOrigin(PointF origin, float oldZoom, float zoom, PointF m, SizeF size)
         {
-            float mx = Math.Max(0, Math.Min(screen.Width - 1, m.X - screen.X));
-            float my = Math.Max(0, Math.Min(screen.Height - 1, m.Y - screen.Y));
-            float x = mx - mx / z, y = my - my / z;
-            x = Math.Max(0, Math.Min(screen.Width - screen.Width / z, x));
-            y = Math.Max(0, Math.Min(screen.Height - screen.Height / z, y));
-            return new PointF(screen.X + x, screen.Y + y);
+            float w = size.Width / zoom, h = size.Height / zoom;
+            float x = origin.X, y = origin.Y;
+            if (zoom != oldZoom)
+            {
+                x = m.X - (m.X - x) * oldZoom / zoom;
+                y = m.Y - (m.Y - y) * oldZoom / zoom;
+            }
+            float bw = w / EdgeBand, bh = h / EdgeBand;
+            if (m.X - x < bw) x = m.X - bw;
+            else if (x + w - m.X < bw) x = m.X + bw - w;
+            if (m.Y - y < bh) y = m.Y - bh;
+            else if (y + h - m.Y < bh) y = m.Y + bh - h;
+            x = Math.Max(0, Math.Min(size.Width - w, x));
+            y = Math.Max(0, Math.Min(size.Height - h, y));
+            return new PointF(x, y);
         }
 
         /// <summary>확대를 맡는 작업. 화면이 한 번 그려질 때마다 배율과 위치를 한 번씩 정한다.</summary>
@@ -647,14 +668,14 @@ namespace ClassPen
         {
             bool init = false;
             try { init = MagInitialize(); } catch { }
-            float zoom = 1f;
-            Point m;
-            GetCursorPos(out m);
-            PointF cur = Offset(screen, m, zoom);
-            if (init && MagSetFullscreenTransform(zoom, (int)cur.X, (int)cur.Y)) started = true;
+            if (init && MagSetFullscreenTransform(1f, screen.X, screen.Y)) started = true;
             ready.Set();
             if (!started) { if (init) MagUninitialize(); return; }
 
+            var size = new SizeF(screen.Width, screen.Height);
+            float zoom = 1f, oldZoom = 1f;
+            PointF origin = PointF.Empty;
+            Point m;
             var watch = System.Diagnostics.Stopwatch.StartNew();
             int frames = 0, sets = 0, lastX = int.MinValue, lastY = int.MinValue;
             float lastZoom = -1f;
@@ -664,14 +685,14 @@ namespace ClassPen
                 while (running)
                 {
                     float t = target;
-                    zoom += (t - zoom) * 0.35f;
+                    zoom += (t - zoom) * 0.3f;
                     if (Math.Abs(t - zoom) < 0.005f) zoom = t;
                     GetCursorPos(out m);
-                    PointF want = Offset(screen, m, zoom);
-                    cur = new PointF(cur.X + (want.X - cur.X) * Follow, cur.Y + (want.Y - cur.Y) * Follow);
-                    if (Math.Abs(want.X - cur.X) < 0.5f) cur.X = want.X;
-                    if (Math.Abs(want.Y - cur.Y) < 0.5f) cur.Y = want.Y;
-                    int x = (int)Math.Round(cur.X), y = (int)Math.Round(cur.Y);
+                    var rel = new PointF(Math.Max(0, Math.Min(size.Width - 1, m.X - screen.X)), Math.Max(0, Math.Min(size.Height - 1, m.Y - screen.Y)));
+                    origin = NextOrigin(origin, oldZoom, zoom, rel, size);
+                    oldZoom = zoom;
+                    lock (gate) { source = new RectangleF(origin.X, origin.Y, size.Width / zoom, size.Height / zoom); shownZoom = zoom; }
+                    int x = screen.X + (int)Math.Round(origin.X), y = screen.Y + (int)Math.Round(origin.Y);
                     if (x != lastX || y != lastY || zoom != lastZoom)
                     {
                         MagSetFullscreenTransform(zoom, x, y);
@@ -686,7 +707,7 @@ namespace ClassPen
                     prev = now;
                     if (debugPath != null && frames % 30 == 0)
                     {
-                        try { File.WriteAllText(debugPath, "frames=" + frames + " avg_ms=" + (now / frames).ToString("0.0") + " max_gap_ms=" + maxGap.ToString("0.0") + " sets=" + sets + " zoom=" + zoom.ToString("0.00") + " offset=" + x + "," + y + " mouse=" + m.X + "," + m.Y); } catch { }
+                        try { File.WriteAllText(debugPath, "frames=" + frames + " avg_ms=" + (now / frames).ToString("0.0") + " max_gap_ms=" + maxGap.ToString("0.0") + " sets=" + sets + " zoom=" + zoom.ToString("0.00") + " origin=" + x + "," + y + " mouse=" + m.X + "," + m.Y); } catch { }
                     }
                 }
             }
@@ -733,7 +754,7 @@ namespace ClassPen
         readonly List<Button> colorButtons = new List<Button>();
         TextBox textBox;
 
-        public Overlay(Screen screen, StartMode mode, float frozenZoom = 0f)
+        public Overlay(Screen screen, StartMode mode, float frozenZoom = 0f, RectangleF frozenSrc = default(RectangleF))
         {
             Rectangle b = screen.Bounds;
             shot = new Bitmap(b.Width, b.Height, PixelFormat.Format32bppArgb);
@@ -784,7 +805,8 @@ namespace ClassPen
             if (mode == StartMode.Board) { board = 1; color = Color.Black; }
             if (mode == StartMode.Zoom) { zoom = 2f; zoomLive = true; }
             if (frozenZoom > 0f) { zoom = frozenZoom; zoomLive = false; } // 라이브 줌에서 넘어옴: 확대된 채 바로 판서
-            UpdateZoomSrc(PointToClientSafe(Cursor.Position));
+            if (frozenZoom > 0f) zoomSrc = frozenSrc; // 라이브 줌에서 보던 그 화면 그대로
+            else UpdateZoomSrc(PointToClientSafe(Cursor.Position));
             Rebuild();
             RefreshBar();
         }
