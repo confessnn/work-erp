@@ -75,3 +75,33 @@ export function clearsLowerBound(price: number, base: number, lowerRate: number,
 export function vatPair(price: number, includesVat: boolean) {
   return includesVat ? { excl: Math.round(price / 1.1), incl: price } : { excl: price, incl: Math.round(price * 1.1) };
 }
+
+/** 공고문 요약에서 AI가 읽어 낸 계산기 값. 문서에서 못 찾은 값은 null */
+export type CalcHints = {
+  award_mode: AwardMode | null;
+  base_amount: number | null;
+  base_kind: string | null;
+  includes_vat: boolean | null;
+  price_weight: number | null;
+  floor_rate: number | null;
+  lower_rate: number | null;
+  range: number | null;
+  notes: string[];
+};
+
+export type HintFields = { mode?: AwardMode; base?: string; includesVat?: boolean; weight?: string; floorRate?: string; lowerRate?: string; range?: string };
+
+/** 계산기 칸에 넣을 값. 찾지 못한 값은 빼서 지금 칸을 그대로 둔다 */
+export function hintsToFields(h: CalcHints): HintFields {
+  const n = (v: number | null) => (v !== null && Number.isFinite(v) && v > 0 ? String(v) : undefined);
+  const out: HintFields = {
+    mode: h.award_mode ?? undefined,
+    base: h.base_amount !== null && h.base_amount > 0 ? String(Math.round(h.base_amount)) : undefined,
+    includesVat: h.includes_vat ?? undefined,
+    weight: n(h.price_weight),
+    floorRate: n(h.floor_rate),
+    lowerRate: n(h.lower_rate),
+    range: n(h.range),
+  };
+  return Object.fromEntries(Object.entries(out).filter(([, v]) => v !== undefined)) as HintFields;
+}

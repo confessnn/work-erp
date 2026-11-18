@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
 import { won } from "@/lib/format";
+import { loadCalcHints } from "../actions";
 import {
   calcCost,
+  hintsToFields,
   clearsLowerBound,
   parseRates,
   plansFromLowerRate,
@@ -11,6 +13,7 @@ import {
   priceScore,
   vatPair,
   type AwardMode,
+  type CalcHints,
   type Plan,
 } from "../calc";
 
@@ -53,10 +56,67 @@ function loadDraft(key: string, fallback: Draft): Draft {
 const subscribeNothing = () => () => {};
 
 /** 입력값은 이 브라우저에 임시로 기억한다. 서버 화면에는 저장값이 없으므로 브라우저에서만 그린다 */
-export function BidCalculator({ draftKey, mode, base }: { draftKey: string; mode: AwardMode; base: number | null }) {
+export function BidCalculator({ draftKey, mode, base, noticeId }: { draftKey: string; mode: AwardMode; base: number | null; noticeId?: string }) {
   const ready = useSyncExternalStore(subscribeNothing, () => true, () => false);
   if (!ready) return <p className="card text-center text-muted">계산기를 준비하고 있습니다.</p>;
-  return <Form draftKey={draftKey} initial={blankDraft(mode, base ? String(base) : "")} />;
+  return <Form draftKey={draftKey} initial={blankDraft(mode, base ? String(base) : "")} noticeId={noticeId} />;
+}
+
+const FIELD_NAMES: Record<string, string> = {
+  mode: "낙찰 방식",
+  base: "기준금액",
+  includesVat: "부가세 포함 여부",
+  weight: "가격 배점",
+  floorRate: "최저입찰가 하한",
+  lowerRate: "낙찰하한율",
+  range: "복수예비가격 범위",
+};
+
+/** 공고 요약에서 AI가 읽은 값으로 칸을 채운다. 무엇을 채웠는지와 주의점을 보여 준다 */
+function HintFiller({ noticeId, onFill }: { noticeId: string; onFill: (fields: ReturnType<typeof hintsToFields>) => void }) {
+  const [pending, start] = useTransition();
+  const [result, setResult] = useState<{ hints?: CalcHints; filled?: string[]; error?: string } | null>(null);
+
+  const run = (again: boolean) =>
+    start(async () => {
+      const r = await loadCalcHints(noticeId, again);
+      if (!r.hints) return setResult({ error: r.error ?? "값을 읽지 못했습니다." });
+      const fields = hintsToFields(r.hints);
+      onFill(fields);
+      setResult({ hints: r.hints, filled: Object.keys(fields).map((k) => FIELD_NAMES[k] ?? k) });
+    });
+
+  return (
+    <div className="space-y-2 rounded-lg bg-accent-soft p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className="btn-primary" disabled={pending} onClick={() => run(false)}>
+          {pending ? "공고문 읽는 중…" : "공고문에서 값 채우기"}
+        </button>
+        {result?.hints && (
+          <button type="button" className="chip" disabled={pending} onClick={() => run(true)}>
+            다시 읽기
+          </button>
+        )}
+      </div>
+      {result?.error && <p className="text-danger">{result.error}</p>}
+      {result?.hints && (
+        <>
+          <p>
+            {result.filled?.length ? `채운 칸: ${result.filled.join(", ")}` : "요약에서 계산에 쓸 값을 찾지 못했습니다. 공고문을 보고 직접 넣어 주세요."}
+            {result.hints.base_kind ? ` (기준금액은 ${result.hints.base_kind})` : ""}
+          </p>
+          {result.hints.notes.length > 0 && (
+            <ul className="list-disc pl-5 text-muted">
+              {result.hints.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-muted">AI가 공고 요약에서 읽은 값입니다. 투찰 전에 공고문 원문과 꼭 맞춰 보세요.</p>
+        </>
+      )}
+    </div>
+  );
 }
 
 function Field({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) {
@@ -69,7 +129,7 @@ function Field({ label, hint, value, onChange }: { label: string; hint?: string;
   );
 }
 
-function Form({ draftKey, initial }: { draftKey: string; initial: Draft }) {
+function Form({ draftKey, initial, noticeId }: { draftKey: string; initial: Draft; noticeId?: string }) {
   const [d, setD] = useState<Draft>(() => loadDraft(draftKey, initial));
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((prev) => ({ ...prev, [k]: v }));
   const setStaff = (i: number, k: "people" | "months" | "monthlyPay", v: string) =>
@@ -107,6 +167,7 @@ function Form({ draftKey, initial }: { draftKey: string; initial: Draft }) {
     <div className="space-y-4">
       <section className="card space-y-3">
         <h2 className="section-title">1. 공고 기준</h2>
+        {noticeId && <HintFiller noticeId={noticeId} onFill={(fields) => setD((prev) => ({ ...prev, ...fields }))} />}
         <div className="grid gap-2 sm:grid-cols-3">
           {MODES.map((m) => (
             <button key={m.v} type="button" className={`choice ${d.mode === m.v ? "choice-on" : ""}`} onClick={() => set("mode", m.v)}>

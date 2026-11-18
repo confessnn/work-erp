@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { buildDigest, fetchProblem, notifiedIds, sendDigest, type DigestNotice, type DigestStatus } from "@/features/bid-inbox/digest";
+import { fetchProblem, notifiedIds, sendDigest, type DigestNotice, type DigestStatus } from "@/features/bid-inbox/digest";
+import { buildMorning, nextDay, type AgendaItem } from "@/features/bid-inbox/morning";
+import { todayInSeoul } from "@/lib/format";
 import { summarizeNotice } from "@/features/bid-inbox/summarize";
 
 export const maxDuration = 300;
@@ -30,24 +32,30 @@ async function summarizePending(db: SupabaseClient, secret: string, user: string
   return done;
 }
 
-/** 아직 알리지 않은 공고와 수신 문제를 메일로 보낸다. 보낼 내용이 없으면 보내지 않는다 */
+/** 아침 '오늘 할 일' 메일: 오늘·내일 일정과 아직 알리지 않은 공고, 수신 문제를 매일 한 통 보낸다 */
 async function mailDigest(db: SupabaseClient, secret: string, user: string, summaryProblem: string | null) {
   const apiKey = process.env.RESEND_API_KEY;
   const to = process.env.BID_NOTIFY_EMAIL;
   if (!apiKey || !to) return "메일 설정 없음";
 
-  const [notices, status] = await Promise.all([
+  const today = todayInSeoul();
+  const [notices, status, agenda] = await Promise.all([
     db.rpc("cron_digest_notices", { p_secret: secret, p_user: user }),
     db.rpc("cron_bid_status", { p_secret: secret, p_user: user }),
+    db.rpc("cron_morning_agenda", { p_secret: secret, p_user: user, p_from: today, p_to: nextDay(today) }),
   ]);
   if (notices.error) throw new Error(notices.error.message);
   if (status.error) throw new Error(status.error.message);
 
   const rows = (notices.data ?? []) as DigestNotice[];
   const [latest] = (status.data ?? []) as DigestStatus[];
-  const problems = [fetchProblem(latest ?? null, new Date()), summaryProblem].flatMap((p) => (p ? [p] : []));
-  const mail = buildDigest(rows, problems);
-  if (!mail) return "보낼 내용 없음";
+  const problems = [
+    fetchProblem(latest ?? null, new Date()),
+    summaryProblem,
+    // 일정을 못 읽어도 공고 메일은 보낸다
+    agenda.error ? `일정을 읽지 못했습니다: ${agenda.error.message}` : null,
+  ].flatMap((p) => (p ? [p] : []));
+  const mail = buildMorning(today, (agenda.data ?? []) as AgendaItem[], rows, problems);
 
   await sendDigest(apiKey, to, mail);
   // 메일을 보낸 뒤에 기록한다. 기록이 실패하면 다음 날 한 번 더 받을 뿐 공고를 놓치지는 않는다

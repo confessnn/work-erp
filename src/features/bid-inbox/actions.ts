@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { fetchAllNotices } from "./fetch-all";
+import type { CalcHints } from "./calc";
+import { extractCalcHints } from "./calc-hints";
 import { summarizeNotice } from "./summarize";
 import type { BidStatus } from "./types";
 
@@ -78,4 +80,28 @@ export async function setBidStatus(id: string, status: BidStatus) {
   const { error } = await supabase.from("bid_notices").update({ status }).eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/bids");
+}
+
+/**
+ * 계산기의 '공고문에서 값 채우기'. 공고 요약에서 낙찰방식·기준금액·하한율·배점을 읽어 돌려준다.
+ * 한 번 읽은 값은 저장해 두고 다시 쓴다 (again=true면 새로 읽는다).
+ */
+export async function loadCalcHints(id: string, again = false): Promise<{ hints?: CalcHints; error?: string }> {
+  const { supabase } = await requireUser();
+  const { data: n, error } = await supabase
+    .from("bid_notices")
+    .select("title, award_method, presumed_price, summary, calc_hints")
+    .eq("id", id)
+    .single();
+  if (error) return { error: error.message };
+  if (n.calc_hints && !again) return { hints: n.calc_hints as CalcHints };
+  if (!n.summary) return { error: "공고 요약이 아직 없습니다. 공고 수신함에서 '요약 만들기'를 먼저 눌러 주세요." };
+
+  try {
+    const hints = await extractCalcHints({ title: n.title, award_method: n.award_method, presumed_price: n.presumed_price, summary: n.summary });
+    await supabase.from("bid_notices").update({ calc_hints: hints }).eq("id", id);
+    return { hints };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "알 수 없는 오류" };
+  }
 }
