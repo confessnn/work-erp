@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { addedReply, overlapReply, parseCallback, toQuickEvent, weekdayOf, whenLabel, type Parsed } from "./quick-add";
+import { addedReply, existingList, memoReply, overlapReply, pickMemoTarget, parseCallback, toQuickEvent, weekdayOf, whenLabel, type Existing, type Parsed } from "./quick-add";
 
-const base: Parsed = { is_event: true, person: "dad", title: "치과", date: "2026-11-19", start_time: "15:00", end_time: null, memo: null };
+const base: Parsed = { is_event: true, person: "dad", title: "치과", date: "2026-11-19", start_time: "15:00", end_time: null, memo: null, memo_for: null };
 const today = "2026-11-18";
 
 describe("toQuickEvent", () => {
@@ -33,7 +33,7 @@ describe("표시", () => {
   it("답장에 되돌리기 버튼", () => {
     const r = addedReply({ person: "baby", title: "예방<접종>", date: "2026-11-19", start: "10:00", end: null, memo: null }, "11111111-2222-3333-4444-555555555555");
     expect(r.html).toContain("예방&lt;접종&gt;");
-    expect(r.html).toContain("아기 · 가족 달력");
+    expect(r.html).toContain("아기 일정");
     expect(r.buttons[0]).toEqual({ text: "되돌리기", callback_data: "undo:11111111-2222-3333-4444-555555555555" });
   });
 });
@@ -56,5 +56,28 @@ describe("시간 겹침 묻기", () => {
     expect(parseCallback(`undo:${id}`)).toEqual({ kind: "undo", id });
     expect(parseCallback("add:nope")).toBeNull();
     expect(parseCallback(undefined)).toBeNull();
+  });
+});
+
+describe("있는 일정에 메모 붙이기", () => {
+  const items: Existing[] = [
+    { kind: "event", id: "e1", event_date: "2026-11-18", start_time: null, title: "아기 병원" },
+    { kind: "lecture", id: "l1", event_date: "2026-11-19", start_time: "08:00:00", title: "도고 켐코인재원" },
+  ];
+  it("existingList", () => {
+    expect(existingList(items)).toBe("1. 2026-11-18(수) 종일 [일정] 아기 병원\n2. 2026-11-19(목) 08:00 [강의] 도고 켐코인재원");
+    expect(existingList([])).toBe("(없음)");
+  });
+  it("pickMemoTarget: 번호가 맞고 메모가 있을 때만", () => {
+    expect(pickMemoTarget({ ...base, memo_for: 2, memo: " 녹음준비 " }, items)).toEqual({ target: items[1], memo: "녹음준비" });
+    expect(pickMemoTarget({ ...base, memo_for: 2, memo: null }, items)).toBeNull();
+    expect(pickMemoTarget({ ...base, memo_for: 3, memo: "x" }, items)).toBeNull();
+    expect(pickMemoTarget({ ...base, memo_for: 0, memo: "x" }, items)).toBeNull();
+    expect(pickMemoTarget({ ...base, memo_for: null, memo: "x" }, items)).toBeNull();
+  });
+  it("memoReply", () => {
+    const r = memoReply({ kind: "lecture", id: "l1", title: "도고 켐코인재원", date: "2026-11-19", start: "08:00", end: "17:00", memo: "녹음준비" }, "녹음준비");
+    expect(r.html).toBe("📝 <b>있는 일정에 메모를 붙였어요</b>\n11월 19일(목) 08:00~17:00 도고 켐코인재원 (강의)\n붙인 메모: 녹음준비");
+    expect(r.buttons).toEqual([{ text: "ERP에서 보기", url: "https://work-erp-one.vercel.app/lectures/l1" }]);
   });
 });

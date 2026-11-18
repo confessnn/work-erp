@@ -1,4 +1,9 @@
 import Link from "next/link";
+import { after } from "next/server";
+import { importFamilySources } from "@/features/family/auto-import";
+import { PushSetup } from "@/features/reminders/components/push-setup";
+import { listMyReminderKeys } from "@/features/reminders/queries";
+import { requireUser } from "@/lib/supabase/server";
 import { parsePeriod, PeriodNav } from "@/components/period-nav";
 import { summarize } from "@/features/dashboard/summary";
 import { LectureCalendar } from "@/features/lectures/components/lecture-calendar";
@@ -27,10 +32,14 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
         next: period.month === 12 ? `${period.year + 1}-01-01` : `${period.year}-${String(period.month + 1).padStart(2, "0")}-01`,
       }
     : { start: `${period.year}-01-01`, next: `${period.year + 1}-01-01` };
-  const [lectures, familyEvents] = await Promise.all([
+  const [lectures, familyEvents, reminderKeys, { userId }] = await Promise.all([
     listLectures(period, { status }),
     status ? Promise.resolve([]) : listFamilyEventsBetween(range.start, range.next),
+    listMyReminderKeys(),
+    requireUser(),
   ]);
+  // 응답을 보낸 뒤, 30분 넘게 안 가져온 가족 구글 캘린더를 가져온다 (다음에 열 때 반영)
+  after(() => importFamilySources({ familyId: userId, staleOnly: true }).catch(() => {}));
   const s = summarize(lectures);
 
   const q = (p: { st?: string; view?: string; month?: number }) => {
@@ -49,9 +58,13 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
         <h1 className="page-title">일정</h1>
         <div className="flex gap-2">
           <Link href="/lectures/import" className="chip self-center">캘린더에서 불러오기</Link>
+          <Link href="/family/calendars" className="chip self-center">구글 캘린더 연결</Link>
+          <Link href="/share-settings#family" className="chip self-center">가족 초대</Link>
           <Link href="/lectures/new" className="btn-primary">+ 일정 추가</Link>
         </div>
       </div>
+
+      <PushSetup />
 
       <PeriodNav base="/lectures" period={period} extra={{ status, view }} />
 
@@ -77,12 +90,12 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
         ))}
         <span className="ml-auto text-muted">
           강의 {s.count}건 · 예상 {won(s.expectedNet)}
-          {familyEvents.length > 0 && ` · 가족 ${familyEvents.length}건`}
+          {familyEvents.length > 0 && ` · 강의 외 ${familyEvents.length}건`}
         </span>
       </div>
 
       {calendar ? (
-        <LectureCalendar year={period.year} month={period.month!} lectures={lectures} today={todayInSeoul()} familyEvents={familyEvents} />
+        <LectureCalendar year={period.year} month={period.month!} lectures={lectures} today={todayInSeoul()} familyEvents={familyEvents} reminderKeys={reminderKeys} />
       ) : (
         <LectureTable lectures={lectures} familyEvents={familyEvents} />
       )}

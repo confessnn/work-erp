@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deleteFamilyEvent, saveFamilyEvent } from "@/features/family/actions";
 import { FamilyEventForm } from "@/features/family/components/event-form";
-import { getFamilyEvent } from "@/features/family/queries";
+import { getFamilyEvent, getFamilyRole } from "@/features/family/queries";
 import { personOf } from "@/features/family/types";
 import { DeleteButton } from "@/features/lectures/components/delete-button";
 import { ReminderBell } from "@/features/reminders/components/reminder-bell";
@@ -13,7 +13,7 @@ import { dateLabel, timeLabel, todayInSeoul } from "@/lib/format";
 export default async function EditFamilyEventPage({ params, searchParams }: PageProps<"/family/[id]">) {
   const { id } = await params;
   const back = (await searchParams).back === "lectures" ? ("lectures" as const) : undefined;
-  const [event, keys] = await Promise.all([getFamilyEvent(id), listMyReminderKeys()]);
+  const [event, keys, role] = await Promise.all([getFamilyEvent(id), listMyReminderKeys(), getFamilyRole()]);
   if (!event) notFound();
 
   const target = familyEventTarget(event);
@@ -28,7 +28,7 @@ export default async function EditFamilyEventPage({ params, searchParams }: Page
     return (
       <>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="page-title">가족 일정</h1>
+          <h1 className="page-title">일정</h1>
           {bell}
         </div>
         <section className="card space-y-2">
@@ -40,8 +40,11 @@ export default async function EditFamilyEventPage({ params, searchParams }: Page
           </p>
         </section>
         <p className="text-sm text-muted">구글 캘린더에서 가져온 일정이에요. 고치거나 지우려면 구글 캘린더에서 해 주세요.</p>
-        <Link href={`/family?y=${Number(event.event_date.slice(0, 4))}&m=${Number(event.event_date.slice(5, 7))}`} className="chip inline-block">
-          가족 달력으로
+        <Link
+          href={`${role.role === "owner" ? "/lectures?view=calendar&" : "/family?"}y=${Number(event.event_date.slice(0, 4))}&m=${Number(event.event_date.slice(5, 7))}`}
+          className="chip inline-block"
+        >
+          달력으로
         </Link>
       </>
     );
@@ -50,7 +53,7 @@ export default async function EditFamilyEventPage({ params, searchParams }: Page
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="page-title">가족 일정 수정</h1>
+        <h1 className="page-title">일정 수정</h1>
         {bell}
       </div>
       <FamilyEventForm

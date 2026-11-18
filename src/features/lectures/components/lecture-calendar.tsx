@@ -8,6 +8,7 @@ import { monthGrid } from "../month-grid";
 import { datesLabel, unpaidOnDates } from "../paid-selection";
 import type { Lecture } from "../types";
 import { personOf, type FamilyEvent } from "@/features/family/types";
+import { familyEventTarget, reminderKey } from "@/features/reminders/keys";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -21,6 +22,7 @@ export function LectureCalendar({
   lectures,
   today,
   familyEvents = [],
+  reminderKeys = [],
 }: {
   year: number;
   month: number;
@@ -28,7 +30,14 @@ export function LectureCalendar({
   today: string;
   /** 같이 보여 줄 가족 일정 (아내·아기 등, 사람별 색) */
   familyEvents?: FamilyEvent[];
+  /** 휴대폰 알림을 켠 일정 (reminderKey 형식). 켠 일정 앞에 🔔 */
+  reminderKeys?: string[];
 }) {
+  const reminded = new Set(reminderKeys);
+  const famOn = (e: FamilyEvent) => {
+    const t = familyEventTarget(e);
+    return reminded.has(reminderKey(t.kind, t.ref));
+  };
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -136,6 +145,7 @@ export function LectureCalendar({
                       }`;
                       const label = (
                         <>
+                          {reminded.has(reminderKey("lecture", l.id)) && <span aria-label="알림 켜짐">🔔</span>}
                           {l.start_time && <span className="hidden tabular-nums sm:inline">{timeLabel(l.start_time)} </span>}
                           {l.title}
                         </>
@@ -160,6 +170,7 @@ export function LectureCalendar({
                       const cls = `block overflow-hidden whitespace-nowrap rounded-md sm:text-ellipsis px-1 py-0.5 text-[11px] leading-tight sm:text-xs ${personOf(e.person).cls}`;
                       const label = (
                         <>
+                          {famOn(e) && <span aria-label="알림 켜짐">🔔</span>}
                           {e.start_time && <span className="hidden tabular-nums sm:inline">{timeLabel(e.start_time)} </span>}
                           {e.title}
                         </>
@@ -211,7 +222,7 @@ export function LectureCalendar({
         <div className="flex gap-3 text-xs text-muted">
           <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-peach/45" />미수령</span>
           <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-mint/50" />수령</span>
-          {familyEvents.length > 0 && <span>· 그 밖의 색은 가족 일정</span>}
+          {familyEvents.length > 0 && <span>· 그 밖의 색은 강의 외 일정 (보라 = 아빠)</span>}
         </div>
       )}
     </div>

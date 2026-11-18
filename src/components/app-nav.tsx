@@ -9,7 +9,6 @@ type NavItem = { href: string; label: string };
 export const NAV: NavItem[] = [
   { href: "/", label: "대시보드" },
   { href: "/lectures", label: "일정" },
-  { href: "/family", label: "가족" },
   { href: "/documents", label: "서류함" },
   { href: "/baby", label: "아기" },
   { href: "/bids", label: "공고" },
@@ -30,7 +29,8 @@ export function AppNav({ items = NAV }: { items?: NavItem[] }) {
   return (
     <nav className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 text-sm whitespace-nowrap [scrollbar-width:none]">
       {items.map((n) => {
-        const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
+        // 가족 일정 화면(/family/...)도 '일정' 탭으로 친다
+        const active = n.href === "/" ? path === "/" : path.startsWith(n.href) || (n.href === "/lectures" && path.startsWith("/family"));
         return (
           <Link
             key={n.href}
