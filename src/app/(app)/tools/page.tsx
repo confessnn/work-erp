@@ -6,9 +6,9 @@ const SHORTCUTS: [string, string][] = [
   ["Ctrl+Shift+2", "판서 시작 (지금 화면 위에 쓰기)"],
   ["Ctrl+Shift+1", "확대 시작 (휠로 배율, 클릭하면 멈추고 판서)"],
   ["Ctrl+Shift+3", "칠판 (흰 화면에 쓰기)"],
-  ["Ctrl+Shift+4", "라이브 줌 (움직이는 화면 그대로 확대, 클릭·입력도 그대로 돼요)"],
+  ["Ctrl+Shift+4", "라이브 줌 (움직이는 화면 그대로 확대, 키보드 입력은 그대로 돼요)"],
   ["Ctrl+휠 (라이브 줌 중)", "라이브 줌 배율"],
-  ["판서 키 (라이브 줌 중)", "확대된 화면을 멈추고 그 위에 판서"],
+  ["왼쪽 클릭 (라이브 줌 중)", "확대된 화면을 멈추고 그 위에 판서 (판서 키도 같아요)"],
   ["P / H / R / L / T", "펜 / 형광펜 / 네모 / 직선 / 글자"],
   ["Shift + 직선", "수평·수직 밑줄"],
   ["휠 또는 [ ]", "굵기"],
@@ -34,7 +34,7 @@ export default function ToolsPage() {
             </p>
           </div>
           <a href="/downloads/ClassPen.exe" download="수업펜.exe" className="btn-primary">
-            내려받기 (Windows, 39KB)
+            내려받기 (Windows, 40KB)
           </a>
         </div>
 

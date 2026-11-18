@@ -437,6 +437,7 @@ namespace ClassPen
                 return;
             }
             live = z;
+            z.Clicked = delegate { if (live == z) Open(StartMode.Draw); };
         }
 
         void Open(StartMode mode)
@@ -466,8 +467,8 @@ namespace ClassPen
                 "■ 시작\n" +
                 "  " + k("draw") + "  판서 (지금 화면 위에 쓰기)\n" +
                 "  " + k("zoom") + "  확대 (휠로 배율, 클릭하면 멈추고 판서)\n" +
-                "  " + k("live") + "  라이브 줌 (움직이는 화면 그대로 확대, 클릭·입력도 그대로 돼요)\n" +
-                "        Ctrl+휠 배율, " + k("draw") + " 멈추고 판서, " + k("live") + " 끝내기\n" +
+                "  " + k("live") + "  라이브 줌 (움직이는 화면 그대로 확대, 키보드 입력은 그대로 돼요)\n" +
+                "        Ctrl+휠 배율, 왼쪽 클릭 또는 " + k("draw") + " 멈추고 판서, " + k("live") + " 끝내기\n" +
                 "  " + k("board") + "  칠판 (흰 화면에 쓰기)\n\n" +
                 "■ 판서 중\n" +
                 "  " + k("pen") + " 펜   " + k("marker") + " 형광펜   " + k("rect") + " 네모   " + k("line") + " 직선(Shift: 수평·수직)   " + k("text") + " 글자\n" +
@@ -586,7 +587,12 @@ namespace ClassPen
         [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
         delegate IntPtr HookProc(int code, IntPtr w, IntPtr l);
 
-        const int WH_MOUSE_LL = 14, WM_MOUSEWHEEL = 0x20A, VK_CONTROL = 0x11;
+        const int WH_MOUSE_LL = 14, WM_LBUTTONDOWN = 0x201, WM_LBUTTONUP = 0x202, WM_MOUSEWHEEL = 0x20A, VK_CONTROL = 0x11;
+
+        /// <summary>왼쪽 클릭하면 부른다 (그 화면을 멈추고 판서). 클릭은 아래 프로그램으로 보내지 않는다.</summary>
+        public Action Clicked;
+        SynchronizationContext ui;
+        bool swallowUp;
         const float EdgeBand = 8f;     // 보이는 폭의 1/8 띠에 마우스가 닿으면 화면을 민다
 
         volatile float target = 2f;    // 바라는 배율 (Ctrl+휠)
@@ -623,13 +629,30 @@ namespace ClassPen
             thread.Start();
             ready.WaitOne(2000);
             if (!started) { Stop(); return false; }
+            ui = SynchronizationContext.Current;
             hook = SetWindowsHookEx(WH_MOUSE_LL, hookProc, GetModuleHandle(null), 0);
             return true;
         }
 
-        /// <summary>Ctrl+휠: 배율 바꾸기 (아래 프로그램으로는 보내지 않음). 그냥 휠은 아래 프로그램 스크롤.</summary>
+        /// <summary>
+        /// Ctrl+휠: 배율 바꾸기 (아래 프로그램으로는 보내지 않음). 그냥 휠은 아래 프로그램 스크롤.
+        /// 왼쪽 클릭: 그 화면을 멈추고 판서 (ZoomIt 라이브 줌과 같음). 훅 안에서 오래 걸리면 마우스가 굳으므로 나중에 처리한다.
+        /// </summary>
         IntPtr OnMouseHook(int code, IntPtr w, IntPtr l)
         {
+            if (code >= 0 && w.ToInt32() == WM_LBUTTONDOWN && Clicked != null)
+            {
+                swallowUp = true;
+                Action a = Clicked;
+                Clicked = null; // 한 번만
+                if (ui != null) ui.Post(delegate { a(); }, null); else a();
+                return (IntPtr)1;
+            }
+            if (code >= 0 && w.ToInt32() == WM_LBUTTONUP && swallowUp)
+            {
+                swallowUp = false;
+                return (IntPtr)1;
+            }
             if (code >= 0 && w.ToInt32() == WM_MOUSEWHEEL && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0)
             {
                 int delta = (short)(Marshal.ReadInt32(l, 8) >> 16);
