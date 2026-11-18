@@ -9,15 +9,15 @@ import { todayInSeoul } from "@/lib/format";
 
 const KINDS = [
   { v: "lecture", label: "강의" },
-  { v: "family", label: "가족 일정 (아내·아기 등)" },
+  { v: "family", label: "강의 외 일정 (내 일정·가족)" },
 ] as const;
 
-/** 일정 추가: 강의와 가족 일정을 한 곳에서. 가족 일정은 가족 달력에도 똑같이 보인다 */
+/** 일정 추가: 강의와 강의 외 일정(내 일정·가족 일정)을 한 곳에서. 강의 외 일정은 초대한 가족의 달력에도 보인다 */
 export default async function NewSchedulePage({ searchParams }: PageProps<"/lectures/new">) {
   const sp = await searchParams;
   const kind = sp.type === "family" ? "family" : "lecture";
   const date = typeof sp.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : todayInSeoul();
-  const person: Person = sp.person === "mom" || sp.person === "baby" || sp.person === "all" ? sp.person : "mom";
+  const person: Person = sp.person === "mom" || sp.person === "baby" || sp.person === "all" ? sp.person : "dad";
   const organizations = kind === "lecture" ? await listOrganizations() : [];
 
   return (

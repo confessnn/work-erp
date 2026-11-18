@@ -34,9 +34,9 @@ export async function saveFamilyEvent(id: string | null, _prev: FamilyFormState,
   revalidatePath("/family");
   revalidatePath("/lectures");
   const [y, m] = parsed.value.event_date.split("-");
-  // '일정' 탭에서 넣거나 고쳤으면 일정 탭으로 돌아간다
-  const base = fd.get("back") === "lectures" ? "/lectures" : "/family";
-  redirect(`${base}?y=${Number(y)}&m=${Number(m)}`);
+  // 가족을 만든 사람(나)은 '일정' 탭 달력으로, 초대받은 가족은 가족 달력으로 돌아간다
+  const owner = (await getFamilyRole()).role === "owner";
+  redirect(owner || fd.get("back") === "lectures" ? `/lectures?view=calendar&y=${Number(y)}&m=${Number(m)}` : `/family?y=${Number(y)}&m=${Number(m)}`);
 }
 
 export async function deleteFamilyEvent(id: string, back?: "lectures") {
@@ -44,7 +44,8 @@ export async function deleteFamilyEvent(id: string, back?: "lectures") {
   await supabase.from("family_events").delete().eq("id", id);
   revalidatePath("/family");
   revalidatePath("/lectures");
-  redirect(back === "lectures" ? "/lectures" : "/family");
+  const owner = (await getFamilyRole()).role === "owner";
+  redirect(owner || back === "lectures" ? "/lectures?view=calendar" : "/family");
 }
 
 /** 초대 링크 만들기 (가족을 만든 사람만) */

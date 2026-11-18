@@ -1,7 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 import { answerCallback, editMessageText, escapeTg, sendMessage } from "@/features/telegram/api";
 import { overlapLabel, type Overlap } from "@/features/family/overlap";
-import { addedReply, HELP_TEXT, overlapReply, parseCallback, parseQuickAdd, toQuickEvent, whenLabel, type QuickEvent } from "@/features/telegram/quick-add";
+import {
+  addedReply,
+  HELP_TEXT,
+  memoReply,
+  overlapReply,
+  parseCallback,
+  parseQuickAdd,
+  pickMemoTarget,
+  toQuickEvent,
+  whenLabel,
+  type Existing,
+  type QuickEvent,
+} from "@/features/telegram/quick-add";
+import { addDays } from "@/features/todos/todos";
 import { todayInSeoul } from "@/lib/format";
 
 export const maxDuration = 60;
@@ -77,7 +90,19 @@ export async function POST(request: Request) {
     }
 
     const today = todayInSeoul();
-    const parsed = toQuickEvent(await parseQuickAdd(text, today), today);
+    // 어제~두 달 뒤 일정을 AI에게 보여 주고, 그중 하나에 붙이는 메모면 새 일정 대신 메모로 붙인다
+    const { data: up } = await db.rpc("tg_upcoming", { p_hook: hook, p_from: addDays(today, -1), p_to: addDays(today, 60) });
+    const existing = (up ?? []) as Existing[];
+    const raw = await parseQuickAdd(text, today, existing);
+    const memoTo = pickMemoTarget(raw, existing);
+    if (memoTo) {
+      const { data: m, error: e6 } = await db.rpc("tg_add_memo", { p_hook: hook, p_kind: memoTo.target.kind, p_id: memoTo.target.id, p_memo: memoTo.memo });
+      if (e6 || !m) throw new Error(`메모를 붙이지 못했어요 (${memoTo.target.title})`);
+      const reply = memoReply(m as Parameters<typeof memoReply>[0], memoTo.memo);
+      await sendMessage(token, chatId, reply.html, reply.buttons);
+      return Response.json({ ok: true });
+    }
+    const parsed = toQuickEvent(raw, today);
     if (!parsed.ok) {
       await sendMessage(token, chatId, `🤔 ${escapeTg(parsed.reason)} 일정은 이렇게 보내 주세요.\n예) 내일 3시 치과\n\n(/help 로 사용법 보기)`);
       return Response.json({ ok: true });

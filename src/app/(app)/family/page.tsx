@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { importFamilySources } from "@/features/family/auto-import";
 import { FamilyCalendar } from "@/features/family/components/family-calendar";
@@ -17,13 +18,15 @@ export default async function FamilyPage({ searchParams }: PageProps<"/family">)
   const prev = month === 1 ? { y: year - 1, m: 12 } : { y: year, m: month - 1 };
   const next = month === 12 ? { y: year + 1, m: 1 } : { y: year, m: month + 1 };
 
-  const [role, { events, lectures }, reminderKeys] = await Promise.all([
-    getFamilyRole(),
+  const role = await getFamilyRole();
+  // 내 일정과 가족 일정은 '일정' 탭 하나에서 본다. 가족 달력 화면은 초대받은 가족만 쓴다
+  if (role.role === "owner") redirect(`/lectures?view=calendar&y=${year}&m=${month}`);
+  const [{ events, lectures }, reminderKeys] = await Promise.all([
     listFamilyMonth(year, month),
     listMyReminderKeys(),
   ]);
   // 응답을 보낸 뒤, 30분 넘게 안 가져온 가족 구글 캘린더를 가져온다 (다음에 열 때 반영)
-  after(() => importFamilySources({ familyId: role.role === "member" ? role.ownerId : role.userId, staleOnly: true }).catch(() => {}));
+  after(() => importFamilySources({ familyId: role.ownerId, staleOnly: true }).catch(() => {}));
 
   return (
     <>
@@ -31,9 +34,6 @@ export default async function FamilyPage({ searchParams }: PageProps<"/family">)
         <h1 className="page-title">가족 달력</h1>
         <div className="flex flex-wrap gap-2">
           <Link href="/family/calendars" className="chip self-center">구글 캘린더 연결</Link>
-          {role.role === "owner" && (
-            <Link href="/share-settings#family" className="chip self-center">가족 초대</Link>
-          )}
           <Link href="/family/new" className="btn-primary">+ 일정 추가</Link>
         </div>
       </div>
@@ -55,7 +55,7 @@ export default async function FamilyPage({ searchParams }: PageProps<"/family">)
         events={events}
         lectures={lectures}
         today={todayInSeoul()}
-        lectureHref={role.role === "owner"}
+        lectureHref={false}
         reminderKeys={reminderKeys}
       />
     </>

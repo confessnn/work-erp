@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { saveFamilyEvent } from "@/features/family/actions";
 import { FamilyEventForm } from "@/features/family/components/event-form";
 import { getFamilyRole } from "@/features/family/queries";
@@ -7,6 +8,7 @@ export default async function NewFamilyEventPage({ searchParams }: PageProps<"/f
   const sp = await searchParams;
   const date = typeof sp.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : todayInSeoul();
   const role = await getFamilyRole();
+  if (role.role === "owner") redirect(`/lectures/new?type=family&date=${date}`);
   return (
     <>
       <h1 className="page-title">가족 일정 추가</h1>
