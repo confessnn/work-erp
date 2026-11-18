@@ -22,7 +22,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
     .maybeSingle();
   const { data: telegram } = await supabase
     .from("telegram_links")
-    .select("bot_username, chat_id, link_code, linked_at, last_sent_at, last_error")
+    .select("bot_username, chat_id, link_code, linked_at, last_sent_at, last_error, notify_events")
     .maybeSingle();
   const msg = typeof sp.google === "string" ? MSG[sp.google] : undefined;
   const configured = isGoogleConfigured();

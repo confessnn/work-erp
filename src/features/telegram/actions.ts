@@ -77,3 +77,12 @@ export async function disconnectTelegram(): Promise<Result> {
   revalidatePath("/integrations");
   return { ok: true, message: "연결을 끊었습니다. 아침 알림은 메일로 갑니다." };
 }
+
+/** 일정 알림 범위 (전부 / 🔔 켠 일정만 / 끄기) */
+export async function setTelegramEvents(mode: string): Promise<Result> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("set_telegram_events", { p_mode: mode });
+  if (error) return fail(new Error(`저장하지 못했어요: ${error.message}`));
+  revalidatePath("/integrations");
+  return { ok: true, message: "일정 알림 설정을 저장했어요." };
+}
