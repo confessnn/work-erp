@@ -188,7 +188,7 @@ export async function fetchOpening(bidNo: string, bidOrd = "000"): Promise<Openi
       const rank = num(i.opengRank);
       out.push({
         rank: Number.isFinite(rank) ? rank : null,
-        bizno: String(i.prcbdrBizno ?? "").replace(/D/g, ""),
+        bizno: String(i.prcbdrBizno ?? "").replace(/\D/g, ""),
         amount: Math.round(amount),
         rate: Number.isFinite(rate) ? rate : NaN,
         remark: str(i.rmrk),

@@ -3,7 +3,7 @@
 /** 한 메시지 최대 4096자. 여유를 둔다 */
 export const MAX_MESSAGE = 3800;
 
-export type InlineButton = { text: string; url: string };
+export type InlineButton = { text: string; url: string } | { text: string; callback_data: string };
 type Update = { message?: { chat?: { id?: number; type?: string }; text?: string } };
 
 async function call<T>(token: string, method: string, body: Record<string, unknown>): Promise<T> {
@@ -77,6 +77,19 @@ export function packChunks(blocks: string[], max = MAX_MESSAGE): string[] {
 }
 
 /** 토큰이 맞는지 확인하고 봇 아이디(@없이)를 돌려준다 */
+/** 이미 보낸 메시지 글자 바꾸기 (버튼은 없앤다) */
+export const editMessageText = (token: string, chatId: number, messageId: number, html: string) =>
+  call(token, "editMessageText", { chat_id: chatId, message_id: messageId, text: html, parse_mode: "HTML", disable_web_page_preview: true });
+
+/** 버튼 누름에 답하기 (버튼의 '불러오는 중' 표시를 끈다) */
+export const answerCallback = (token: string, id: string, text?: string) => call(token, "answerCallbackQuery", { callback_query_id: id, ...(text ? { text } : {}) });
+
+/** 봇에게 온 메시지를 우리 주소로 보내 달라고 등록한다. 등록 중에는 getUpdates를 쓸 수 없다 */
+export const setWebhook = (token: string, url: string, secret: string) =>
+  call(token, "setWebhook", { url, secret_token: secret, allowed_updates: ["message", "callback_query"], drop_pending_updates: true });
+
+export const deleteWebhook = (token: string) => call(token, "deleteWebhook", { drop_pending_updates: false });
+
 export async function getBotUsername(token: string) {
   const me = await call<{ username?: string }>(token, "getMe", {});
   if (!me.username) throw new Error("봇 정보를 읽지 못했습니다.");

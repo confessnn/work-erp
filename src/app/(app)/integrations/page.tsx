@@ -22,7 +22,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
     .maybeSingle();
   const { data: telegram } = await supabase
     .from("telegram_links")
-    .select("bot_username, chat_id, link_code, linked_at, last_sent_at, last_error, notify_events")
+    .select("bot_username, chat_id, link_code, linked_at, last_sent_at, last_error, notify_events, hook_hash")
     .maybeSingle();
   const msg = typeof sp.google === "string" ? MSG[sp.google] : undefined;
   const configured = isGoogleConfigured();
@@ -40,7 +40,9 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
             못한 날은 메일로 대신 보냅니다. 강의료 같은 금액은 보내지 않습니다.
           </p>
         </div>
-        <TelegramPanel state={(telegram as TelegramState) ?? null} />
+        <TelegramPanel
+          state={telegram ? ({ ...telegram, hook_hash: undefined, inbox_on: !!telegram.hook_hash } as TelegramState) : null}
+        />
       </section>
 
       <section className="card space-y-4">

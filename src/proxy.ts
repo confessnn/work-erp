@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from "next/server";
 // manifest.webmanifest: 홈 화면 앱 설정은 로그인 전에도 읽혀야 한다
 // /sw.js: 알림용 서비스 워커는 로그인 화면에서도 받아져야 한다
 // /join: 가족 초대 링크. 로그인 전에도 열려야 가입·로그인 안내를 보여 줄 수 있다
-const PUBLIC_PATHS = ["/login", "/auth", "/share", "/api/cron", "/about", "/privacy", "/manifest.webmanifest", "/join", "/sw.js"];
+// /api/telegram/webhook: 텔레그램 서버가 부른다. 비밀 헤더 확인은 그 경로에서 한다
+const PUBLIC_PATHS = ["/login", "/auth", "/share", "/api/cron", "/api/telegram/webhook", "/about", "/privacy", "/manifest.webmanifest", "/join", "/sw.js"];
 
 /** 요청마다 Supabase 세션을 갱신하고, 로그인하지 않았으면 /login으로 보낸다. */
 export async function proxy(request: NextRequest) {
