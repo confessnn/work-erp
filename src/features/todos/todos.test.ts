@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { addDays, cleanRecord, cleanTitle, progress, recordTarget, seoulDayStart, sourceLabel, todayList, withPrevious, withRecords, type Todo } from "./todos";
+import { addDays, cleanNote, cleanRecord, cleanTitle, progress, recordTarget, seoulDayStart, sourceLabel, todayList, withPrevious, withRecords, type Todo } from "./todos";
 
 const t = (id: string, due_date: string, done_at: string | null = null, created_at = "2026-11-10T00:00:00Z"): Todo => ({ id, title: id, due_date, done_at, created_at });
 
@@ -86,4 +86,10 @@ it("withPrevious: 같은 일의 지난 회차 기록을 붙인다", () => {
   expect(a.previous).toEqual({ date: "2026-11-17", title: "재경관리사 2회차", record: "L2 기록", series: "재경관리사" });
   expect(b.previous).toBeUndefined();
   expect(withPrevious([ev], new Map([["lecture:L3", "새 강의"]]), entries, "2026-11-21")[0].previous).toBeNull();
+});
+
+it("cleanNote", () => {
+  expect(cleanNote("  손영한 팀장\r\n043-261-3858 ")).toBe("손영한 팀장\n043-261-3858");
+  expect(cleanNote(" ")).toBeNull();
+  expect(cleanNote("가".repeat(1200))?.length).toBe(1000);
 });
