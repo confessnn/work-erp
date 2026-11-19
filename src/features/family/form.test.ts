@@ -8,7 +8,7 @@ describe("parseEventInput", () => {
     const r = parseEventInput(input({ person: "mom", title: " 병원 ", event_date: "2026-11-12", start_time: "10:00", end_time: "11:30" }));
     expect(r).toEqual({
       ok: true,
-      value: { person: "mom", title: "병원", event_date: "2026-11-12", start_time: "10:00", end_time: "11:30", memo: null },
+      value: { person: "mom", title: "병원", event_date: "2026-11-12", start_time: "10:00", end_time: "11:30", memo: null, record: null },
     });
   });
 

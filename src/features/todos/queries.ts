@@ -1,6 +1,6 @@
 import "server-only";
 import { requireUser } from "@/lib/supabase/server";
-import { addDays, seoulDayStart, todayList, TODO_COLUMNS, type Todo } from "./todos";
+import { addDays, recordTarget, seoulDayStart, todayList, TODO_COLUMNS, withRecords, type Todo } from "./todos";
 
 /**
  * 대시보드 '오늘 할 일' (최근 30일 안의 밀린 할 일까지).
@@ -21,5 +21,25 @@ export async function listTodayTodos(today: string): Promise<Todo[]> {
     .or(`done_at.is.null,done_at.gte.${seoulDayStart(today)},due_date.eq.${today}`)
     .limit(200);
   if (error) throw new Error(error.message);
-  return todayList((data ?? []) as Todo[], today);
+  const rows = todayList((data ?? []) as Todo[], today);
+  return withRecords(rows, await loadRecords(supabase, rows), new Date());
+}
+
+/** 일정 할 일이 가리키는 강의·가족 일정의 기록. 못 읽어도 할 일 목록은 보여 준다 */
+async function loadRecords(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], rows: Todo[]) {
+  const ids = { lecture: [] as string[], family: [] as string[] };
+  for (const t of rows) {
+    const target = recordTarget(t);
+    if (target) ids[target.kind].push(target.id);
+  }
+  const records = new Map<string, string | null>();
+  const [lectures, family] = await Promise.all([
+    ids.lecture.length ? supabase.from("lectures").select("id, record").in("id", ids.lecture) : null,
+    ids.family.length ? supabase.from("family_events").select("id, record").in("id", ids.family) : null,
+  ]);
+  for (const [kind, res] of [["lecture", lectures], ["family", family]] as const) {
+    if (res?.error) console.error("일정 기록 불러오기 실패:", res.error.message);
+    for (const r of res?.data ?? []) records.set(`${kind}:${r.id}`, r.record);
+  }
+  return records;
 }

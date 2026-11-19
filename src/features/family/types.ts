@@ -23,6 +23,8 @@ export type FamilyEvent = {
   start_time: string | null;
   end_time: string | null;
   memo: string | null;
+  /** 끝난 뒤 남긴 기록 */
+  record: string | null;
   created_by: string | null;
   updated_at: string;
   external_uid: string | null;

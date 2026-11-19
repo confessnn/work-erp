@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
-import { addDays, cleanTitle, TODO_COLUMNS, type Todo } from "./todos";
+import { addDays, cleanRecord, cleanTitle, recordTarget, TODO_COLUMNS, type Todo } from "./todos";
 
 type Result = { ok: true; todo?: Todo } | { ok: false; message: string };
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -50,5 +50,26 @@ export async function deleteTodo(id: string): Promise<Result> {
   const error = hidden.error ?? removed.error;
   if (error) return { ok: false, message: error.message };
   revalidatePath("/");
+  return { ok: true };
+}
+
+/** 일정에서 온 할 일에 기록 남기기: 기록은 그 일정(강의·가족 일정)의 '기록' 칸에 저장한다 */
+export async function saveScheduleRecord(todoId: string, raw: string): Promise<Result> {
+  const { supabase } = await requireUser();
+  const { data: todo, error: e1 } = await supabase.from("todos").select("source_key, source_kind, source_id").eq("id", todoId).maybeSingle();
+  if (e1) return { ok: false, message: e1.message };
+  const target = todo && recordTarget(todo as Pick<Todo, "source_key" | "source_kind" | "source_id">);
+  if (!target) return { ok: false, message: "일정에서 온 할 일이 아니에요." };
+
+  const record = cleanRecord(raw);
+  const table = target.kind === "lecture" ? "lectures" : "family_events";
+  const { data, error } = await supabase
+    .from(table)
+    .update({ record, updated_at: new Date().toISOString() })
+    .eq("id", target.id)
+    .select("id");
+  if (error) return { ok: false, message: `저장하지 못했어요: ${error.message}` };
+  if (!data?.length) return { ok: false, message: "일정을 찾지 못했어요. 지워졌을 수 있어요." };
+  revalidatePath("/", "layout");
   return { ok: true };
 }

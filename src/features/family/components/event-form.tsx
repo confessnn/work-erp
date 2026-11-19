@@ -83,6 +83,19 @@ export function FamilyEventForm({
       <label className="field">
         <span>메모 (선택)</span>
         <textarea name="memo" rows={3} maxLength={2000} defaultValue={event?.memo ?? ""} className="input" />
+        <span className="text-xs text-muted">한 줄에 하나씩 적으면 그날 &apos;오늘 할 일&apos;에 들어가요.</span>
+      </label>
+
+      <label className="field">
+        <span>기록 (선택)</span>
+        <textarea
+          name="record"
+          rows={2}
+          maxLength={2000}
+          defaultValue={event?.record ?? ""}
+          placeholder="끝난 뒤 남길 내용"
+          className="input"
+        />
       </label>
 
       {state.error && <p className="text-sm text-danger">{state.error}</p>}
