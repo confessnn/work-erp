@@ -17,9 +17,14 @@ export async function RecentRecords() {
     <section className="card space-y-3">
       <div className="flex items-center justify-between gap-3">
         <h2 className="section-title">최근 기록</h2>
-        <Link href="/records" className="text-sm text-muted hover:underline">
-          모아보기 ›
-        </Link>
+        <div className="flex gap-3">
+          <Link href="/records/graph" className="text-sm text-muted hover:underline">
+            관계도
+          </Link>
+          <Link href="/records" className="text-sm text-muted hover:underline">
+            모아보기 ›
+          </Link>
+        </div>
       </div>
       {recent.length === 0 ? (
         <p className="text-sm text-muted">일정을 끝냈다고 체크하고 기록을 남기면 여기에 모여요.</p>

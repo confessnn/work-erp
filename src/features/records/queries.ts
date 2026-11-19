@@ -1,5 +1,6 @@
 import "server-only";
 import { requireUser } from "@/lib/supabase/server";
+import type { Graph, GraphNode, Relation } from "./graph";
 import type { RecordEntry } from "./series";
 
 type Db = Awaited<ReturnType<typeof requireUser>>["supabase"];
@@ -46,4 +47,22 @@ export async function listRecordEntries(db?: Db): Promise<RecordEntry[]> {
       record: f.record as string,
     })),
   ].filter((e) => e.record.trim() !== "");
+}
+
+/** 마지막으로 만든 관계도 (없으면 null) */
+export async function latestGraph(): Promise<{ graph: Graph; entryCount: number; createdAt: string } | null> {
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase
+    .from("record_graphs")
+    .select("nodes, relations, entry_count, created_at")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    graph: { nodes: data.nodes as GraphNode[], relations: data.relations as Relation[] },
+    entryCount: data.entry_count as number,
+    createdAt: data.created_at as string,
+  };
 }
