@@ -1,5 +1,5 @@
 export type BidCategory = "cost" | "hanil";
-export type BidSource = "g2b" | "d2b" | "lh" | "kwater";
+export type BidSource = "g2b" | "d2b" | "kwater";
 export type BidMatch = "industry" | "keyword";
 export type BidVerdict = "possible" | "check" | "impossible" | "na";
 export type BidStatus = "new" | "interested" | "dismissed";
@@ -47,4 +47,4 @@ export type BidSettings = {
 };
 
 /** 목록에 보이는 출처 이름 (나라장터는 표시하지 않는다) */
-export const SOURCE_LABEL: Record<BidSource, string | null> = { g2b: null, d2b: "국방부", lh: "LH", kwater: "K-water" };
+export const SOURCE_LABEL: Record<BidSource, string | null> = { g2b: null, d2b: "국방부", kwater: "K-water" };

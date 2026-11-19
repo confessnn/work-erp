@@ -2,7 +2,6 @@ import { fetchD2bCostNotices, fetchD2bNotices } from "./d2b-api";
 import { fetchCategoryNotices, fetchRegionLimits } from "./g2b-api";
 import { CATEGORIES } from "./categories";
 import { fetchKwaterNotices } from "./kwater-api";
-import { fetchLhNotices } from "./lh-api";
 import type { BidNoticeInput } from "./types";
 
 export type SourceResult = {
@@ -43,13 +42,10 @@ export async function fetchAllNotices(knownD2b: Set<string>, now = new Date()): 
     note: r.remaining > 0 ? `${r.remaining}건은 다음 수신 때 확인` : undefined,
     error: r.error,
   }));
-  // LH·K-water는 한 번 조회로 원가(용역)·한일ENG(공사)를 함께 받는다
-  const agency = (label: string, load: () => Promise<BidNoticeInput[]>) =>
-    load().then(
-      (rows): SourceResult => ({ label, rows }),
-      (e): SourceResult => ({ label, rows: [], error: e instanceof Error ? e.message : "알 수 없는 오류" }),
-    );
-  const lh = agency("LH", () => fetchLhNotices(now));
-  const kwater = agency("K-water", () => fetchKwaterNotices(now));
-  return Promise.all([...g2b, d2b, d2bCost, lh, kwater]);
+  // K-water는 한 번 조회로 원가(용역)·한일ENG(공사)를 함께 받는다
+  const kwater = fetchKwaterNotices(now).then(
+    (rows): SourceResult => ({ label: "K-water", rows }),
+    (e): SourceResult => ({ label: "K-water", rows: [], error: e instanceof Error ? e.message : "알 수 없는 오류" }),
+  );
+  return Promise.all([...g2b, d2b, d2bCost, kwater]);
 }
