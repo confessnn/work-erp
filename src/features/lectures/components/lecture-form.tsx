@@ -204,6 +204,18 @@ export function LectureForm({ action, lecture, organizations, defaultDate, submi
         <label className="field">
           <span>메모</span>
           <textarea name="memo" rows={2} defaultValue={lecture?.memo ?? ""} className="input" />
+          <span className="text-xs text-muted">한 줄에 하나씩 적으면 그날 &apos;오늘 할 일&apos;에 들어가요.</span>
+        </label>
+        <label className="field">
+          <span>기록</span>
+          <textarea
+            name="record"
+            rows={2}
+            maxLength={2000}
+            defaultValue={lecture?.record ?? ""}
+            placeholder="끝난 뒤 남길 내용 (예: 3장까지 진행, 다음엔 4장부터)"
+            className="input"
+          />
         </label>
       </section>
 

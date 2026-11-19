@@ -10,10 +10,46 @@ export type Todo = {
   source_key?: string | null;
   /** 메모 줄이 나온 일정 이름 */
   source_title?: string | null;
+  source_kind?: ScheduleKind | null;
+  source_id?: string | null;
+  /** 일정이 끝나는 시각 (일정 자체 할 일만) */
+  source_end_at?: string | null;
+  /** 일정 자체 할 일: 그 일정에 남긴 기록 (lectures.record / family_events.record) */
+  record?: string | null;
+  /** 일정 자체 할 일: 끝나는 시각이 지났는지 (서버 시각 기준) */
+  ended?: boolean;
 };
 
+export type ScheduleKind = "lecture" | "family";
+
 /** DB에서 읽을 칸 */
-export const TODO_COLUMNS = "id, title, due_date, done_at, created_at, source_key, source_title";
+export const TODO_COLUMNS = "id, title, due_date, done_at, created_at, source_key, source_title, source_kind, source_id, source_end_at";
+
+export const RECORD_MAX = 2000;
+
+/** 일정 자체에서 온 할 일이면 기록을 남길 일정 */
+export function recordTarget(t: Pick<Todo, "source_key" | "source_kind" | "source_id">): { kind: ScheduleKind; id: string } | null {
+  return t.source_key === "event" && t.source_kind && t.source_id ? { kind: t.source_kind, id: t.source_id } : null;
+}
+
+/** 일정 할 일에 기록과 '끝났는지'를 붙인다. records 키는 "lecture:<id>" / "family:<id>" */
+export function withRecords(rows: Todo[], records: Map<string, string | null>, now: Date): Todo[] {
+  return rows.map((t) => {
+    const target = recordTarget(t);
+    if (!target) return t;
+    return {
+      ...t,
+      record: records.get(`${target.kind}:${target.id}`) ?? null,
+      ended: !!t.source_end_at && Date.parse(t.source_end_at) <= now.getTime(),
+    };
+  });
+}
+
+/** 기록 입력 정리: 앞뒤 공백을 떼고 2000자까지. 비우면 null (기록 지우기) */
+export function cleanRecord(raw: string): string | null {
+  const t = raw.replace(/\r\n/g, "\n").trim();
+  return t ? t.slice(0, RECORD_MAX) : null;
+}
 
 /** 할 일 옆에 작게 붙는 출처: 일정 자체는 '일정', 메모 줄은 '○○ 메모' */
 export function sourceLabel(t: Pick<Todo, "source_key" | "source_title">): string | null {

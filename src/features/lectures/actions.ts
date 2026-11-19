@@ -64,6 +64,7 @@ function toRow(fd: FormData) {
       paid_date: isPaid ? (str(fd, "paid_date") ?? todayInSeoul()) : null,
       paid_amount: isPaid ? (paidAmount !== null ? Math.round(paidAmount) : tax.net) : null,
       memo: str(fd, "memo"),
+      record: str(fd, "record")?.slice(0, 2000) ?? null,
     },
   } as const;
 }

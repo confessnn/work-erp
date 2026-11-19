@@ -7,6 +7,7 @@ export type EventInput = {
   start_time: string | null;
   end_time: string | null;
   memo: string | null;
+  record: string | null;
 };
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -38,10 +39,12 @@ export function parseEventInput(get: (k: string) => unknown): { ok: true; value:
 
   const memo = s("memo");
   if (memo.length > 2000) return { ok: false, error: "메모는 2000자까지 쓸 수 있어요." };
+  const record = s("record");
+  if (record.length > 2000) return { ok: false, error: "기록은 2000자까지 쓸 수 있어요." };
 
   return {
     ok: true,
-    value: { person, title, event_date: date, start_time: start || null, end_time: end || null, memo: memo || null },
+    value: { person, title, event_date: date, start_time: start || null, end_time: end || null, memo: memo || null, record: record || null },
   };
 }
 

@@ -21,6 +21,8 @@ export type Lecture = {
   paid_date: string | null;
   paid_amount: number | null;
   memo: string | null;
+  /** 끝난 뒤 남긴 기록 (메모와 따로. 메모 줄은 오늘 할 일로 불러온다) */
+  record?: string | null;
   external_uid: string | null; // 캘린더에서 불러온 일정이면 원본 ID
   google_event_id?: string | null; // 구글로 내보낸 일정 ID
   google_synced_at?: string | null;
