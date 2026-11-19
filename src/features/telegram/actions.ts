@@ -48,7 +48,7 @@ export async function confirmTelegram(): Promise<Result> {
     if (!chatId) return { ok: false, message: `봇 대화방에서 코드(${link.link_code})를 찾지 못했습니다. 봇에게 코드를 보낸 뒤 다시 눌러 주세요.` };
     const { error } = await supabase.rpc("link_telegram_chat", { p_chat_id: chatId });
     if (error) return { ok: false, message: error.message };
-    await sendMessage(token, chatId, "✅ <b>ERP와 연결됐어요.</b>\n매일 아침 9시쯤 오늘 할 일을 여기로 보내 드릴게요.");
+    await sendMessage(token, chatId, "✅ <b>ERP와 연결됐어요.</b>\n매일 아침 7시쯤 오늘 할 일을 여기로 보내 드릴게요.");
     revalidatePath("/integrations");
     return { ok: true, message: "연결했습니다. 텔레그램에 시험 메시지를 보냈어요." };
   } catch (e) {
