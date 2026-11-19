@@ -100,11 +100,11 @@ describe("buildMorningTelegram", () => {
 describe("아침 알림의 할 일", () => {
   const todos = [
     { title: "견적서 <보내기>", due_date: "2026-11-17" },
-    { title: "착수계 확인", due_date: "2026-11-19" },
+    { title: "착수계 확인", due_date: "2026-11-19", note: "담당 <손> 팀장\n043-000-0000" },
   ];
   it("텔레그램: 할 일과 밀린 날짜", () => {
     const [text] = buildMorningTelegram("2026-11-19", [], [], [], todos);
-    expect(text).toContain("<b>할 일 2개</b>\n☐ 견적서 &lt;보내기&gt; (밀림 · 11/17 (화))\n☐ 착수계 확인");
+    expect(text).toContain("<b>할 일 2개</b>\n☐ 견적서 &lt;보내기&gt; (밀림 · 11/17 (화))\n☐ 착수계 확인\n<i>담당 &lt;손&gt; 팀장\n043-000-0000</i>");
   });
   it("할 일이 없으면 칸을 만들지 않는다", () => {
     expect(buildMorningTelegram("2026-11-19", [], [], [])[0]).not.toContain("할 일 ");
@@ -113,5 +113,6 @@ describe("아침 알림의 할 일", () => {
     const m = buildMorning("2026-11-19", [], [], [], todos);
     expect(m.subject).toContain("할 일 2개");
     expect(m.html).toContain("☐ 견적서 &lt;보내기&gt;");
+    expect(m.html).toContain("담당 &lt;손&gt; 팀장\n043-000-0000</div>");
   });
 });

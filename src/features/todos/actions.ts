@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { schedulePush } from "@/features/google-calendar/push";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
-import { addDays, cleanRecord, cleanTitle, recordTarget, TODO_COLUMNS, type Todo } from "./todos";
+import { addDays, cleanNote, cleanRecord, cleanTitle, recordTarget, TODO_COLUMNS, type Todo } from "./todos";
 
 type Result = { ok: true; todo?: Todo } | { ok: false; message: string };
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -74,5 +74,14 @@ export async function saveScheduleRecord(todoId: string, raw: string): Promise<R
   // 강의를 고친 Server Action은 구글 캘린더 반영을 예약한다 (AGENTS.md)
   if (target.kind === "lecture") schedulePush(supabase);
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** 할 일 메모 저장 (비우면 지운다) */
+export async function saveTodoNote(id: string, raw: string): Promise<Result> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("todos").update({ note: cleanNote(raw) }).eq("id", id);
+  if (error) return { ok: false, message: `저장하지 못했어요: ${error.message}` };
+  revalidatePath("/");
   return { ok: true };
 }

@@ -10,6 +10,8 @@ export type Todo = {
   created_at: string;
   /** 일정에서 불러온 할 일: 'event' = 일정 자체, 'memo:…' = 메모 한 줄. 직접 적은 할 일은 null */
   source_key?: string | null;
+  /** 할 일 메모 (담당자 연락처, 금액 등) */
+  note?: string | null;
   /** 메모 줄이 나온 일정 이름 */
   source_title?: string | null;
   source_kind?: ScheduleKind | null;
@@ -29,7 +31,15 @@ export type PreviousRecord = { date: string; title: string; record: string; seri
 export type ScheduleKind = "lecture" | "family";
 
 /** DB에서 읽을 칸 */
-export const TODO_COLUMNS = "id, title, due_date, done_at, created_at, source_key, source_title, source_kind, source_id, source_end_at";
+export const TODO_COLUMNS = "id, title, due_date, done_at, created_at, note, source_key, source_title, source_kind, source_id, source_end_at";
+
+export const NOTE_MAX = 1000;
+
+/** 할 일 메모 정리: 앞뒤 공백을 떼고 1000자까지. 비우면 null */
+export function cleanNote(raw: string): string | null {
+  const t = raw.replace(/\r\n/g, "\n").trim();
+  return t ? t.slice(0, NOTE_MAX) : null;
+}
 
 export const RECORD_MAX = 2000;
 
