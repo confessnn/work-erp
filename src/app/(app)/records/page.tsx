@@ -62,9 +62,14 @@ export default async function RecordsPage({ searchParams }: PageProps<"/records"
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-title">기록</h1>
-        <a href={`/records/export${q ? `?q=${encodeURIComponent(q)}` : ""}`} className="chip text-sm">
-          CSV 내보내기
-        </a>
+        <div className="flex gap-2">
+          <Link href="/records/graph" className="chip text-sm">
+            관계도
+          </Link>
+          <a href={`/records/export${q ? `?q=${encodeURIComponent(q)}` : ""}`} className="chip text-sm">
+            CSV 내보내기
+          </a>
+        </div>
       </div>
       <p className="text-sm text-muted">
         일정을 끝내고 남긴 기록이 같은 일끼리 모여요. 제목의 &apos;2회차&apos;, &apos;3차시&apos;, &apos;(4)&apos; 같은 회차 표시는 빼고 묶어요.
