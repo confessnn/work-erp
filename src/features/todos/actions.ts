@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { schedulePush } from "@/features/google-calendar/push";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
 import { addDays, cleanRecord, cleanTitle, recordTarget, TODO_COLUMNS, type Todo } from "./todos";
@@ -70,6 +71,8 @@ export async function saveScheduleRecord(todoId: string, raw: string): Promise<R
     .select("id");
   if (error) return { ok: false, message: `저장하지 못했어요: ${error.message}` };
   if (!data?.length) return { ok: false, message: "일정을 찾지 못했어요. 지워졌을 수 있어요." };
+  // 강의를 고친 Server Action은 구글 캘린더 반영을 예약한다 (AGENTS.md)
+  if (target.kind === "lecture") schedulePush(supabase);
   revalidatePath("/", "layout");
   return { ok: true };
 }
