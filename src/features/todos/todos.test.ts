@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { addDays, cleanTitle, progress, seoulDayStart, todayList, type Todo } from "./todos";
+import { addDays, cleanTitle, progress, seoulDayStart, sourceLabel, todayList, type Todo } from "./todos";
 
 const t = (id: string, due_date: string, done_at: string | null = null, created_at = "2026-11-10T00:00:00Z"): Todo => ({ id, title: id, due_date, done_at, created_at });
 
@@ -27,4 +27,12 @@ it("cleanTitle", () => {
   expect(cleanTitle("  견적서   보내기 ")).toBe("견적서 보내기");
   expect(cleanTitle("   ")).toBeNull();
   expect(cleanTitle("가".repeat(300))?.length).toBe(200);
+});
+
+it("sourceLabel: 일정에서 불러온 할 일의 출처", () => {
+  expect(sourceLabel({ source_key: null, source_title: null })).toBeNull();
+  expect(sourceLabel({})).toBeNull();
+  expect(sourceLabel({ source_key: "event", source_title: null })).toBe("일정");
+  expect(sourceLabel({ source_key: "memo:녹음준비", source_title: "도고 켐코인재원" })).toBe("도고 켐코인재원 메모");
+  expect(sourceLabel({ source_key: "memo:녹음준비", source_title: null })).toBe("일정 메모");
 });
