@@ -73,8 +73,13 @@ async function toContent(docs: BidFile[]) {
   return { content, read, unread };
 }
 
+/** 국방전자조달 공고번호인지 (영문 3자 + 숫자 4자) */
+export const isD2bBidNo = (bidNo: string) => /^[A-Z]{3}\d{4}$/.test(bidNo);
+
 /** 공고의 첨부를 받아 요약한다. 실패하면 이유를 담아 throw */
 export async function summarizeNotice(bidNo: string, bidOrd: string, title: string): Promise<SummaryResult> {
+  // 국방부 공고번호(예: LDG0088)는 나라장터 첨부 조회가 안 된다
+  if (isD2bBidNo(bidNo)) throw new Error("국방부 공고는 첨부를 자동으로 받지 못해요. 국방전자조달에서 공고문을 확인해 주세요.");
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY가 설정되지 않았습니다.");
 
   const files = await fetchNoticeFiles(bidNo, bidOrd);

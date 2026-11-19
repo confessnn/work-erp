@@ -110,7 +110,7 @@ export function NoticeList({ notices, viewer = false }: { notices: BidNotice[]; 
 
           {n.verdict_reason && <p className="text-xs text-muted">1차 판정 근거: {n.verdict_reason}</p>}
 
-          {n.category === "cost" && n.verdict !== "na" && <NoticeSummary notice={n} />}
+          {n.category === "cost" && n.verdict !== "na" && n.source !== "d2b" && <NoticeSummary notice={n} />}
         </li>
       ))}
     </ul>

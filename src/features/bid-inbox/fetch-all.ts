@@ -1,4 +1,4 @@
-import { fetchD2bNotices } from "./d2b-api";
+import { fetchD2bCostNotices, fetchD2bNotices } from "./d2b-api";
 import { fetchCategoryNotices, fetchRegionLimits } from "./g2b-api";
 import { CATEGORIES } from "./categories";
 import type { BidNoticeInput } from "./types";
@@ -20,7 +20,7 @@ export async function fetchAllNotices(knownD2b: Set<string>, now = new Date()): 
   // 지역을 못 받으면 지역 제한 공고가 '가능'으로 잘못 보이므로 나라장터 수신을 실패로 둔다 (다음 수신 때 7일치를 다시 받는다)
   const regions = fetchRegionLimits(now);
   const g2b = CATEGORIES.map(async (c): Promise<SourceResult> => {
-    const label = c.key === "hanil" ? `${c.label} 나라장터` : c.label;
+    const label = `${c.label} 나라장터`;
     try {
       return { label, rows: await fetchCategoryNotices(c, await regions, now) };
     } catch (e) {
@@ -34,5 +34,12 @@ export async function fetchAllNotices(knownD2b: Set<string>, now = new Date()): 
     note: r.remaining > 0 ? `${r.remaining}건은 다음 수신 때 확인` : undefined,
     error: r.error,
   }));
-  return Promise.all([...g2b, d2b]);
+  const d2bCost = fetchD2bCostNotices(knownD2b, now).then((r): SourceResult => ({
+    label: "원가계산 국방부",
+    rows: r.rows,
+    checked: r.checked,
+    note: r.remaining > 0 ? `${r.remaining}건은 다음 수신 때 확인` : undefined,
+    error: r.error,
+  }));
+  return Promise.all([...g2b, d2b, d2bCost]);
 }
