@@ -11,6 +11,7 @@ const MAX_PAGES = 5;
 /** K-water 전자조달시스템. 공고별 주소는 API에 없다 */
 const DETAIL_URL = "https://ebid.kwater.or.kr/";
 const HANIL_TITLE = /방수|도장/;
+const CLOSED_STATUS = /취소|완료|마감|개찰|낙찰|유찰/;
 
 type Kind = "cost" | "hanil";
 
@@ -22,7 +23,8 @@ export function toKwaterNotice(i: Item, kind: Kind, now: Date): BidNoticeInput |
   const title = (i.tndrPblancNm ?? "").trim();
   const bidNo = (i.tndrPbanno ?? "").trim();
   if (!title || !bidNo) return null;
-  if (/취소/.test(i.tndrStat ?? "")) return null;
+  // 진행상태가 '입찰완료'처럼 끝난 공고는 받지 않는다 (마감일이 비어 오는 공고가 있어 상태로도 거른다)
+  if (CLOSED_STATUS.test(i.tndrStat ?? "")) return null;
   if (kind === "cost" ? !isCostNotice(title) : !HANIL_TITLE.test(title)) return null;
 
   // 신청마감일은 날짜만 온다. 그날 끝까지 열려 있는 것으로 본다
