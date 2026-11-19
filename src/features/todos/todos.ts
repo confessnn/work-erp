@@ -6,7 +6,21 @@ export type Todo = {
   due_date: string; // YYYY-MM-DD (서울)
   done_at: string | null;
   created_at: string;
+  /** 일정에서 불러온 할 일: 'event' = 일정 자체, 'memo:…' = 메모 한 줄. 직접 적은 할 일은 null */
+  source_key?: string | null;
+  /** 메모 줄이 나온 일정 이름 */
+  source_title?: string | null;
 };
+
+/** DB에서 읽을 칸 */
+export const TODO_COLUMNS = "id, title, due_date, done_at, created_at, source_key, source_title";
+
+/** 할 일 옆에 작게 붙는 출처: 일정 자체는 '일정', 메모 줄은 '○○ 메모' */
+export function sourceLabel(t: Pick<Todo, "source_key" | "source_title">): string | null {
+  if (!t.source_key) return null;
+  if (t.source_key === "event") return "일정";
+  return t.source_title ? `${t.source_title} 메모` : "일정 메모";
+}
 
 /** "2026-11-19" 다음 날 */
 export function addDays(day: string, n: number) {

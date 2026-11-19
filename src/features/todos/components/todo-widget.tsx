@@ -3,9 +3,12 @@
 import { useState, useTransition, type FormEvent } from "react";
 import { dateLabel } from "@/lib/format";
 import { addTodo, deleteTodo, postponeTodo, setTodoDone } from "../actions";
-import { progress, type Todo } from "../todos";
+import { progress, sourceLabel, type Todo } from "../todos";
 
-/** 대시보드 '오늘 할 일' 위젯: 적고, 체크하고, 내일로 미루고, 지운다. 누르면 바로 바뀌고 서버에는 뒤에서 저장한다 */
+/**
+ * 대시보드 '오늘 할 일' 위젯: 적고, 체크하고, 내일로 미루고, 지운다. 누르면 바로 바뀌고 서버에는 뒤에서 저장한다.
+ * 오늘 일정과 일정 메모의 줄도 할 일로 들어온다 (출처가 작게 붙는다).
+ */
 export function TodoWidget({ initial, today }: { initial: Todo[]; today: string }) {
   const [items, setItems] = useState(initial);
   const [text, setText] = useState("");
@@ -81,11 +84,12 @@ export function TodoWidget({ initial, today }: { initial: Todo[]; today: string 
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {total === 0 ? (
-        <p className="text-sm text-muted">오늘 할 일이 없어요. 위에 적어 보세요.</p>
+        <p className="text-sm text-muted">오늘 할 일이 없어요. 위에 적거나, 일정 메모에 적으면 여기에 들어와요.</p>
       ) : (
         <ul className="divide-y divide-line">
           {items.map((t) => {
             const late = t.due_date < today;
+            const from = sourceLabel(t);
             return (
               <li key={t.id} className="group flex items-center gap-3 py-2">
                 <input
@@ -97,6 +101,7 @@ export function TodoWidget({ initial, today }: { initial: Todo[]; today: string 
                 />
                 <span className={`min-w-0 flex-1 break-words text-sm ${t.done_at ? "text-muted line-through" : ""}`}>
                   {t.title}
+                  {from && <span className="ml-2 text-xs text-muted">{from}</span>}
                   {late && !t.done_at && <span className="ml-2 text-xs text-warn">밀림 · {dateLabel(t.due_date)}</span>}
                 </span>
                 {!t.done_at && (
