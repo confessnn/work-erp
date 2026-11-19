@@ -36,7 +36,7 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
         <div>
           <h2 className="section-title">텔레그램 알림</h2>
           <p className="mt-1 text-sm text-muted">
-            매일 아침 9시쯤 <b>오늘 할 일</b>(오늘·내일 강의, 가족 일정, 새 입찰 공고)을 내 텔레그램 봇으로 받습니다. 연결하지 않았거나 보내지
+            매일 아침 7시쯤 <b>오늘 할 일</b>(오늘·내일 강의, 가족 일정, 새 입찰 공고)을 내 텔레그램 봇으로 받습니다. 연결하지 않았거나 보내지
             못한 날은 메일로 대신 보냅니다. 강의료 같은 금액은 보내지 않습니다.
           </p>
         </div>
