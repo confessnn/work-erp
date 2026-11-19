@@ -1,5 +1,6 @@
 import { kstToIso, toApiDate, FETCH_WINDOW_DAYS } from "./g2b-api";
-import { judgeHanil, HANIL_MAX_PRICE } from "./judge";
+import { costRegionOk, isCostNotice, judgeCost, judgeHanil, HANIL_MAX_PRICE } from "./judge";
+import type { BidVerdict } from "./types";
 import type { BidNoticeInput } from "./types";
 
 // 방위사업청_군수품조달정보 입찰공고_GW. 나라장터와 같은 서비스키를 쓰고, 응답은 XML이다.
@@ -14,6 +15,8 @@ const MAX_BASE_AMOUNT = HANIL_MAX_PRICE * 1.3;
 const FORWARD_DAYS = 14;
 /** 개발계정 하루 100회 한도를 넘지 않도록 한 번에 조회할 상세 건수. 남은 건은 다음 수신 때 이어서 본다 */
 export const MAX_DETAILS_PER_RUN = 60;
+/** 원가 용역은 하루 몇 건뿐이라 따로 이만큼만 상세를 본다 */
+export const MAX_COST_DETAILS_PER_RUN = 10;
 const CONCURRENCY = 5;
 
 type Item = Record<string, string>;
@@ -205,6 +208,162 @@ export async function fetchD2bNotices(known: Set<string>, now = new Date(), maxD
           result.checked.push(c.key);
         }),
       );
+    }
+  } catch (e) {
+    result.error = e instanceof Error ? e.message : "알 수 없는 오류";
+  }
+  return result;
+}
+
+// ───────── 원가계산: 국방부 물품·용역(국내조달) 공고 중 '원가' 용역 ─────────
+
+/** 다시 조회하지 않도록 저장하는 키 (한일ENG 시설공사 키와 섞이지 않게 앞에 붙인다) */
+export const costKey = (i: Item) => `cost:${i.pblancNo}-${i.pblancOdr}`;
+
+const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
+
+/** "최저가격제 · 낙찰하한율 88% · 기초금액 2,567,000원(±2%)" (계산기·목록에 그대로 보인다) */
+export function costAwardText(detail: Item): string | null {
+  const parts: string[] = [];
+  if (detail.sucbidrDecsnMth) parts.push(detail.sucbidrDecsnMth);
+  const rate = Number(detail.scsbidLwltRt);
+  if (rate > 0) parts.push(`낙찰하한율 ${rate}%`);
+  const base = Number(detail.bsisPreparPc || detail.budgetAmount);
+  if (base > 0) {
+    const up = Number(detail.asessRtUplmt);
+    parts.push(`기초금액 ${won(Math.round(base))}${up > 0 ? `(±${up}%)` : ""}`);
+  }
+  return parts.length ? parts.join(" · ") : null;
+}
+
+/**
+ * 국방부 원가 용역 1차 판정.
+ * 공개수의(전자견적)는 누구나 견적을 낼 수 있어 나라장터 수의계약과 달리 투찰 대상으로 본다.
+ */
+export function judgeD2bCost(negotiated: boolean, detail: Item): { verdict: BidVerdict; reason: string } {
+  const license = cleanList(detail.lcnsLmttList);
+  if (negotiated) {
+    if (license) return { verdict: "check", reason: `공개수의(견적): 자격 제한 확인 필요 (${license})` };
+    return { verdict: "possible", reason: "국방부 공개수의(전자견적): 공고문 검토 후 견적 투찰 가능" };
+  }
+  return judgeCost({ contractMethod: detail.cntrctMth || null, awardMethod: detail.sucbidrDecsnMth || null, regionLimit: null, presumedPrice: null, matchedBy: "keyword" });
+}
+
+/** 상세 응답 → 저장 값. 지역 제한이 맞지 않으면 null */
+export function toD2bCostNotice(list: Item, detail: Item, closesAt: string | null, negotiated: boolean): BidNoticeInput | null {
+  const regionLimit = cleanList(detail.areaLmttList);
+  if (regionLimit && !costRegionOk(regionLimit)) return null;
+  const { verdict, reason } = judgeD2bCost(negotiated, detail);
+  const presumedPrice = Number(detail.estmPrce) > 0 ? Math.round(Number(detail.estmPrce)) : null;
+  return {
+    category: "cost",
+    source: "d2b",
+    matched_by: "keyword",
+    bid_no: list.pblancNo,
+    bid_ord: list.pblancOdr,
+    title: (negotiated ? list.othbcNtatNm : list.bidNm) || detail.othbcNtatNm || detail.bidNm,
+    notice_kind: negotiated ? "공개수의" : list.pblancSe || null,
+    notice_org: list.ornt || null,
+    demand_org: null,
+    presumed_price: presumedPrice,
+    contract_method: detail.cntrctMth || (negotiated ? "수의계약" : null),
+    award_method: costAwardText(detail),
+    region_limit: regionLimit,
+    main_industry: cleanList(detail.lcnsLmttList),
+    site_region: null,
+    noticed_at: list.pblancDate ? kstToIso(`${list.pblancDate}0000`) : list.ntatPlanDate ? kstToIso(`${list.ntatPlanDate}0000`) : null,
+    closes_at: closesAt,
+    opens_at: kstToIso(list.opengDt),
+    detail_url: "https://www.d2b.go.kr/",
+    verdict,
+    verdict_reason: reason,
+  };
+}
+
+type CostCandidate = Candidate & { negotiated: boolean };
+
+const isCostService = (i: Item, title: string | undefined) => i.busiDivs === "용역" && isCostNotice(title ?? "");
+
+/** 국내조달 경쟁입찰 + 공개수의 목록에서 '원가' 용역만 고른다 */
+async function listCostCandidates(now: Date): Promise<CostCandidate[]> {
+  const day = (d: Date) => toApiDate(d).slice(0, 8);
+  const [competitive, negotiated] = await Promise.all([
+    call("getDmstcCmpetBidPblancList", {
+      numOfRows: "500",
+      pageNo: "1",
+      anmtDateBegin: day(new Date(now.getTime() - FETCH_WINDOW_DAYS * 86_400_000)),
+      anmtDateEnd: day(now),
+    }),
+    call("getDmstcOthbcVltrnNtatPlanList", {
+      numOfRows: "500",
+      pageNo: "1",
+      prqudoPresentnClosDateBegin: day(now),
+      prqudoPresentnClosDateEnd: day(new Date(now.getTime() + FORWARD_DAYS * 86_400_000)),
+    }),
+  ]);
+  const isOpen = (closesAt: string | null) => !closesAt || Date.parse(closesAt) > now.getTime();
+  const out: CostCandidate[] = [];
+
+  for (const i of competitive.items) {
+    const closesAt = kstToIso(i.biddocPresentnClosDt);
+    if (!isCostService(i, i.bidNm) || i.pblancSe === "취소공고" || !isOpen(closesAt)) continue;
+    out.push({
+      key: costKey(i),
+      list: i,
+      closesAt,
+      negotiated: false,
+      detail: async () =>
+        (await call("getDmstcCmpetBidPblancDetail", {
+          demandYear: i.demandYear,
+          orntCode: i.orntCode,
+          dcsNo: i.dcsNo,
+          pblancNo: i.pblancNo,
+          pblancOdr: i.pblancOdr,
+          pblancSeCode: i.pblancSeCode,
+          excutTyCode: i.excutTyCode,
+        })).items[0],
+    });
+  }
+  for (const i of negotiated.items) {
+    const closesAt = kstToIso(i.prqudoPresentnClosDt);
+    if (!isCostService(i, i.othbcNtatNm) || i.progrsSttus !== "진행중" || !isOpen(closesAt)) continue;
+    out.push({
+      key: costKey(i),
+      list: i,
+      closesAt,
+      negotiated: true,
+      detail: async () =>
+        (await call("getDmstcOthbcVltrnNtatPlanDetail", {
+          orntCode: i.orntCode,
+          dcsNo: i.dcsNo,
+          demandYear: i.demandYear,
+          ntatPlanDate: i.ntatPlanDate,
+          pblancNo: i.pblancNo,
+          pblancOdr: i.pblancOdr,
+          iemNo: i.iemNo,
+        })).items[0],
+    });
+  }
+  return out;
+}
+
+/** 국방부 공고 중 '원가' 용역. 오류가 나도 그때까지 확인한 결과는 돌려준다. */
+export async function fetchD2bCostNotices(known: Set<string>, now = new Date(), maxDetails = MAX_COST_DETAILS_PER_RUN): Promise<D2bResult> {
+  const result: D2bResult = { rows: [], checked: [], remaining: 0 };
+  try {
+    const seen = new Set<string>();
+    const todo = (await listCostCandidates(now))
+      .filter((c) => !known.has(c.key) && !seen.has(c.key) && seen.add(c.key))
+      .sort((a, b) => (a.closesAt ?? "9").localeCompare(b.closesAt ?? "9"));
+    const batch = todo.slice(0, maxDetails);
+    result.remaining = todo.length - batch.length;
+    for (const c of batch) {
+      const detail = await c.detail();
+      if (detail) {
+        const n = toD2bCostNotice(c.list, detail, c.closesAt, c.negotiated);
+        if (n) result.rows.push(n);
+      }
+      result.checked.push(c.key);
     }
   } catch (e) {
     result.error = e instanceof Error ? e.message : "알 수 없는 오류";
