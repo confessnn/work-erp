@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { addDays, cleanRecord, cleanTitle, progress, recordTarget, seoulDayStart, sourceLabel, todayList, withRecords, type Todo } from "./todos";
+import { addDays, cleanRecord, cleanTitle, progress, recordTarget, seoulDayStart, sourceLabel, todayList, withPrevious, withRecords, type Todo } from "./todos";
 
 const t = (id: string, due_date: string, done_at: string | null = null, created_at = "2026-11-10T00:00:00Z"): Todo => ({ id, title: id, due_date, done_at, created_at });
 
@@ -74,4 +74,16 @@ it("cleanRecord", () => {
   expect(cleanRecord("  3장까지\r\n다음엔 4장  ")).toBe("3장까지\n다음엔 4장");
   expect(cleanRecord("   ")).toBeNull();
   expect(cleanRecord("가".repeat(2100))?.length).toBe(2000);
+});
+
+it("withPrevious: 같은 일의 지난 회차 기록을 붙인다", () => {
+  const ev: Todo = { ...t("오늘강의", "2026-11-21"), source_key: "event", source_kind: "lecture", source_id: "L3" };
+  const memo: Todo = { ...t("메모", "2026-11-21"), source_key: "memo:x", source_kind: "lecture", source_id: "L3" };
+  const entry = (id: string, title: string, date: string) => ({ kind: "lecture" as const, id, title, organization: null, date, start_time: null, record: `${id} 기록` });
+  const entries = [entry("L1", "재경관리사 1회차", "2026-11-14"), entry("L2", "재경관리사 2회차", "2026-11-17"), entry("L3", "재경관리사 3회차", "2026-11-21")];
+  const titles = new Map([["lecture:L3", "재경관리사 3회차"]]);
+  const [a, b] = withPrevious([ev, memo], titles, entries, "2026-11-21");
+  expect(a.previous).toEqual({ date: "2026-11-17", title: "재경관리사 2회차", record: "L2 기록", series: "재경관리사" });
+  expect(b.previous).toBeUndefined();
+  expect(withPrevious([ev], new Map([["lecture:L3", "새 강의"]]), entries, "2026-11-21")[0].previous).toBeNull();
 });
