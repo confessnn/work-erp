@@ -19,7 +19,7 @@ export const MAX_DETAILS_PER_RUN = 60;
 export const MAX_COST_DETAILS_PER_RUN = 10;
 const CONCURRENCY = 5;
 
-type Item = Record<string, string>;
+export type Item = Record<string, string>;
 
 const decode = (s: string) =>
   s
@@ -31,14 +31,14 @@ const decode = (s: string) =>
     .trim();
 
 /** 응답 XML → 항목 목록. 오류 응답이면 이유를 담아 throw (서비스키가 메시지에 섞이지 않도록 정해진 칸만 읽음) */
-export function parseXml(xml: string): { items: Item[]; total: number } {
+export function parseXml(xml: string, label = "국방부"): { items: Item[]; total: number } {
   const tag = (name: string) => xml.match(new RegExp(`<${name}>([^<]*)</${name}>`))?.[1];
   if (xml.includes("<OpenAPI_ServiceResponse>")) {
-    throw new Error(`국방부 API 오류: ${tag("returnAuthMsg") ?? tag("errMsg") ?? "인증 실패"}`);
+    throw new Error(`${label} API 오류: ${tag("returnAuthMsg") ?? tag("errMsg") ?? "인증 실패"}`);
   }
   const code = tag("resultCode");
-  if (code && code !== "00") throw new Error(`국방부 API 오류: ${tag("resultMsg") ?? code}`);
-  if (!code) throw new Error("국방부 API 오류: 응답을 읽을 수 없음");
+  if (code && !/^0+$/.test(code)) throw new Error(`${label} API 오류: ${tag("resultMsg") ?? code}`);
+  if (!code) throw new Error(`${label} API 오류: 응답을 읽을 수 없음`);
 
   const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].map((m) =>
     Object.fromEntries([...m[1].matchAll(/<(\w+)>([\s\S]*?)<\/\1>/g)].map((x) => [x[1], decode(x[2])])),

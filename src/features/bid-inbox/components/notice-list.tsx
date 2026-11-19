@@ -8,7 +8,7 @@ import { setViewerMark } from "@/features/bid-viewer/actions";
 import { CATEGORY_LABEL } from "../categories";
 import { VERDICT_LABEL } from "../judge";
 import { SubmissionBadge } from "./submission-badge";
-import type { BidNotice, BidStatus, BidVerdict } from "../types";
+import { SOURCE_LABEL, type BidNotice, type BidStatus, type BidVerdict } from "../types";
 import { NoticeSummary } from "./notice-summary";
 
 const VERDICT_CLASS: Record<BidVerdict, string> = {
@@ -71,7 +71,7 @@ export function NoticeList({ notices, viewer = false }: { notices: BidNotice[]; 
               {VERDICT_LABEL[n.verdict]}
             </span>
             <SubmissionBadge awardMethod={n.award_method} />
-            {n.source === "d2b" && <span className="text-muted">국방부</span>}
+            {SOURCE_LABEL[n.source] && <span className="text-muted">{SOURCE_LABEL[n.source]}</span>}
             {!viewer && n.status === "new" && <span className="badge badge-unpaid">새 공고</span>}
             {n.notice_kind && n.notice_kind !== "등록공고" && <span className="text-muted">{n.notice_kind}</span>}
             {n.closes_at && <span className="ml-auto font-semibold tabular-nums">{dDay(n.closes_at, now)}</span>}
@@ -110,7 +110,7 @@ export function NoticeList({ notices, viewer = false }: { notices: BidNotice[]; 
 
           {n.verdict_reason && <p className="text-xs text-muted">1차 판정 근거: {n.verdict_reason}</p>}
 
-          {n.category === "cost" && n.verdict !== "na" && n.source !== "d2b" && <NoticeSummary notice={n} />}
+          {n.category === "cost" && n.verdict !== "na" && n.source === "g2b" && <NoticeSummary notice={n} />}
         </li>
       ))}
     </ul>
