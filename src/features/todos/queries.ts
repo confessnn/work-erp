@@ -1,6 +1,7 @@
 import "server-only";
 import { requireUser } from "@/lib/supabase/server";
-import { addDays, recordTarget, seoulDayStart, todayList, TODO_COLUMNS, withRecords, type Todo } from "./todos";
+import { listRecordEntries } from "@/features/records/queries";
+import { addDays, recordTarget, seoulDayStart, todayList, TODO_COLUMNS, withPrevious, withRecords, type Todo } from "./todos";
 
 /**
  * 대시보드 '오늘 할 일' (최근 30일 안의 밀린 할 일까지).
@@ -22,7 +23,15 @@ export async function listTodayTodos(today: string): Promise<Todo[]> {
     .limit(200);
   if (error) throw new Error(error.message);
   const rows = todayList((data ?? []) as Todo[], today);
-  return withRecords(rows, await loadRecords(supabase, rows), new Date());
+  const { records, titles } = await loadRecords(supabase, rows);
+  const withRec = withRecords(rows, records, new Date());
+  if (titles.size === 0) return withRec;
+  // 지난 회차 기록은 덤이라, 못 읽어도 할 일 목록은 보여 준다
+  const entries = await listRecordEntries(supabase).catch((e) => {
+    console.error("지난 기록 불러오기 실패:", e instanceof Error ? e.message : e);
+    return [];
+  });
+  return withPrevious(withRec, titles, entries, today);
 }
 
 /** 일정 할 일이 가리키는 강의·가족 일정의 기록. 못 읽어도 할 일 목록은 보여 준다 */
@@ -34,12 +43,16 @@ async function loadRecords(supabase: Awaited<ReturnType<typeof requireUser>>["su
   }
   const records = new Map<string, string | null>();
   const [lectures, family] = await Promise.all([
-    ids.lecture.length ? supabase.from("lectures").select("id, record").in("id", ids.lecture) : null,
-    ids.family.length ? supabase.from("family_events").select("id, record").in("id", ids.family) : null,
+    ids.lecture.length ? supabase.from("lectures").select("id, title, record").in("id", ids.lecture) : null,
+    ids.family.length ? supabase.from("family_events").select("id, title, record").in("id", ids.family) : null,
   ]);
+  const titles = new Map<string, string>();
   for (const [kind, res] of [["lecture", lectures], ["family", family]] as const) {
     if (res?.error) console.error("일정 기록 불러오기 실패:", res.error.message);
-    for (const r of res?.data ?? []) records.set(`${kind}:${r.id}`, r.record);
+    for (const r of res?.data ?? []) {
+      records.set(`${kind}:${r.id}`, r.record);
+      titles.set(`${kind}:${r.id}`, r.title);
+    }
   }
-  return records;
+  return { records, titles };
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition, type FormEvent } from "react";
 import { dateLabel } from "@/lib/format";
 import { addTodo, deleteTodo, postponeTodo, saveScheduleRecord, setTodoDone } from "../actions";
@@ -146,7 +147,16 @@ export function TodoWidget({ initial, today }: { initial: Todo[]; today: string 
                     ×
                   </button>
                 </div>
-                {canRecord && t.record && !open && (
+                {t.previous && !open && (
+                <Link
+                  href={`/records?s=${encodeURIComponent(t.previous.series)}`}
+                  className="mt-1 ml-8 block rounded-lg border border-line px-3 py-2 text-xs hover:bg-line/30"
+                >
+                  <span className="text-muted">지난 회차 {dateLabel(t.previous.date)} 기록 · 모아보기 ›</span>
+                  <span className="mt-0.5 line-clamp-2 block whitespace-pre-wrap break-words">{t.previous.record}</span>
+                </Link>
+              )}
+              {canRecord && t.record && !open && (
                   <p className="mt-1 ml-8 whitespace-pre-wrap break-words rounded-lg bg-line/40 px-3 py-2 text-xs">{t.record}</p>
                 )}
                 {open && (

@@ -10,6 +10,7 @@ import { LectureCalendar } from "@/features/lectures/components/lecture-calendar
 import { LectureTable } from "@/features/lectures/components/lecture-table";
 import { listLectures, listUpcoming } from "@/features/lectures/queries";
 import { flushPendingGoogleDeletes } from "@/features/google-calendar/push";
+import { RecentRecords } from "@/features/records/components/recent-records";
 import { TodoWidget } from "@/features/todos/components/todo-widget";
 import { listTodayTodos } from "@/features/todos/queries";
 import { requireUser } from "@/lib/supabase/server";
@@ -17,7 +18,7 @@ import { hoursLabel, nowInSeoul, todayInSeoul, won } from "@/lib/format";
 
 /**
  * 대시보드. 휴대폰에서 빨리 뜨도록 할 일·이번 달 달력만 먼저 그리고,
- * 다가오는 일정·API 크레딧·강의료 통계는 준비되는 대로 따로 채운다 (Suspense).
+ * 최근 기록·다가오는 일정·API 크레딧·강의료 통계는 준비되는 대로 따로 채운다 (Suspense).
  */
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   // 초대받은 가족의 첫 화면은 가족 달력
@@ -37,6 +38,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       </div>
 
       <TodoWidget key={today} initial={todos} today={today} />
+
+      <Suspense fallback={<Placeholder className="h-32" />}>
+        <RecentRecords />
+      </Suspense>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">

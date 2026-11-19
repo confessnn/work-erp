@@ -1,5 +1,7 @@
 // 할 일 (supabase/migrations/20261119040000_todos.sql)
 
+import { previousRecord, seriesKey, type RecordEntry } from "@/features/records/series";
+
 export type Todo = {
   id: string;
   title: string;
@@ -18,7 +20,11 @@ export type Todo = {
   record?: string | null;
   /** 일정 자체 할 일: 끝나는 시각이 지났는지 (서버 시각 기준) */
   ended?: boolean;
+  /** 일정 자체 할 일: 같은 일의 지난 회차 기록 */
+  previous?: PreviousRecord | null;
 };
+
+export type PreviousRecord = { date: string; title: string; record: string; series: string };
 
 export type ScheduleKind = "lecture" | "family";
 
@@ -42,6 +48,20 @@ export function withRecords(rows: Todo[], records: Map<string, string | null>, n
       record: records.get(`${target.kind}:${target.id}`) ?? null,
       ended: !!t.source_end_at && Date.parse(t.source_end_at) <= now.getTime(),
     };
+  });
+}
+
+/**
+ * 일정 할 일에 같은 일의 지난 회차 기록을 붙인다.
+ * titles 키는 "lecture:<id>" / "family:<id>", 값은 일정 제목 (할 일 제목에는 시간이 붙어 있어 일정 제목을 쓴다)
+ */
+export function withPrevious(rows: Todo[], titles: Map<string, string>, entries: RecordEntry[], today: string): Todo[] {
+  return rows.map((t) => {
+    const target = recordTarget(t);
+    const title = target && titles.get(`${target.kind}:${target.id}`);
+    if (!target || !title) return t;
+    const prev = previousRecord(entries, title, today, target.id);
+    return { ...t, previous: prev ? { date: prev.date, title: prev.title, record: prev.record, series: seriesKey(title) } : null };
   });
 }
 

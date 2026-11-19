@@ -9,6 +9,7 @@ type NavItem = { href: string; label: string };
 export const NAV: NavItem[] = [
   { href: "/", label: "대시보드" },
   { href: "/lectures", label: "일정" },
+  { href: "/records", label: "기록" },
   { href: "/documents", label: "서류함" },
   { href: "/baby", label: "아기" },
   { href: "/bids", label: "공고" },
