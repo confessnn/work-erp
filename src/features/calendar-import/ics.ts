@@ -2,7 +2,7 @@ import ICAL from "ical.js";
 
 /** 외부 캘린더(iCal/ICS)의 일정 하나. 날짜·시간은 한국 시간 기준. */
 export type CalendarEvent = {
-  uid: string; // 반복 일정은 회차별로 다른 값 (uid#회차시작)
+  uid: string; // 반복 일정은 회차별로 다른 값 (uid#회차 원래 날짜 YYYY-MM-DD). 비교는 occurrenceKey()로
   title: string;
   location: string | null;
   date: string; // YYYY-MM-DD
@@ -36,6 +36,27 @@ function toSeoul(t: ICAL.Time): { date: string; time: string | null } {
     return { date: `${t.year}-${pad(t.month)}-${pad(t.day)}`, time: `${pad(t.hour)}:${pad(t.minute)}` };
   }
   return seoulParts(t.toJSDate());
+}
+
+/** 반복 일정 회차 ID: 원래 회차 날짜(한국 시간)만 쓴다. 시간을 바꿔도 같은 회차로 남도록 */
+const occurrenceUid = (uid: string, recurrenceId: ICAL.Time) => `${uid}#${toSeoul(recurrenceId).date}`;
+
+/**
+ * 같은 일정인지 비교할 때 쓰는 키.
+ * - 옛 형식 "uid#2026-12-01T17:30:00" (회차 시각 포함)도 "uid#2026-12-01" 로 맞춘다.
+ *   UTC 형식("...T083000Z")은 한국 날짜로 바꾼다.
+ * - 구글에서 "이 일정 및 향후 일정"을 바꾸면 반복 일정이 "uid_R20261201T083000" 으로 나뉘는데, 같은 반복으로 본다.
+ */
+export function occurrenceKey(uid: string): string {
+  const i = uid.indexOf("#");
+  const base = (i < 0 ? uid : uid.slice(0, i)).replace(/_R\d{8}(T\d{6}Z?)?(?=@|$)/, "");
+  if (i < 0) return base;
+  const rest = uid.slice(i + 1);
+  const m = /^(\d{4})-?(\d{2})-?(\d{2})(?:T(\d{2}):?(\d{2}):?(\d{2})(Z)?)?$/.exec(rest);
+  if (!m) return `${base}#${rest}`;
+  const [, y, mo, d, h, mi, sec, z] = m;
+  if (z && h) return `${base}#${seoulParts(new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +sec))).date}`;
+  return `${base}#${y}-${mo}-${d}`;
 }
 
 function toEvent(uid: string, summary: string, location: string | null, start: ICAL.Time, end: ICAL.Time | null): CalendarEvent {
@@ -93,7 +114,7 @@ export function parseIcs(text: string, from: string, to: string, maxEvents = 100
       while ((next = it.next()) && guard++ < 2000) {
         const occ = ev.getOccurrenceDetails(next);
         const ce = toEvent(
-          `${ev.uid}#${next.toString()}`,
+          occurrenceUid(ev.uid, next),
           occ.item.summary ?? "",
           occ.item.location ?? null,
           occ.startDate,
@@ -103,11 +124,18 @@ export function parseIcs(text: string, from: string, to: string, maxEvents = 100
         if (inRange(ce.date) && !cancelled(occ.item.component)) out.push(ce);
       }
     } else {
-      const uid = ev.recurrenceId ? `${ev.uid}#${ev.recurrenceId.toString()}` : ev.uid;
+      const uid = ev.recurrenceId ? occurrenceUid(ev.uid, ev.recurrenceId) : ev.uid;
       const ce = toEvent(uid, ev.summary ?? "", ev.location ?? null, ev.startDate, ev.endDate);
       if (inRange(ce.date)) out.push(ce);
     }
     if (out.length >= maxEvents) break;
+  }
+
+  // 하루에 같은 반복 일정 회차가 둘 이상이면(시간 단위 반복 등) 두 번째부터 시각을 붙여 ID가 겹치지 않게 한다
+  const seen = new Set<string>();
+  for (const e of out) {
+    if (seen.has(e.uid)) e.uid = `${e.uid}T${(e.start ?? "").replace(":", "")}`;
+    seen.add(e.uid);
   }
 
   return out.sort((a, b) => (a.date + (a.start ?? "")).localeCompare(b.date + (b.start ?? "")));

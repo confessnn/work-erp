@@ -1,5 +1,6 @@
 import { calculateWithholding, grossFrom, hoursBetween, type IncomeType } from "@/features/lectures/tax";
-import { parseIcs, type CalendarEvent } from "./ics";
+import { feeFields, feeFrom } from "@/features/lectures/fee-memory";
+import { occurrenceKey, parseIcs, type CalendarEvent } from "./ics";
 
 /** 캘린더별 불러오기 설정 (calendar_sources 의 자동 불러오기 컬럼) */
 export type ImportSettings = {
@@ -67,14 +68,71 @@ export function addDays(d: string, n: number) {
   return new Date(Date.UTC(y, m - 1, day + n)).toISOString().slice(0, 10);
 }
 
-/** 중복 비교용 기존 ERP 일정 */
+/** 중복 비교용 기존 ERP 일정. 시간·강의료 칸은 구글에서 시간이 바뀐 일정을 고칠 때 쓴다 */
 export type ExistingLecture = {
   id: string;
   lecture_date: string;
   start_time: string | null;
   title: string;
   external_uid: string | null;
+  end_time?: string | null;
+  hours?: number | string;
+  hourly_rate?: number;
+  gross_amount?: number;
+  income_type?: IncomeType;
+  apply_tax_exemption?: boolean;
 };
+
+/** 구글에서 날짜·시간이 바뀐 일정 → ERP 강의에 고칠 값 (없는 칸은 그대로 둔다) */
+export type LectureUpdate = {
+  id: string;
+  external_uid: string;
+  lecture_date?: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  hours?: number;
+  hourly_rate?: number;
+  gross_amount?: number;
+  income_type?: IncomeType;
+  apply_tax_exemption?: boolean;
+  income_tax?: number;
+  local_tax?: number;
+  expected_net?: number;
+};
+
+const hm = (t: string | null | undefined) => (t ? t.slice(0, 5) : null);
+
+/**
+ * 이미 불러온 강의(l)와 구글 일정(e)을 비교해 고칠 값을 돌려준다. 같으면 null.
+ * - ID가 옛 형식이면 새 형식으로 바꾼다
+ * - 날짜·시간이 바뀌었으면 시간과 강의 시간(hours)을 고치고, 강의료는 시간당이면 다시 계산·고정 금액이면 그대로
+ */
+export function lectureUpdate(l: ExistingLecture, e: CalendarEvent): LectureUpdate | null {
+  const timeChanged =
+    l.lecture_date !== e.date || hm(l.start_time) !== e.start || (l.end_time !== undefined && hm(l.end_time) !== e.end);
+  if (!timeChanged) return l.external_uid === e.uid ? null : { id: l.id, external_uid: e.uid };
+
+  const hours = hoursBetween(e.start, e.end);
+  const fee =
+    l.hours !== undefined && l.hourly_rate !== undefined && l.gross_amount !== undefined
+      ? feeFrom({
+          hours: l.hours,
+          hourly_rate: l.hourly_rate,
+          gross_amount: l.gross_amount,
+          income_type: l.income_type ?? "business",
+          apply_tax_exemption: l.apply_tax_exemption ?? true,
+        })
+      : null;
+  return {
+    id: l.id,
+    external_uid: e.uid,
+    lecture_date: e.date,
+    start_time: e.start,
+    end_time: e.end,
+    hours,
+    ...(fee ? feeFields(hours, fee) : {}),
+  };
+}
 
 /** ERP가 직접 내보낸 일정(구글 ERP 캘린더 / 가족 공유 피드)이면 true → 다시 불러오지 않는다 */
 export function isOwnErpEvent(uid: string) {
@@ -104,11 +162,15 @@ export type ImportPlan = {
   newEvents: CalendarEvent[];
   /** ERP에 이미 있는 강의 → 구글 원본과 연결만 */
   links: { lecture_id: string; external_uid: string }[];
+  /** 이미 불러온 강의인데 구글에서 날짜·시간이 바뀜 (또는 ID가 옛 형식) → 고치기 */
+  updates: LectureUpdate[];
 };
 
 /**
- * 불러올 일정 분류. 이미 불러왔거나 삭제한 것(known), ERP가 내보낸 것, 키워드 불일치는 건너뛴다.
- * 같은 날짜·시각의 ERP 일정이 있으면 새로 만들지 않고 연결한다.
+ * 불러올 일정 분류. 일정은 occurrenceKey 로 비교한다 (반복 일정은 날짜까지만 → 시간을 바꿔도 같은 일정).
+ * - 이미 불러온 강의: 날짜·시간이 바뀌었으면 고친다
+ * - 삭제한 것(known), ERP가 내보낸 것, 키워드 불일치: 건너뛴다
+ * - 같은 날짜·시각의 ERP 일정이 있으면 새로 만들지 않고 연결한다
  */
 export function planImport(
   events: CalendarEvent[],
@@ -117,9 +179,26 @@ export function planImport(
   existing: ExistingLecture[],
 ): ImportPlan {
   const pool = [...existing];
-  const plan: ImportPlan = { newEvents: [], links: [] };
+  const knownKeys = new Set([...known].map(occurrenceKey));
+  const imported = new Map<string, ExistingLecture>();
+  for (const l of existing) {
+    if (!l.external_uid) continue;
+    const k = occurrenceKey(l.external_uid);
+    if (!imported.has(k)) imported.set(k, l);
+  }
+  const plan: ImportPlan = { newEvents: [], links: [], updates: [] };
   for (const e of events) {
-    if (known.has(e.uid) || isOwnErpEvent(e.uid) || !matchesKeyword(e, keyword)) continue;
+    if (isOwnErpEvent(e.uid)) continue;
+    const key = occurrenceKey(e.uid);
+    const mine = imported.get(key);
+    if (mine) {
+      imported.delete(key); // 같은 키의 일정이 또 오면 아래 knownKeys 에서 건너뜀
+      knownKeys.add(key);
+      const u = lectureUpdate(mine, e);
+      if (u) plan.updates.push(u);
+      continue;
+    }
+    if (knownKeys.has(key) || !matchesKeyword(e, keyword)) continue;
     const dup = findDuplicate(e, pool);
     if (dup) {
       if (!dup.external_uid) {
@@ -131,6 +210,7 @@ export function planImport(
     plan.newEvents.push(e);
     // 같은 캘린더 안의 똑같은 일정 두 개도 하나만 만들도록
     pool.push({ id: `new:${e.uid}`, lecture_date: e.date, start_time: e.start, title: e.title, external_uid: e.uid });
+    knownKeys.add(key);
   }
   return plan;
 }
@@ -151,5 +231,5 @@ export async function collectAutoImport(
     throw new Error("캘린더 형식을 읽지 못했습니다.");
   }
   const plan = planImport(events, settings.keyword, known, existing.map((l) => ({ ...l })));
-  return { rows: plan.newEvents.map((e) => eventToRow(e, settings)), links: plan.links };
+  return { rows: plan.newEvents.map((e) => eventToRow(e, settings)), links: plan.links, updates: plan.updates };
 }
