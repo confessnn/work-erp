@@ -1,6 +1,6 @@
 import { calculateWithholding, grossFrom, hoursBetween, type IncomeType } from "@/features/lectures/tax";
 import { feeFields, feeFrom } from "@/features/lectures/fee-memory";
-import { occurrenceKey, parseIcs, type CalendarEvent } from "./ics";
+import { occurrenceKey, parseIcsDetailed, type CalendarEvent } from "./ics";
 
 /** 캘린더별 불러오기 설정 (calendar_sources 의 자동 불러오기 컬럼) */
 export type ImportSettings = {
@@ -225,11 +225,113 @@ export async function collectAutoImport(
 ) {
   const text = await downloadIcs(icsUrl);
   let events: CalendarEvent[];
+  let complete: boolean;
   try {
-    events = parseIcs(text, today, addDays(today, 365));
+    ({ events, complete } = parseIcsDetailed(text, today, addDays(today, 365), 5000));
   } catch {
     throw new Error("캘린더 형식을 읽지 못했습니다.");
   }
   const plan = planImport(events, settings.keyword, known, existing.map((l) => ({ ...l })));
-  return { rows: plan.newEvents.map((e) => eventToRow(e, settings)), links: plan.links, updates: plan.updates };
+  return {
+    rows: plan.newEvents.map((e) => eventToRow(e, settings)),
+    links: plan.links,
+    updates: plan.updates,
+    /** 구글에서 지운 강의 판단용. 다 못 읽었으면 null */
+    events: complete ? events : null,
+  };
+}
+
+/** 구글에서 지웠는지 볼 ERP 강의 (DB가 오늘 이후·수령 안 함·서류 제출 없음으로 이미 거른 것) */
+export type RemovalCandidate = {
+  id: string;
+  lecture_date: string;
+  external_uid: string | null;
+  google_event_id: string | null;
+  google_synced_at: string | null;
+  updated_at: string;
+};
+
+/** 한 번에 이보다 많이, 그리고 후보의 절반 넘게 지워야 하면 캘린더를 잘못 받은 것으로 보고 멈춘다 */
+const MAX_SAFE_REMOVALS = 10;
+/** ERP가 구글에 올린 지 이 시간이 안 된 일정은 iCal 주소에 아직 안 보일 수 있어 건너뛴다 */
+const PUSH_SETTLE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 구글 캘린더에서 지운 일정 → 지울 ERP 강의 id.
+ * events: 사용자의 모든 캘린더에서 [from, to] 범위로 받은 일정 (하나라도 못 받았으면 부르지 않는다)
+ * - 구글에서 불러온 강의: 같은 일정(occurrenceKey)이 없으면 지움
+ * - ERP가 구글에 올린 강의: ERP 전용 캘린더도 받아왔고(erpCalendarCovered), 올린 뒤 ERP에서 안 고쳤고,
+ *   올린 지 하루가 지났는데 구글에 없으면 지움
+ */
+export function planRemovals(
+  events: CalendarEvent[],
+  lectures: RemovalCandidate[],
+  opts: { from: string; to: string; erpCalendarCovered: boolean; now: number },
+): { ids: string[]; blocked?: string } {
+  if (events.length === 0) return { ids: [], blocked: "캘린더에 일정이 하나도 없어 지우기를 건너뜀" };
+  const keys = new Set(events.map((e) => occurrenceKey(e.uid)));
+  const erpIds = new Set(events.filter((e) => isOwnErpEvent(e.uid)).map((e) => e.uid.split("@")[0]));
+
+  const inRange = lectures.filter((l) => l.lecture_date >= opts.from && l.lecture_date <= opts.to);
+  const ids = inRange
+    .filter((l) => {
+      if (l.external_uid) return !keys.has(occurrenceKey(l.external_uid));
+      if (!l.google_event_id || !opts.erpCalendarCovered || !l.google_synced_at) return false;
+      const synced = Date.parse(l.google_synced_at);
+      if (Date.parse(l.updated_at) > synced || opts.now - synced < PUSH_SETTLE_MS) return false;
+      return !erpIds.has(l.google_event_id);
+    })
+    .map((l) => l.id);
+
+  if (ids.length > MAX_SAFE_REMOVALS && ids.length * 2 > inRange.length) {
+    return { ids: [], blocked: `구글에서 없어진 강의가 ${ids.length}건이나 돼서 지우지 않음 (캘린더 주소 확인 필요)` };
+  }
+  return { ids };
+}
+
+/** 캘린더 주소가 ERP 전용 구글 캘린더의 것인지 (구글 iCal 주소에는 캘린더 ID가 들어 있다) */
+export function isErpCalendarUrl(icsUrl: string, erpCalendarId: string | null) {
+  if (!erpCalendarId) return false;
+  try {
+    return decodeURIComponent(icsUrl).includes(erpCalendarId);
+  } catch {
+    return icsUrl.includes(erpCalendarId);
+  }
+}
+
+export type RemovalContext = {
+  sources: { id: string; ics_url: string }[];
+  erp_calendar_id: string | null;
+  lectures: RemovalCandidate[];
+};
+
+/**
+ * 사용자의 모든 캘린더를 확인해 구글에서 지운 강의 id 를 고른다.
+ * already: 이번에 이미 받아온 캘린더의 일정 (다시 받지 않음). 하나라도 못 받으면 아무것도 지우지 않는다.
+ */
+export async function collectRemovals(
+  ctx: RemovalContext,
+  already: Map<string, CalendarEvent[] | null>,
+  today: string,
+  now = Date.now(),
+): Promise<{ ids: string[]; blocked?: string }> {
+  if (ctx.lectures.length === 0 || ctx.sources.length === 0) return { ids: [] };
+  const from = today;
+  const to = addDays(today, 365);
+  const all: CalendarEvent[] = [];
+  for (const s of ctx.sources) {
+    let evs = already.get(s.id);
+    if (evs === undefined) {
+      try {
+        const r = parseIcsDetailed(await downloadIcs(s.ics_url), from, to, 5000);
+        evs = r.complete ? r.events : null;
+      } catch {
+        return { ids: [], blocked: "받아오지 못한 캘린더가 있어 지우기를 건너뜀" };
+      }
+    }
+    if (!evs) return { ids: [], blocked: "캘린더 일정을 다 읽지 못해 지우기를 건너뜀" };
+    all.push(...evs);
+  }
+  const erpCalendarCovered = ctx.sources.some((s) => isErpCalendarUrl(s.ics_url, ctx.erp_calendar_id));
+  return planRemovals(all, ctx.lectures, { from, to, erpCalendarCovered, now });
 }

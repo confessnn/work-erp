@@ -3,8 +3,11 @@ import type { CalendarEvent } from "./ics";
 import {
   eventToRow,
   findDuplicate,
+  isErpCalendarUrl,
   isOwnErpEvent,
   lectureUpdate,
+  planRemovals,
+  type RemovalCandidate,
   matchesKeyword,
   planImport,
   type ExistingLecture,
@@ -189,5 +192,81 @@ describe("eventToRow", () => {
       org_from_location: false,
     });
     expect(row).toMatchObject({ hours: 0, gross_amount: 0, expected_net: 0, organization: null });
+  });
+});
+
+describe("planRemovals (구글에서 지운 일정 → ERP 강의 삭제)", () => {
+  const NOW = Date.parse("2026-11-21T15:00:00Z");
+  const opts = { from: "2026-11-21", to: "2027-11-21", erpCalendarCovered: true, now: NOW };
+  const lec = (over: Partial<RemovalCandidate>): RemovalCandidate => ({
+    id: "L1",
+    lecture_date: "2026-12-04",
+    external_uid: "4doo@google.com#2026-12-04T18:00:00",
+    google_event_id: null,
+    google_synced_at: null,
+    updated_at: "2026-11-18T21:51:36Z",
+    ...over,
+  });
+  const keep = ev({ uid: "4doo@google.com#2026-12-03", date: "2026-12-03" });
+
+  it("구글에서 없어진 불러온 강의는 지움 (옛 형식 ID도)", () => {
+    expect(planRemovals([keep], [lec({})], opts).ids).toEqual(["L1"]);
+  });
+
+  it("구글에 아직 있으면 (시간이 바뀌었어도) 그대로", () => {
+    const still = ev({ uid: "4doo@google.com#2026-12-04", date: "2026-12-04", start: "19:00" });
+    expect(planRemovals([still], [lec({})], opts).ids).toEqual([]);
+  });
+
+  it("범위 밖(지난) 강의는 지우지 않음", () => {
+    expect(planRemovals([keep], [lec({ lecture_date: "2026-11-20" })], opts).ids).toEqual([]);
+  });
+
+  it("받아온 일정이 하나도 없으면 아무것도 지우지 않음", () => {
+    expect(planRemovals([], [lec({})], opts)).toMatchObject({ ids: [] });
+    expect(planRemovals([], [lec({})], opts).blocked).toBeTruthy();
+  });
+
+  it("한꺼번에 너무 많이 없어지면 멈춤", () => {
+    const many = Array.from({ length: 12 }, (_, i) => lec({ id: `L${i}`, external_uid: `x${i}@google.com` }));
+    const r = planRemovals([keep], many, opts);
+    expect(r.ids).toEqual([]);
+    expect(r.blocked).toContain("12건");
+  });
+
+  describe("ERP가 구글에 올린 강의", () => {
+    const pushed = lec({
+      id: "P1",
+      lecture_date: "2026-12-21",
+      external_uid: null,
+      google_event_id: "erp84f1e44f8d1c4cb984d50fcc9a0c4d11",
+      google_synced_at: "2026-11-19T07:29:10Z",
+      updated_at: "2026-11-19T07:29:08Z",
+    });
+
+    it("구글에서 지웠으면 지움", () => {
+      expect(planRemovals([keep], [pushed], opts).ids).toEqual(["P1"]);
+    });
+    it("구글에 있으면 그대로", () => {
+      const copy = ev({ uid: "erp84f1e44f8d1c4cb984d50fcc9a0c4d11@google.com", date: "2026-12-21" });
+      expect(planRemovals([keep, copy], [pushed], opts).ids).toEqual([]);
+    });
+    it("ERP 캘린더를 받아오지 않았으면 판단하지 않음", () => {
+      expect(planRemovals([keep], [pushed], { ...opts, erpCalendarCovered: false }).ids).toEqual([]);
+    });
+    it("올린 뒤 ERP에서 고쳤거나(아직 안 올라감) 올린 지 하루가 안 됐으면 그대로", () => {
+      expect(planRemovals([keep], [{ ...pushed, updated_at: "2026-11-20T00:00:00Z" }], opts).ids).toEqual([]);
+      expect(planRemovals([keep], [{ ...pushed, google_synced_at: "2026-11-21T10:00:00Z", updated_at: "2026-11-21T09:00:00Z" }], opts).ids).toEqual([]);
+      expect(planRemovals([keep], [{ ...pushed, google_synced_at: null }], opts).ids).toEqual([]);
+    });
+  });
+});
+
+describe("isErpCalendarUrl", () => {
+  const id = "41c0ba46df13@group.calendar.google.com";
+  it("구글 iCal 주소에 들어 있는 캘린더 ID로 판단", () => {
+    expect(isErpCalendarUrl("https://calendar.google.com/calendar/ical/41c0ba46df13%40group.calendar.google.com/private-x/basic.ics", id)).toBe(true);
+    expect(isErpCalendarUrl("https://calendar.google.com/calendar/ical/other%40gmail.com/private-x/basic.ics", id)).toBe(false);
+    expect(isErpCalendarUrl("https://x/basic.ics", null)).toBe(false);
   });
 });

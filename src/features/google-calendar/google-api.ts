@@ -1,5 +1,5 @@
 import "server-only";
-import type { GoogleEvent } from "./event";
+import type { GoogleEvent, GoogleStart } from "./event";
 
 /**
  * 구글 OAuth / Calendar API 최소 클라이언트 (fetch 만 사용).
@@ -148,12 +148,52 @@ export async function updateEvent(token: string, calendarId: string, eventId: st
   await call(token, "PUT", `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, ev);
 }
 
-export async function deleteEvent(token: string, calendarId: string, eventId: string) {
+/** 지웠으면 true, 이미 없으면(404/410) false */
+export async function deleteEvent(token: string, calendarId: string, eventId: string): Promise<boolean> {
   try {
     await call(token, "DELETE", `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`);
+    return true;
   } catch (e) {
     // 이미 지워진 일정이면 성공으로 본다
-    if (e instanceof GoogleApiError && (e.status === 404 || e.status === 410)) return;
+    if (e instanceof GoogleApiError && (e.status === 404 || e.status === 410)) return false;
+    throw e;
+  }
+}
+
+export type GoogleEventInfo = {
+  id: string;
+  status?: string;
+  recurrence?: string[];
+  start: GoogleStart;
+  originalStartTime?: GoogleStart;
+};
+
+/** 일정 하나 읽기. 없으면 null */
+export async function getEvent(token: string, calendarId: string, eventId: string): Promise<GoogleEventInfo | null> {
+  try {
+    return await call<GoogleEventInfo>(
+      token,
+      "GET",
+      `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    );
+  } catch (e) {
+    if (e instanceof GoogleApiError && (e.status === 404 || e.status === 410)) return null;
+    throw e;
+  }
+}
+
+/** 반복 일정의 회차들 (timeMin ~ timeMax, RFC3339) */
+export async function listInstances(token: string, calendarId: string, eventId: string, timeMin: string, timeMax: string) {
+  const q = new URLSearchParams({ timeMin, timeMax, maxResults: "50" });
+  try {
+    const r = await call<{ items?: GoogleEventInfo[] }>(
+      token,
+      "GET",
+      `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}/instances?${q}`,
+    );
+    return r.items ?? [];
+  } catch (e) {
+    if (e instanceof GoogleApiError && (e.status === 404 || e.status === 410)) return [];
     throw e;
   }
 }

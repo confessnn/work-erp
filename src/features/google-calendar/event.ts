@@ -77,3 +77,53 @@ export function lectureToGoogleEvent(
     extendedProperties: { private: { erpLectureId: l.id } },
   };
 }
+
+/**
+ * 구글에서 불러온 강의의 ID(external_uid) → 구글 일정 ID와 (반복 일정이면) 회차 날짜.
+ * - 구글 iCal 의 UID 는 "<일정ID>@google.com". 반복 회차는 뒤에 "#YYYY-MM-DD" (옛 형식 "#YYYY-MM-DDTHH:MM:SS")
+ * - 구글에서 만든 일정이 아니면(다른 앱에서 가져온 UID 등) null → 구글에서 지울 수 없음
+ */
+export function googleTargetFromUid(uid: string): { eventId: string; date: string | null } | null {
+  const i = uid.indexOf("#");
+  const base = i < 0 ? uid : uid.slice(0, i);
+  const m = /^([a-z0-9_]+)@google\.com$/.exec(base);
+  if (!m) return null;
+  if (i < 0) return { eventId: m[1], date: null };
+  const d = /^(\d{4})-?(\d{2})-?(\d{2})/.exec(uid.slice(i + 1));
+  return d ? { eventId: m[1], date: `${d[1]}-${d[2]}-${d[3]}` } : null;
+}
+
+/** 구글 API 일정의 시작 (시간 있는 일정 / 종일 일정) */
+export type GoogleStart = { dateTime?: string; date?: string; timeZone?: string };
+
+/** "2026-12-01T18:00:00+09:00" 같은 시각의 한국 시간 HH:MM:SS */
+function seoulClock(dateTime: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(dateTime));
+}
+
+/**
+ * 반복 일정의 한 회차 ID (구글 규칙: "<일정ID>_<원래 시작 UTC YYYYMMDDTHHMMSSZ>", 종일이면 "<일정ID>_<YYYYMMDD>").
+ * 회차의 원래 시작 시각 = 반복 일정(master)의 시작 시각(한국 시간) + 회차 날짜.
+ */
+export function instanceIdFor(eventId: string, masterStart: GoogleStart, date: string): string | null {
+  if (masterStart.date) return `${eventId}_${date.replaceAll("-", "")}`;
+  if (!masterStart.dateTime) return null;
+  const utc = new Date(`${date}T${seoulClock(masterStart.dateTime)}+09:00`);
+  if (Number.isNaN(utc.getTime())) return null;
+  return `${eventId}_${utc.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")}`;
+}
+
+/** 구글 일정 시작의 한국 날짜 (회차 찾기용) */
+export function seoulDateOf(start: GoogleStart): string | null {
+  if (start.date) return start.date;
+  if (!start.dateTime) return null;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(
+    new Date(start.dateTime),
+  );
+}

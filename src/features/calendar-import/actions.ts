@@ -9,6 +9,8 @@ import type { IncomeType } from "@/features/lectures/tax";
 import { normalizeIcsUrl, type CalendarEvent } from "./ics";
 import {
   collectAutoImport,
+  collectRemovals,
+  type RemovalContext,
   eventToRow,
   planImport,
   type ExistingLecture,
@@ -69,9 +71,9 @@ export async function syncNow(id: string): Promise<SourceState> {
 
   const { known, existing } = await loadDedupeContext(supabase);
 
-  let rows, links, updates;
+  let rows, links, updates, events;
   try {
-    ({ rows, links, updates } = await collectAutoImport(s.ics_url, s as ImportSettings, known, existing, todayInSeoul()));
+    ({ rows, links, updates, events } = await collectAutoImport(s.ics_url, s as ImportSettings, known, existing, todayInSeoul()));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "불러오기 실패";
     await supabase.from("calendar_sources").update({ last_synced_at: new Date().toISOString(), last_sync_result: `실패: ${msg}` }).eq("id", id);
@@ -86,19 +88,22 @@ export async function syncNow(id: string): Promise<SourceState> {
     const { error } = await supabase.from("lectures").insert(rows.map((r) => ({ ...withRememberedFee(r, fees), user_id: userId })));
     if (error) return { error: `저장 실패: ${error.message}` };
   }
+  const { removed, blocked } = await removeGoneLectures(supabase, new Map([[id, events]]));
   await supabase
     .from("calendar_sources")
     .update({
       last_synced_at: new Date().toISOString(),
-      last_sync_result: `수동: ${rows.length}건 새로 추가${linked ? ` · ${linked}건 기존 일정과 연결` : ""}${updated ? ` · ${updated}건 시간 변경 반영` : ""}`,
+      last_sync_result: `수동: ${rows.length}건 새로 추가${linked ? ` · ${linked}건 기존 일정과 연결` : ""}${updated ? ` · ${updated}건 시간 변경 반영` : ""}${removed ? ` · ${removed}건 구글에서 지워져 삭제` : ""}`,
     })
     .eq("id", id);
-  if (linked || updated) schedulePush(supabase); // ERP 캘린더의 사본 정리
+  if (linked || updated || removed) schedulePush(supabase); // ERP 캘린더의 사본 정리
   revalidatePath("/", "layout");
   const parts = [
     rows.length && `${rows.length}개 새로 불러옴`,
     linked && `${linked}개는 ERP에 이미 있어 연결만 함`,
     updated && `${updated}개는 구글에서 바뀐 시간으로 고침`,
+    removed && `${removed}개는 구글에서 지워져 ERP에서도 삭제함`,
+    blocked,
   ].filter(Boolean);
   return { message: parts.length ? `${parts.join(", ")}.` : "새로 불러올 일정이 없습니다." };
 }
@@ -146,6 +151,25 @@ async function linkLectures(supabase: Db, links: { lecture_id: string; external_
     n += data?.length ?? 0;
   }
   return n;
+}
+
+/**
+ * 구글 캘린더에서 지운 일정 → ERP 강의도 삭제 (오늘 이후·수령 안 함·서류 제출 없음만).
+ * 사용자의 모든 캘린더를 받아와 확인하고, 하나라도 못 받으면 지우지 않는다. 실패해도 불러오기는 계속.
+ */
+async function removeGoneLectures(supabase: Db, already: Map<string, CalendarEvent[] | null>) {
+  try {
+    const { data: ctx, error } = await supabase.rpc("removal_context");
+    if (error) throw new Error(error.message);
+    const { ids, blocked } = await collectRemovals(ctx as RemovalContext, already, todayInSeoul());
+    if (!ids.length) return { removed: 0, blocked };
+    const { data: n, error: e1 } = await supabase.rpc("remove_gone_lectures", { p_ids: ids });
+    if (e1) throw new Error(e1.message);
+    return { removed: Number(n) || 0 };
+  } catch (e) {
+    console.error("구글에서 지운 강의 정리 실패", e instanceof Error ? e.message : e);
+    return { removed: 0 };
+  }
 }
 
 /** 구글에서 날짜·시간이 바뀐 불러온 강의 고치기 (적힌 칸만 바꾼다) */
