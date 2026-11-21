@@ -2,12 +2,12 @@
 
 export type Person = "dad" | "mom" | "baby" | "all";
 
-/** 누구의 일정인지. 색은 달력 칸과 목록에서 같이 쓴다. */
+/** 누구의 일정인지. 색은 달력 칸과 목록에서 같이 쓴다. 강의 색(미수령 살구·수령 민트, 가족 달력은 회색)과 겹치지 않게 고른다. */
 export const PERSONS: { v: Person; label: string; cls: string }[] = [
-  { v: "dad", label: "아빠", cls: "bg-lavender/60" },
-  { v: "mom", label: "엄마", cls: "bg-peach/60" },
-  { v: "baby", label: "아기", cls: "bg-mint/70" },
-  { v: "all", label: "가족", cls: "bg-ochre/50" },
+  { v: "dad", label: "아빠", cls: "bg-sky" },
+  { v: "mom", label: "엄마", cls: "bg-rose" },
+  { v: "baby", label: "아기", cls: "bg-lilac" },
+  { v: "all", label: "가족", cls: "bg-ochre/70" },
 ];
 export const personOf = (v: string) => PERSONS.find((p) => p.v === v) ?? PERSONS[3];
 

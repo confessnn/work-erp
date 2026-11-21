@@ -20,6 +20,10 @@
   --peach: #f4cdb8;
   --ochre: #ecd79c;
   --mint: #bfe0d4;
+  /* 가족 일정 사람별 색. 강의(살구·민트)와 겹치지 않게 파랑·분홍·보라를 따로 둔다 */
+  --sky: #bcd8f4;
+  --rose: #f2bcd9;
+  --lilac: #dcc9f2;
 }
 
 @theme inline {
@@ -38,6 +42,9 @@
   --color-peach: var(--peach);
   --color-ochre: var(--ochre);
   --color-mint: var(--mint);
+  --color-sky: var(--sky);
+  --color-rose: var(--rose);
+  --color-lilac: var(--lilac);
   --font-sans: "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
 
