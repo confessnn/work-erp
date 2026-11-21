@@ -33,7 +33,7 @@ describe("표시", () => {
   it("답장에 되돌리기 버튼", () => {
     const r = addedReply({ person: "baby", title: "예방<접종>", date: "2026-11-19", start: "10:00", end: null, memo: null }, "11111111-2222-3333-4444-555555555555");
     expect(r.html).toContain("예방&lt;접종&gt;");
-    expect(r.html).toContain("아기 일정");
+    expect(r.html).toContain("임채현 일정");
     expect(r.buttons[0]).toEqual({ text: "되돌리기", callback_data: "undo:11111111-2222-3333-4444-555555555555" });
   });
 });

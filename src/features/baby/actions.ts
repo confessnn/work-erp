@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { createFolder, folderUsable, getFile, trashFile } from "@/features/documents/drive";
-import { driveContext, failResult } from "@/features/google-drive/context";
+import { failResult } from "@/features/google-drive/context";
+import { getFamilyRole } from "@/features/family/queries";
+import { babyDriveContext, type BabyDriveContext } from "./drive";
 import { GoogleApiError } from "@/features/google-calendar/google-api";
 import { monthKey } from "./age";
 
@@ -11,6 +13,7 @@ type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const isDate = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
 
 export async function saveBabyInfo(fd: FormData) {
+  if ((await getFamilyRole()).role === "member") return;
   const { supabase, userId } = await requireUser();
   const name = String(fd.get("baby_name") ?? "").trim().slice(0, 30) || null;
   const birth = String(fd.get("baby_birth_date") ?? "");
@@ -23,16 +26,18 @@ export async function saveBabyInfo(fd: FormData) {
   revalidatePath("/baby");
 }
 
-type Ctx = Awaited<ReturnType<typeof driveContext>>;
+type Ctx = BabyDriveContext;
+
+/** 날짜 바꾸기·삭제는 가족을 만든 사람만 */
+const ownerOnly = async () =>
+  (await getFamilyRole()).role === "member" ? { ok: false as const, error: "날짜 바꾸기와 삭제는 대표 계정에서만 할 수 있어요." } : null;
 
 /** work-erp/아기 사진 폴더 (없으면 생성) */
 async function babyRoot(ctx: Ctx) {
-  if (await folderUsable(ctx.token, ctx.conn.drive_baby_folder_id)) return ctx.conn.drive_baby_folder_id as string;
-  const workErpRoot = (await getFile(ctx.token, ctx.folders.docs)).parents?.[0];
+  if (await folderUsable(ctx.token, ctx.babyFolder)) return ctx.babyFolder as string;
+  const workErpRoot = (await getFile(ctx.token, ctx.docsFolder)).parents?.[0];
   const id = (await createFolder(ctx.token, "아기 사진", workErpRoot)).id;
-  await ctx.supabase.from("google_connections").update({ drive_baby_folder_id: id }).eq("user_id", ctx.userId);
-  // 최상위가 새로 생겼으면 예전 날짜 폴더 기록은 쓸모없음
-  await ctx.supabase.from("baby_folders").delete().eq("user_id", ctx.userId);
+  await ctx.setBabyRoot(id);
   return id;
 }
 
@@ -41,7 +46,7 @@ async function folderFor(ctx: Ctx, key: string, parent: string, known: Map<strin
   const cached = known.get(key);
   if (cached && (await folderUsable(ctx.token, cached))) return cached;
   const id = (await createFolder(ctx.token, key, parent)).id;
-  await ctx.supabase.from("baby_folders").upsert({ user_id: ctx.userId, key, folder_id: id });
+  await ctx.supabase.from("baby_folders").upsert({ user_id: ctx.ownerId, key, folder_id: id });
   known.set(key, id);
   return id;
 }
@@ -68,7 +73,7 @@ export async function prepareBabyUpload(input: { dates: string[]; sha1s: string[
   try {
     const dates = input.dates.filter(isDate).slice(0, 400);
     if (!dates.length) return { ok: false, error: "사진 날짜를 확인하지 못했습니다." };
-    const ctx = await driveContext();
+    const ctx = await babyDriveContext();
     const folders = await dateFolders(ctx, dates);
     const sha1s = input.sha1s.filter((s) => /^[0-9a-f]{40}$/.test(s)).slice(0, 1000);
     const { data } = sha1s.length
@@ -95,12 +100,13 @@ export async function registerBabyPhoto(input: {
     if (!isDate(input.takenDate) || !/^[0-9a-f]{40}$/.test(input.sha1)) return { ok: false, error: "사진 정보가 올바르지 않습니다." };
     const { supabase } = await requireUser();
     const { data: folder } = await supabase.from("baby_folders").select("folder_id").eq("key", input.takenDate).maybeSingle();
-    const ctx = await driveContext();
+    const ctx = await babyDriveContext();
     const f = await getFile(ctx.token, input.driveFileId);
     if (!folder || !f.parents?.includes(folder.folder_id)) return { ok: false, error: "날짜 폴더에 올라간 사진이 아닙니다." };
 
     const thumb = input.thumb?.startsWith("data:image/jpeg;base64,") && input.thumb.length < 120_000 ? input.thumb : null;
     const { error } = await supabase.from("baby_photos").insert({
+      user_id: ctx.ownerId,
       drive_file_id: f.id,
       file_name: f.name,
       mime_type: f.mimeType,
@@ -135,7 +141,9 @@ export async function refreshBabyPage() {
 export async function changePhotoDate(id: string, newDate: string): Promise<Result> {
   try {
     if (!isDate(newDate)) return { ok: false, error: "날짜가 올바르지 않습니다." };
-    const ctx = await driveContext();
+    const denied = await ownerOnly();
+    if (denied) return denied;
+    const ctx = await babyDriveContext();
     const { data: p } = await ctx.supabase.from("baby_photos").select("drive_file_id, taken_date").eq("id", id).single();
     if (!p) return { ok: false, error: "사진을 찾지 못했습니다." };
     const folders = await dateFolders(ctx, [newDate]);
@@ -156,7 +164,9 @@ export async function changePhotoDate(id: string, newDate: string): Promise<Resu
 /** 사진 삭제: 앱 목록에서 지우고 드라이브 파일은 휴지통으로 (30일 안에 복구 가능) */
 export async function deleteBabyPhoto(id: string): Promise<Result> {
   try {
-    const ctx = await driveContext();
+    const denied = await ownerOnly();
+    if (denied) return denied;
+    const ctx = await babyDriveContext();
     const { data: p } = await ctx.supabase.from("baby_photos").select("drive_file_id").eq("id", id).single();
     if (p) await trashFile(ctx.token, p.drive_file_id);
     await ctx.supabase.from("baby_photos").delete().eq("id", id);

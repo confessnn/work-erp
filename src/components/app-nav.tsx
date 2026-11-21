@@ -11,7 +11,7 @@ export const NAV: NavItem[] = [
   { href: "/lectures", label: "일정" },
   { href: "/records", label: "기록" },
   { href: "/documents", label: "서류함" },
-  { href: "/baby", label: "아기" },
+  { href: "/baby", label: "임채현" },
   { href: "/bids", label: "공고" },
   { href: "/content", label: "콘텐츠" },
   { href: "/tools", label: "수업도구" },
@@ -20,7 +20,10 @@ export const NAV: NavItem[] = [
 ];
 
 /** 초대받은 가족 계정의 메뉴 */
-export const MEMBER_NAV: NavItem[] = [{ href: "/family", label: "가족 달력" }];
+export const MEMBER_NAV: NavItem[] = [
+  { href: "/family", label: "가족 달력" },
+  { href: "/baby", label: "임채현" },
+];
 
 /** 초대받은 공고 열람자(동생) 계정의 메뉴 */
 export const BID_VIEWER_NAV: NavItem[] = [{ href: "/bids", label: "한일ENG 공고" }];

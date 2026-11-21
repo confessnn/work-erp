@@ -52,7 +52,7 @@ describe("buildMorning", () => {
     expect(mail.subject).toBe("[오늘 할 일] 11/19 (목) · 강의 1건 · 가족 1건 · 새 공고 1건");
     const [todayPart, tomorrowPart] = mail.html.split("내일 11/20 (금)");
     expect(todayPart).toContain("09:00~12:00</strong> 엑셀 실무 · 청주시청");
-    expect(todayPart).toContain("[가족·아기]");
+    expect(todayPart).toContain("[가족·임채현]");
     expect(todayPart).toContain("종일");
     expect(tomorrowPart).toContain("한글 기초");
     expect(mail.html).toContain("원가계산 용역");
