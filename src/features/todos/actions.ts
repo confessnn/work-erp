@@ -32,10 +32,11 @@ export async function setTodoDone(id: string, done: boolean): Promise<Result> {
   return { ok: true };
 }
 
-/** 내일로 미루기 */
-export async function postponeTodo(id: string): Promise<Result> {
+/** 하루 미루기: 보고 있는 날(없으면 오늘)의 다음 날로 */
+export async function postponeTodo(id: string, from?: string): Promise<Result> {
   const { supabase } = await requireUser();
-  const { error } = await supabase.from("todos").update({ due_date: addDays(todayInSeoul(), 1), done_at: null }).eq("id", id);
+  const base = from && DAY.test(from) && from > todayInSeoul() ? from : todayInSeoul();
+  const { error } = await supabase.from("todos").update({ due_date: addDays(base, 1), done_at: null }).eq("id", id);
   if (error) return { ok: false, message: error.message };
   revalidatePath("/");
   return { ok: true };
@@ -84,4 +85,23 @@ export async function saveTodoNote(id: string, raw: string): Promise<Result> {
   if (error) return { ok: false, message: `저장하지 못했어요: ${error.message}` };
   revalidatePath("/");
   return { ok: true };
+}
+
+/**
+ * 다른 날의 할 일 (위젯에서 날짜를 넘길 때). 그날로 적어 둔 할 일만 보여 준다.
+ * 일정에서 불러오는 할 일은 그날이 되면 자동으로 들어오므로 여기서는 미리 만들지 않는다.
+ */
+export async function listTodosOn(day: string): Promise<{ ok: true; todos: Todo[] } | { ok: false; message: string }> {
+  if (!DAY.test(day)) return { ok: false, message: "날짜가 올바르지 않아요." };
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase
+    .from("todos")
+    .select(TODO_COLUMNS)
+    .is("dismissed_at", null)
+    .eq("due_date", day)
+    .order("created_at")
+    .limit(200);
+  if (error) return { ok: false, message: error.message };
+  const rows = (data ?? []) as Todo[];
+  return { ok: true, todos: [...rows.filter((t) => !t.done_at), ...rows.filter((t) => t.done_at)] };
 }
