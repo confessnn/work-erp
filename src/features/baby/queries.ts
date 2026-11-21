@@ -15,6 +15,7 @@ export type BabyPhoto = {
   id: string;
   drive_file_id: string;
   file_name: string;
+  mime_type: string | null;
   taken_at: string | null;
   taken_date: string;
   date_source: "exif" | "file" | "manual";
@@ -41,7 +42,7 @@ export async function listPhotosInMonth(month: string): Promise<BabyPhoto[]> {
   const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
   const { data } = await supabase
     .from("baby_photos")
-    .select("id, drive_file_id, file_name, taken_at, taken_date, date_source, thumb")
+    .select("id, drive_file_id, file_name, mime_type, taken_at, taken_date, date_source, thumb")
     .gte("taken_date", `${month}-01`)
     .lt("taken_date", next)
     .order("taken_date", { ascending: true })

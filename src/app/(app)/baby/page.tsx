@@ -55,9 +55,9 @@ export default async function BabyPage({ searchParams }: PageProps<"/baby">) {
           )}
 
           <section className="card space-y-3">
-            <h2 className="section-title">사진 올리기</h2>
+            <h2 className="section-title">사진·동영상 올리기</h2>
             <p className="text-sm text-muted">
-              여러 장을 한 번에 고르면 사진에 기록된 <b>찍은 날짜</b>로 나눠서 구글 드라이브 <b>work-erp/아기 사진/2026-11/2026-11-05</b>{" "}
+              사진과 동영상을 여러 개 한 번에 고르면 기록된 <b>찍은 날짜</b>로 나눠서 구글 드라이브 <b>work-erp/아기 사진/2026-11/2026-11-05</b>{" "}
               같은 날짜 폴더에 넣습니다. 이미 올린 사진은 건너뜁니다.
             </p>
             <PhotoUploader birthDate={baby.birthDate} />

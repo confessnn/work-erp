@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { changePhotoDate, deleteBabyPhoto } from "../actions";
 import { ageLabel } from "../age";
 import type { BabyPhoto } from "../queries";
+import { isVideo } from "../video";
 
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 const dayTitle = (d: string) => {
@@ -52,13 +53,18 @@ export function PhotoGallery({
                     setErr(null);
                     setOpen(p);
                   }}
-                  className="block aspect-square w-full overflow-hidden rounded-xl bg-bg"
+                  className="relative block aspect-square w-full overflow-hidden rounded-xl bg-bg"
                 >
                   {p.thumb ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={p.thumb} alt="" loading="lazy" className="h-full w-full object-cover" />
                   ) : (
                     <span className="flex h-full items-center justify-center p-1 text-center text-xs text-muted">{p.file_name}</span>
+                  )}
+                  {isVideo(p.mime_type, p.file_name) && (
+                    <span className="absolute right-1 top-1 rounded bg-black/60 px-1.5 text-xs text-white" aria-label="동영상">
+                      ▶
+                    </span>
                   )}
                 </button>
               </li>
@@ -70,9 +76,20 @@ export function PhotoGallery({
       {open && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center" onClick={() => setOpen(null)}>
           <div className="card w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
-            {open.thumb && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={open.thumb} alt="" className="mx-auto max-h-64 rounded-xl" />
+            {isVideo(open.mime_type, open.file_name) ? (
+              <video
+                src={`/baby/photo/${open.id}`}
+                poster={open.thumb ?? undefined}
+                controls
+                playsInline
+                preload="metadata"
+                className="mx-auto max-h-[60vh] w-full rounded-xl bg-black"
+              />
+            ) : (
+              open.thumb && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={open.thumb} alt="" className="mx-auto max-h-64 rounded-xl" />
+              )
             )}
             <p className="text-sm">
               {dayTitle(open.taken_date)} {timeOf(open.taken_at)}
@@ -81,7 +98,7 @@ export function PhotoGallery({
               </span>
             </p>
             <a href={`/baby/photo/${open.id}`} target="_blank" rel="noreferrer" className="btn-primary w-full">
-              원본 크게 보기
+              {isVideo(open.mime_type, open.file_name) ? "새 창에서 크게 보기" : "원본 크게 보기"}
             </a>
             {showDriveLink && (
               <a
@@ -117,7 +134,7 @@ export function PhotoGallery({
                 disabled={pending}
                 className="text-danger underline"
                 onClick={() => {
-                  if (!confirm("이 사진을 삭제할까요? 드라이브에서는 휴지통으로 이동합니다(30일 안에 복구 가능).")) return;
+                  if (!confirm("삭제할까요? 드라이브에서는 휴지통으로 이동합니다(30일 안에 복구 가능).")) return;
                   start(async () => {
                     const r = await deleteBabyPhoto(open.id);
                     if (!r.ok) return setErr(r.error);
