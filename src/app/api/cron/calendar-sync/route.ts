@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
   const today = todayInSeoul();
   const knownByUser = new Map<string, Set<string>>();
-  const results: { source: string; added?: number; linked?: number; error?: string }[] = [];
+  const results: { source: string; added?: number; linked?: number; updated?: number; error?: string }[] = [];
 
   for (const job of (jobs ?? []) as Job[]) {
     try {
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
       }
       const { data: existing, error: e0 } = await db.rpc("cron_existing_lectures", { p_secret: secret, p_user: job.user_id });
       if (e0) throw new Error(e0.message);
-      const { rows: collected, links } = await collectAutoImport(job.ics_url, job, known, (existing ?? []) as ExistingLecture[], today);
+      const { rows: collected, links, updates } = await collectAutoImport(job.ics_url, job, known, (existing ?? []) as ExistingLecture[], today);
       // 같은 제목의 일정에 입력해 둔 강의료를 새 일정에 넣는다
       const { data: feeRecords, error: e2 } = await db.rpc("cron_lecture_fees", { p_secret: secret, p_user: job.user_id });
       if (e2) throw new Error(e2.message);
@@ -52,15 +52,23 @@ export async function GET(request: Request) {
         if (e1) throw new Error(e1.message);
         links.forEach((x) => known.add(x.external_uid));
       }
+      // 이미 불러온 강의인데 구글에서 날짜·시간이 바뀜 → ERP 강의 시간(과 시간당 강의료) 고치기
+      let updated = 0;
+      if (updates.length) {
+        const { data: n, error: e3 } = await db.rpc("cron_update_lectures", { p_secret: secret, p_user: job.user_id, p_rows: updates });
+        if (e3) throw new Error(e3.message);
+        updated = Number(n) || 0;
+        updates.forEach((x) => known.add(x.external_uid));
+      }
       const { data: added, error: e } = await db.rpc("cron_save_import", {
         p_secret: secret,
         p_source: job.source_id,
         p_rows: rows,
-        p_result: null,
+        p_result: updated ? `자동: ${rows.length}건 새로 추가 · ${updated}건 시간 변경 반영` : null,
       });
       if (e) throw new Error(e.message);
       rows.forEach((r) => known.add(r.external_uid));
-      results.push({ source: job.source_id, added: Number(added) || 0, linked: links.length });
+      results.push({ source: job.source_id, added: Number(added) || 0, linked: links.length, updated });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "알 수 없는 오류";
       await db.rpc("cron_save_import", { p_secret: secret, p_source: job.source_id, p_rows: [], p_result: `자동 실패: ${msg}` });

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "./ics";
-import { eventToRow, findDuplicate, isOwnErpEvent, matchesKeyword, planImport, type ExistingLecture } from "./sync";
+import {
+  eventToRow,
+  findDuplicate,
+  isOwnErpEvent,
+  lectureUpdate,
+  matchesKeyword,
+  planImport,
+  type ExistingLecture,
+} from "./sync";
 
 const ev = (over: Partial<CalendarEvent>): CalendarEvent => ({
   uid: "u1",
@@ -70,7 +78,7 @@ describe("planImport", () => {
 
   it("이미 다른 구글 일정과 연결된 ERP 일정이면 건너뜀", () => {
     const plan = planImport([ev({ uid: "g2" })], null, new Set(), [erp({ external_uid: "g1" })]);
-    expect(plan).toEqual({ newEvents: [], links: [] });
+    expect(plan).toEqual({ newEvents: [], links: [], updates: [] });
   });
 
   it("ERP가 내보낸 일정은 다시 불러오지 않음", () => {
@@ -81,6 +89,76 @@ describe("planImport", () => {
   it("같은 캘린더에 똑같은 일정이 두 개여도 하나만", () => {
     const plan = planImport([ev({ uid: "x1" }), ev({ uid: "x2" })], null, new Set(), []);
     expect(plan.newEvents.map((e) => e.uid)).toEqual(["x1"]);
+  });
+});
+
+describe("반복 일정 시간 변경 (예: 백석문화대 ITQ 17:30 → 18:00)", () => {
+  const SERIES = "4doo@google.com";
+  // 옛 형식 ID(회차 시각 포함)로 불러온 강의: 시간당 4만 원 × 3시간
+  const old = erp({
+    id: "L9",
+    lecture_date: "2026-12-01",
+    start_time: "17:30:00",
+    end_time: "20:30:00",
+    title: "백석문화대 ITQ",
+    external_uid: `${SERIES}#2026-12-01T17:30:00`,
+    hours: "3.00",
+    hourly_rate: 40_000,
+    gross_amount: 120_000,
+    income_type: "business",
+    apply_tax_exemption: true,
+  });
+  const moved = ev({ uid: `${SERIES}#2026-12-01`, title: "백석문화대 ITQ", date: "2026-12-01", start: "18:00", end: "21:30" });
+
+  it("새로 만들지 않고 기존 강의의 시간·강의료를 고친다", () => {
+    const plan = planImport([moved], null, new Set([old.external_uid!]), [old]);
+    expect(plan.newEvents).toEqual([]);
+    expect(plan.links).toEqual([]);
+    expect(plan.updates).toEqual([
+      expect.objectContaining({
+        id: "L9",
+        external_uid: `${SERIES}#2026-12-01`,
+        start_time: "18:00",
+        end_time: "21:30",
+        hours: 3.5,
+        gross_amount: 140_000,
+        income_tax: 4_200,
+        local_tax: 420,
+        expected_net: 135_380,
+      }),
+    ]);
+  });
+
+  it("고정 금액 강의는 금액을 그대로 둔다", () => {
+    const fixed = { ...old, hourly_rate: 0, gross_amount: 500_000 };
+    const [u] = planImport([moved], null, new Set(), [fixed]).updates;
+    expect(u).toMatchObject({ hours: 3.5, start_time: "18:00" });
+    expect(u.gross_amount).toBe(500_000);
+  });
+
+  it("시간이 같고 ID만 옛 형식이면 ID만 바꾼다", () => {
+    const same = ev({ ...moved, start: "17:30", end: "20:30" });
+    expect(planImport([same], null, new Set(), [old]).updates).toEqual([{ id: "L9", external_uid: `${SERIES}#2026-12-01` }]);
+  });
+
+  it("이미 새 형식이고 바뀐 게 없으면 할 일 없음", () => {
+    const cur = { ...old, start_time: "18:00:00", end_time: "21:30:00", external_uid: moved.uid };
+    expect(planImport([moved], null, new Set([moved.uid]), [cur])).toEqual({ newEvents: [], links: [], updates: [] });
+  });
+
+  it("옛 형식 ID로 삭제했던 회차는 시간이 바뀌어도 다시 불러오지 않음", () => {
+    const plan = planImport([moved], null, new Set([`${SERIES}#2026-12-01T17:30:00`]), []);
+    expect(plan).toEqual({ newEvents: [], links: [], updates: [] });
+  });
+
+  it("다른 날짜 회차는 따로", () => {
+    const next = ev({ ...moved, uid: `${SERIES}#2026-12-02`, date: "2026-12-02" });
+    expect(planImport([next], null, new Set([old.external_uid!]), [old]).newEvents.map((e) => e.uid)).toEqual([next.uid]);
+  });
+
+  it("lectureUpdate: 종일 일정으로 바뀌면 0시간", () => {
+    const u = lectureUpdate(old, ev({ ...moved, start: null, end: null, allDay: true }));
+    expect(u).toMatchObject({ start_time: null, end_time: null, hours: 0, gross_amount: 0 });
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeIcsUrl, parseIcs } from "./ics";
+import { normalizeIcsUrl, occurrenceKey, parseIcs } from "./ics";
 
 const ICS = `BEGIN:VCALENDAR
 VERSION:2.0
@@ -89,7 +89,19 @@ describe("parseIcs", () => {
     expect(weekly.map((e) => e.date)).toEqual(["2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23"]);
     const changed = weekly.find((e) => e.date === "2026-11-09");
     expect(changed).toMatchObject({ title: "주간 강의 (시간 변경)", start: "13:00", end: "15:00" });
-    expect(new Set(weekly.map((e) => e.uid)).size).toBe(4);
+    expect(weekly.map((e) => e.uid)).toEqual([
+      "weekly-1#2026-11-02",
+      "weekly-1#2026-11-09",
+      "weekly-1#2026-11-16",
+      "weekly-1#2026-11-23",
+    ]);
+  });
+
+  it("반복 일정 전체 시간을 바꿔도 회차 ID는 그대로 (날짜만 사용)", () => {
+    const moved = parseIcs(ICS.replace(/T090000/g, "T093000").replace(/T120000/g, "T123000"), "2026-11-01", "2026-11-30");
+    const weekly = moved.filter((e) => e.uid.startsWith("weekly-1#"));
+    expect(weekly.map((e) => e.uid)).toEqual(events.filter((e) => e.uid.startsWith("weekly-1#")).map((e) => e.uid));
+    expect(weekly.find((e) => e.date === "2026-11-16")).toMatchObject({ start: "09:30", end: "12:30" });
   });
 
   it("취소·범위 밖 일정 제외", () => {
@@ -100,6 +112,24 @@ describe("parseIcs", () => {
   it("날짜순 정렬", () => {
     const keys = events.map((e) => e.date + (e.start ?? ""));
     expect([...keys].sort()).toEqual(keys);
+  });
+});
+
+describe("occurrenceKey", () => {
+  it("새 형식·단일 일정은 그대로", () => {
+    expect(occurrenceKey("a@google.com#2026-12-01")).toBe("a@google.com#2026-12-01");
+    expect(occurrenceKey("single-1")).toBe("single-1");
+  });
+  it("옛 형식(회차 시각 포함)은 날짜만", () => {
+    expect(occurrenceKey("a@google.com#2026-12-01T17:30:00")).toBe("a@google.com#2026-12-01");
+    expect(occurrenceKey("a@google.com#2026-12-01")).toBe(occurrenceKey("a@google.com#2026-12-01T18:00:00"));
+  });
+  it("옛 UTC 형식은 한국 날짜로", () => {
+    expect(occurrenceKey("a#2026-11-30T16:00:00Z")).toBe("a#2026-12-01");
+    expect(occurrenceKey("a#2026-11-30T14:00:00Z")).toBe("a#2026-11-30");
+  });
+  it("구글 '이 일정 및 향후 일정' 분할(_R...)은 같은 반복으로", () => {
+    expect(occurrenceKey("a_R20261201T083000@google.com#2026-12-08")).toBe("a@google.com#2026-12-08");
   });
 });
 

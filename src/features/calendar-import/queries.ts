@@ -2,7 +2,7 @@ import "server-only";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
 import type { IncomeType } from "@/features/lectures/tax";
-import { parseIcs, type CalendarEvent } from "./ics";
+import { occurrenceKey, parseIcs, type CalendarEvent } from "./ics";
 import { addDays, downloadIcs, findDuplicate, type ExistingLecture } from "./sync";
 
 export type CalendarSource = {
@@ -56,11 +56,12 @@ export async function fetchCandidates(
     .select("id, lecture_date, start_time, title, external_uid")
     .gte("lecture_date", from);
   const existing = (data ?? []) as ExistingLecture[];
-  const done = new Set(existing.map((r) => r.external_uid).filter(Boolean));
+  // 반복 일정은 날짜까지만 비교 (구글에서 시간을 바꿔도, 옛 형식 ID여도 '이미 불러옴')
+  const done = new Set(existing.flatMap((r) => (r.external_uid ? [occurrenceKey(r.external_uid)] : [])));
 
   return {
     events: events.map((e) => {
-      const imported = done.has(e.uid);
+      const imported = done.has(occurrenceKey(e.uid));
       return { ...e, imported, inErp: !imported && findDuplicate(e, existing) !== null };
     }),
   };

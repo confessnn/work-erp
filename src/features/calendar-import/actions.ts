@@ -7,7 +7,14 @@ import { todayInSeoul } from "@/lib/format";
 import { rememberedFees, withRememberedFee, type FeeRecord } from "@/features/lectures/fee-memory";
 import type { IncomeType } from "@/features/lectures/tax";
 import { normalizeIcsUrl, type CalendarEvent } from "./ics";
-import { collectAutoImport, eventToRow, planImport, type ExistingLecture, type ImportSettings } from "./sync";
+import {
+  collectAutoImport,
+  eventToRow,
+  planImport,
+  type ExistingLecture,
+  type ImportSettings,
+  type LectureUpdate,
+} from "./sync";
 import { schedulePush } from "@/features/google-calendar/push";
 import { addDays } from "./sync";
 
@@ -62,9 +69,9 @@ export async function syncNow(id: string): Promise<SourceState> {
 
   const { known, existing } = await loadDedupeContext(supabase);
 
-  let rows, links;
+  let rows, links, updates;
   try {
-    ({ rows, links } = await collectAutoImport(s.ics_url, s as ImportSettings, known, existing, todayInSeoul()));
+    ({ rows, links, updates } = await collectAutoImport(s.ics_url, s as ImportSettings, known, existing, todayInSeoul()));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "불러오기 실패";
     await supabase.from("calendar_sources").update({ last_synced_at: new Date().toISOString(), last_sync_result: `실패: ${msg}` }).eq("id", id);
@@ -73,6 +80,7 @@ export async function syncNow(id: string): Promise<SourceState> {
   }
 
   const linked = await linkLectures(supabase, links);
+  const updated = await updateLectures(supabase, updates);
   if (rows.length) {
     const fees = await loadRememberedFees(supabase);
     const { error } = await supabase.from("lectures").insert(rows.map((r) => ({ ...withRememberedFee(r, fees), user_id: userId })));
@@ -82,12 +90,16 @@ export async function syncNow(id: string): Promise<SourceState> {
     .from("calendar_sources")
     .update({
       last_synced_at: new Date().toISOString(),
-      last_sync_result: `수동: ${rows.length}건 새로 추가${linked ? ` · ${linked}건 기존 일정과 연결` : ""}`,
+      last_sync_result: `수동: ${rows.length}건 새로 추가${linked ? ` · ${linked}건 기존 일정과 연결` : ""}${updated ? ` · ${updated}건 시간 변경 반영` : ""}`,
     })
     .eq("id", id);
-  if (linked) schedulePush(supabase); // ERP 캘린더의 사본 정리
+  if (linked || updated) schedulePush(supabase); // ERP 캘린더의 사본 정리
   revalidatePath("/", "layout");
-  const parts = [rows.length && `${rows.length}개 새로 불러옴`, linked && `${linked}개는 ERP에 이미 있어 연결만 함`].filter(Boolean);
+  const parts = [
+    rows.length && `${rows.length}개 새로 불러옴`,
+    linked && `${linked}개는 ERP에 이미 있어 연결만 함`,
+    updated && `${updated}개는 구글에서 바뀐 시간으로 고침`,
+  ].filter(Boolean);
   return { message: parts.length ? `${parts.join(", ")}.` : "새로 불러올 일정이 없습니다." };
 }
 
@@ -110,7 +122,9 @@ async function loadDedupeContext(supabase: Db) {
     supabase.from("import_skips").select("external_uid"),
     supabase
       .from("lectures")
-      .select("id, lecture_date, start_time, title, external_uid")
+      .select(
+        "id, lecture_date, start_time, title, external_uid, end_time, hours, hourly_rate, gross_amount, income_type, apply_tax_exemption",
+      )
       .gte("lecture_date", addDays(todayInSeoul(), -31)),
   ]);
   return {
@@ -129,6 +143,22 @@ async function linkLectures(supabase: Db, links: { lecture_id: string; external_
       .eq("id", x.lecture_id)
       .is("external_uid", null)
       .select("id");
+    n += data?.length ?? 0;
+  }
+  return n;
+}
+
+/** 구글에서 날짜·시간이 바뀐 불러온 강의 고치기 (적힌 칸만 바꾼다) */
+async function updateLectures(supabase: Db, updates: LectureUpdate[]) {
+  let n = 0;
+  for (const { id, ...fields } of updates) {
+    const { data, error } = await supabase
+      .from("lectures")
+      .update(fields)
+      .eq("id", id)
+      .not("external_uid", "is", null)
+      .select("id");
+    if (error) console.error("강의 시간 변경 실패", error.message);
     n += data?.length ?? 0;
   }
   return n;
@@ -173,13 +203,14 @@ export async function importEvents(fd: FormData) {
   const fees = await loadRememberedFees(supabase);
   const fresh = plan.newEvents.map((e) => ({ ...withRememberedFee(eventToRow(e, settings), fees), user_id: userId }));
   const linked = await linkLectures(supabase, plan.links);
+  const updated = await updateLectures(supabase, plan.updates);
 
   if (fresh.length) {
     const { error } = await supabase.from("lectures").insert(fresh);
     if (error) redirect(`/lectures/import?msg=error`);
     await supabase.from("import_skips").delete().in("external_uid", fresh.map((r) => r.external_uid));
   }
-  if (linked) schedulePush(supabase);
+  if (linked || updated) schedulePush(supabase);
   revalidatePath("/", "layout");
   redirect(`/lectures/import?msg=ok&n=${fresh.length}&linked=${linked}`);
 }
