@@ -181,6 +181,7 @@ async function updateLectures(supabase: Db, updates: LectureUpdate[]) {
       .update(fields)
       .eq("id", id)
       .not("external_uid", "is", null)
+      .eq("google_import_dirty", false) // ERP에서 고친 뒤 아직 구글에 못 보낸 강의는 덮어쓰지 않는다
       .select("id");
     if (error) console.error("강의 시간 변경 실패", error.message);
     n += data?.length ?? 0;

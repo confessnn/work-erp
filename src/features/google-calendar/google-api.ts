@@ -148,6 +148,17 @@ export async function updateEvent(token: string, calendarId: string, eventId: st
   await call(token, "PUT", `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, ev);
 }
 
+/** 일정 일부만 고치기. 고쳤으면 true, 없으면(404/410) false */
+export async function patchEvent(token: string, calendarId: string, eventId: string, patch: Record<string, unknown>): Promise<boolean> {
+  try {
+    await call(token, "PATCH", `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, patch);
+    return true;
+  } catch (e) {
+    if (e instanceof GoogleApiError && (e.status === 404 || e.status === 410)) return false;
+    throw e;
+  }
+}
+
 /** 지웠으면 true, 이미 없으면(404/410) false */
 export async function deleteEvent(token: string, calendarId: string, eventId: string): Promise<boolean> {
   try {
