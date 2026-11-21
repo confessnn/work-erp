@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { Suspense } from "react";
 import { parsePeriod, PeriodNav, type PeriodParams } from "@/components/period-nav";
-import { getFamilyRole } from "@/features/family/queries";
+import { getFamilyRole, listFamilyEventsBetween } from "@/features/family/queries";
+import { listMyReminderKeys } from "@/features/reminders/queries";
 import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
 import { LectureCalendar } from "@/features/lectures/components/lecture-calendar";
@@ -26,7 +27,15 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const now = nowInSeoul();
   const period = parsePeriod(await searchParams, now);
   const today = todayInSeoul();
-  const [thisMonth, todos, { supabase }] = await Promise.all([listLectures(now), listTodayTodos(today), requireUser()]);
+  const monthStart = `${now.year}-${String(now.month).padStart(2, "0")}-01`;
+  const monthNext = now.month === 12 ? `${now.year + 1}-01-01` : `${now.year}-${String(now.month + 1).padStart(2, "0")}-01`;
+  const [thisMonth, familyEvents, reminderKeys, todos, { supabase }] = await Promise.all([
+    listLectures(now),
+    listFamilyEventsBetween(monthStart, monthNext),
+    listMyReminderKeys(),
+    listTodayTodos(today),
+    requireUser(),
+  ]);
   // 구글 캘린더에서 지울 일정이 남아 있으면 화면을 보낸 뒤에 처리한다
   after(() => flushPendingGoogleDeletes(supabase).catch(() => {}));
 
@@ -50,7 +59,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
             다른 달 보기 ›
           </Link>
         </div>
-        <LectureCalendar year={now.year} month={now.month} lectures={thisMonth} today={today} />
+        <LectureCalendar year={now.year} month={now.month} lectures={thisMonth} today={today} familyEvents={familyEvents} reminderKeys={reminderKeys} />
       </section>
 
       <div className="space-y-2">
