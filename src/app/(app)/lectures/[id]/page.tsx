@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { deleteLecture, updateLecture } from "@/features/lectures/actions";
 import { DeleteButton } from "@/features/lectures/components/delete-button";
 import { LectureForm } from "@/features/lectures/components/lecture-form";
+import { MoveCalendar } from "@/features/family/components/move-calendar";
 import { getLecture, listOrganizations } from "@/features/lectures/queries";
 import { ReminderBell } from "@/features/reminders/components/reminder-bell";
 import { reminderKey } from "@/features/reminders/keys";
@@ -48,6 +49,7 @@ export default async function EditLecturePage({ params }: PageProps<"/lectures/[
         organizations={organizations}
         submitLabel="수정 저장"
       />
+      <MoveCalendar kind="lecture" id={id} current="lecture" />
       <section id="documents" className="card space-y-3">
         <h2 className="section-title">제출 서류</h2>
         <SubmissionPanel

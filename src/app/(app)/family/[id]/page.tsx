@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deleteFamilyEvent, saveFamilyEvent } from "@/features/family/actions";
 import { FamilyEventForm } from "@/features/family/components/event-form";
+import { MoveCalendar } from "@/features/family/components/move-calendar";
 import { getFamilyEvent, getFamilyRole } from "@/features/family/queries";
 import { personOf } from "@/features/family/types";
 import { DeleteButton } from "@/features/lectures/components/delete-button";
@@ -64,6 +65,7 @@ export default async function EditFamilyEventPage({ params, searchParams }: Page
         submitLabel="수정 저장"
         back={back}
       />
+      <MoveCalendar kind="family" id={id} current={event.person} allowLecture={role.role === "owner"} />
       <form action={deleteFamilyEvent.bind(null, id, back)}>
         <DeleteButton />
       </form>

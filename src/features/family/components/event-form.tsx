@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useState } from "react";
+import { TimeSelect } from "@/components/time-select";
 import type { FamilyFormState } from "../actions";
 import { OverlapNotice, submitKeepingInputs } from "./overlap-notice";
 import { PERSONS, type FamilyEvent, type Person } from "../types";
@@ -71,11 +72,11 @@ export function FamilyEventForm({
         <div className="grid grid-cols-2 gap-3">
           <label className="field">
             <span>시작</span>
-            <input name="start_time" type="time" defaultValue={event?.start_time?.slice(0, 5)} className="input" />
+            <TimeSelect name="start_time" defaultValue={event?.start_time} />
           </label>
           <label className="field">
             <span>끝</span>
-            <input name="end_time" type="time" defaultValue={event?.end_time?.slice(0, 5)} className="input" />
+            <TimeSelect name="end_time" defaultValue={event?.end_time} />
           </label>
         </div>
       )}

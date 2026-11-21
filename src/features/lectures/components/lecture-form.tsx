@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useState } from "react";
+import { TimeSelect } from "@/components/time-select";
 import { won } from "@/lib/format";
 import type { FormState } from "../actions";
 import { OverlapNotice, submitKeepingInputs } from "@/features/family/components/overlap-notice";
@@ -77,11 +78,11 @@ export function LectureForm({ action, lecture, organizations, defaultDate, submi
           </label>
           <label className="field">
             <span>시작</span>
-            <input name="start_time" type="time" value={start} onChange={(e) => setStart(e.target.value)} className="input" />
+            <TimeSelect name="start_time" value={start} onChange={setStart} />
           </label>
           <label className="field">
             <span>종료</span>
-            <input name="end_time" type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="input" />
+            <TimeSelect name="end_time" value={end} onChange={setEnd} />
           </label>
         </div>
       </section>

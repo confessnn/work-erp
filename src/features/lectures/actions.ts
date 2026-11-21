@@ -202,3 +202,37 @@ export async function markPaidMany(ids: string[]): Promise<{ count: number; erro
   refresh();
   return { count };
 }
+
+/**
+ * 강의 일정을 가족 달력(아빠·엄마·임채현·가족)으로 옮긴다: 가족 일정을 만들고 강의는 지운다.
+ * 수령했거나 서류를 낸 강의는 기록이 사라지므로 옮기지 않는다.
+ * 구글에서 불러온 강의면 구글 '강의 일정(ERP)'의 원본도 지워진다 (강의 삭제와 같음).
+ */
+export async function moveLectureToFamily(id: string, person: string): Promise<{ error?: string }> {
+  if (!["dad", "mom", "baby", "all"].includes(person)) return { error: "옮길 달력을 골라 주세요." };
+  const { supabase } = await requireUser();
+  const { data: l } = await supabase
+    .from("lectures")
+    .select("title, lecture_date, start_time, end_time, memo, is_paid")
+    .eq("id", id)
+    .maybeSingle();
+  if (!l) return { error: "일정을 찾지 못했어요." };
+  if (l.is_paid) return { error: "강의료를 받은 일정은 옮길 수 없어요. 먼저 미수령으로 바꿔 주세요." };
+  const { count } = await supabase.from("document_submissions").select("id", { count: "exact", head: true }).eq("lecture_id", id);
+  if (count) return { error: "서류를 제출한 기록이 있는 강의는 옮길 수 없어요." };
+
+  const { error } = await supabase.from("family_events").insert({
+    person,
+    title: l.title,
+    event_date: l.lecture_date,
+    start_time: l.start_time,
+    end_time: l.start_time ? l.end_time : null,
+    memo: l.memo,
+  });
+  if (error) return { error: `옮기지 못했어요: ${error.message}` };
+  await supabase.from("lectures").delete().eq("id", id);
+  schedulePush(supabase);
+  refresh();
+  const [y, m] = String(l.lecture_date).split("-");
+  redirect(`/lectures?y=${Number(y)}&m=${Number(m)}`);
+}
