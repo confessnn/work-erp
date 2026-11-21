@@ -10,6 +10,8 @@ import { parseEventInput } from "./form";
 import { fetchImportRows } from "./import";
 import { findMyOverlaps, overlapLabel } from "./overlap";
 import { getFamilyRole } from "./queries";
+import { schedulePush } from "@/features/google-calendar/push";
+import { calculateWithholding, hoursBetween } from "@/features/lectures/tax";
 
 /** overlaps: 시간이 겹치는 일정 (있으면 저장하지 않고 다시 묻는다) */
 export type FamilyFormState = { error?: string; overlaps?: string[] };
@@ -127,4 +129,58 @@ export async function syncFamilySource(id: string): Promise<{ count?: number; er
     revalidatePath("/family", "layout");
     return { error: msg };
   }
+}
+
+/**
+ * 가족 일정을 다른 달력으로 옮긴다.
+ * - 아빠·엄마·임채현·가족: 누구의 일정인지만 바꾼다
+ * - 강의: 강의 일정을 만들고(강의료는 비워 둠) 가족 일정은 지운다. 가족을 만든 사람만
+ * 구글 캘린더에서 가져온 일정은 다음 가져오기 때 되돌아가므로 옮기지 않는다.
+ */
+export async function moveFamilyEvent(id: string, to: string): Promise<{ error?: string }> {
+  const { supabase, userId } = await requireUser();
+  const { data: e } = await supabase
+    .from("family_events")
+    .select("title, event_date, start_time, end_time, memo, source_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!e) return { error: "일정을 찾지 못했어요." };
+  if (e.source_id) return { error: "구글 캘린더에서 가져온 일정은 옮길 수 없어요." };
+  const [y, m] = String(e.event_date).split("-");
+  const owner = (await getFamilyRole()).role === "owner";
+  const back = owner ? `/lectures?y=${Number(y)}&m=${Number(m)}` : `/family?y=${Number(y)}&m=${Number(m)}`;
+
+  if (["dad", "mom", "baby", "all"].includes(to)) {
+    const { error } = await supabase.from("family_events").update({ person: to, updated_at: new Date().toISOString() }).eq("id", id);
+    if (error) return { error: `옮기지 못했어요: ${error.message}` };
+  } else if (to === "lecture") {
+    if (!owner) return { error: "강의 일정으로는 가족을 만든 사람만 옮길 수 있어요." };
+    const tax = calculateWithholding(0, "business", true);
+    const { error } = await supabase.from("lectures").insert({
+      user_id: userId,
+      title: e.title,
+      lecture_date: e.event_date,
+      start_time: e.start_time,
+      end_time: e.end_time,
+      hours: hoursBetween(e.start_time, e.end_time),
+      hourly_rate: 0,
+      gross_amount: 0,
+      income_type: "business",
+      apply_tax_exemption: true,
+      income_tax: tax.incomeTax,
+      local_tax: tax.localTax,
+      expected_net: tax.net,
+      is_paid: false,
+      memo: e.memo,
+    });
+    if (error) return { error: `옮기지 못했어요: ${error.message}` };
+    await supabase.from("family_events").delete().eq("id", id);
+    schedulePush(supabase);
+  } else {
+    return { error: "옮길 달력을 골라 주세요." };
+  }
+  revalidatePath("/family");
+  revalidatePath("/lectures");
+  revalidatePath("/", "layout");
+  redirect(back);
 }
