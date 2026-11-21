@@ -103,7 +103,7 @@ async function FeeStats({ period }: { period: PeriodParams }) {
 
       <PeriodNav base="/" period={period} />
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <section data-stagger className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="총 강의료 (세전)" value={won(s.grossTotal)} sub={`${s.count}건 · ${hoursLabel(s.totalHours)}`} tone="navy" />
         <Stat label="예상 수령액 (세후)" value={won(s.expectedNet)} sub={`원천징수 ${won(s.taxTotal)}`} tone="ochre" />
         <Stat
@@ -183,10 +183,10 @@ const STAT_TONE = {
   peach: "border border-line border-t-4 border-t-peach bg-surface",
 };
 
-export function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: keyof typeof STAT_TONE }) {
+function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: keyof typeof STAT_TONE }) {
   const onNavy = tone === "navy";
   return (
-    <div className={`rounded-2xl p-4 sm:p-5 ${STAT_TONE[tone]}`}>
+    <div className={`lift rounded-2xl p-4 sm:p-5 ${STAT_TONE[tone]} ${tone === "navy" ? "shadow-[0_12px_28px_rgba(16,36,69,0.25)]" : ""}`}>
       <div className={`text-sm font-semibold ${onNavy ? "text-accent-soft" : "text-muted"}`}>{label}</div>
       <div className="mt-1 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">{value}</div>
       {sub && <div className={`mt-1 text-xs ${onNavy ? "text-white/80" : "text-muted"}`}>{sub}</div>}

@@ -76,13 +76,13 @@ body {
   }
   /* 버튼은 알약 모양. 채운 남색(primary) / 남색 테두리(line) */
   .btn-primary {
-    @apply inline-flex min-h-11 items-center justify-center rounded-full bg-accent px-6 py-2.5 text-sm font-semibold text-white hover:bg-accent-deep disabled:bg-line disabled:text-muted;
+    @apply inline-flex min-h-11 items-center justify-center rounded-full bg-accent px-6 py-2.5 text-sm font-semibold text-white shadow-[0_4px_16px_rgba(16,36,69,0.22)] transition-[background-color,box-shadow,translate] duration-250 hover:-translate-y-px hover:bg-accent-deep hover:shadow-[0_8px_22px_rgba(16,36,69,0.3)] disabled:translate-y-0 disabled:bg-line disabled:text-muted disabled:shadow-none;
   }
   .btn-line {
-    @apply inline-flex min-h-11 items-center justify-center rounded-full border-2 border-accent px-6 py-2 text-sm font-semibold text-accent hover:bg-accent hover:text-white;
+    @apply inline-flex min-h-11 items-center justify-center rounded-full border-2 border-accent px-6 py-2 text-sm font-semibold text-accent transition-colors duration-250 hover:bg-accent hover:text-white;
   }
   .btn-ghost {
-    @apply inline-flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface text-lg hover:border-accent;
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface text-lg transition-colors duration-250 hover:border-accent;
   }
   .choice {
     @apply cursor-pointer rounded-xl border border-line bg-surface px-3 py-2.5 text-center text-sm;
@@ -91,7 +91,7 @@ body {
     @apply border-accent bg-accent-soft font-semibold;
   }
   .chip {
-    @apply rounded-full border border-line bg-surface px-4 py-1.5;
+    @apply rounded-full border border-line bg-surface px-4 py-1.5 transition-colors duration-250 hover:border-accent;
   }
   /* 포트폴리오 필터 버튼처럼 고른 칩은 남색으로 채운다 */
   .chip-on {
@@ -106,6 +106,10 @@ body {
   .badge-unpaid {
     @apply border border-warn/40 text-warn;
   }
+  /* 마우스를 올리면 살짝 떠오르는 카드 (포트폴리오 이미지·카드 효과) */
+  .lift {
+    @apply transition-[translate,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-[0_12px_28px_rgba(16,36,69,0.12)];
+  }
   .num {
     @apply text-right tabular-nums;
   }
@@ -117,5 +121,22 @@ body {
   }
   .calc-total {
     @apply mt-1 border-t border-line pt-2 text-base font-bold;
+  }
+}
+
+/* 스크롤 등장 효과 (포트폴리오 vibe-4). 표시는 components/scroll-reveal.tsx 가 붙인다 */
+[data-ani] {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 700ms ease, transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+[data-ani][data-show] {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
