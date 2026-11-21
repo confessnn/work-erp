@@ -3,7 +3,7 @@ import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Lecture } from "@/features/lectures/types";
 import { decryptSecret } from "./crypto";
-import { googleEventIdFor, lectureToGoogleEvent } from "./event";
+import { googleEventIdFor, googleTargetFromUid, instanceIdFor, lectureToGoogleEvent, seoulDateOf } from "./event";
 import {
   accessToken,
   CALENDAR_SCOPE,
@@ -11,7 +11,9 @@ import {
   hasScope,
   createErpCalendar,
   deleteEvent,
+  getEvent,
   GoogleApiError,
+  listInstances,
   isGoogleConfigured,
   upsertEvent,
 } from "./google-api";
@@ -55,6 +57,7 @@ export async function pushToGoogle(supabase: SupabaseClient, opts: { force?: boo
       recreate = true;
       await supabase.from("google_connections").update({ calendar_id: calendarId }).eq("user_id", conn.user_id);
       await supabase.from("google_pending_deletes").delete().eq("user_id", conn.user_id);
+      await supabase.from("google_import_deletes").delete().eq("user_id", conn.user_id);
       await supabase
         .from("lectures")
         .update({ google_event_id: null, google_synced_at: null })
@@ -68,6 +71,15 @@ export async function pushToGoogle(supabase: SupabaseClient, opts: { force?: boo
         await deleteEvent(token, calendarId, d.google_event_id);
         await supabase.from("google_pending_deletes").delete().eq("google_event_id", d.google_event_id);
         result.deleted++;
+      }
+    }
+
+    // 1-2) ERP에서 지운 '구글에서 불러온 강의' → 구글 원본 일정(반복이면 그 회차만) 삭제
+    if (!recreate) {
+      const { data: dels } = await supabase.from("google_import_deletes").select("external_uid");
+      for (const d of dels ?? []) {
+        if (await deleteImportedEvent(token, calendarId, d.external_uid)) result.deleted++;
+        await supabase.from("google_import_deletes").delete().eq("external_uid", d.external_uid);
       }
     }
 
@@ -104,6 +116,44 @@ export async function pushToGoogle(supabase: SupabaseClient, opts: { force?: boo
 
   await save();
   return result;
+}
+
+const addDaysIso = (d: string, n: number) => {
+  const [y, m, day] = d.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, day + n)).toISOString().slice(0, 10);
+};
+
+/**
+ * 구글에서 불러온 강의의 원본 일정을 ERP 전용 캘린더에서 지운다. 지웠으면 true.
+ * 권한(calendar.app.created)상 ERP 전용 캘린더의 일정만 지울 수 있다. 다른 캘린더에서 불러온 일정은 404 → 건너뜀.
+ * - 단일 일정: 그대로 삭제
+ * - 반복 일정 회차: 회차 ID(일정ID_원래시작)를 계산해 그 회차만 삭제. 안 맞으면 그 날짜 앞뒤 회차 목록에서 찾는다
+ */
+async function deleteImportedEvent(token: string, calendarId: string, externalUid: string): Promise<boolean> {
+  const t = googleTargetFromUid(externalUid);
+  if (!t) return false;
+  if (!t.date) return deleteEvent(token, calendarId, t.eventId);
+
+  const master = await getEvent(token, calendarId, t.eventId);
+  if (!master || master.status === "cancelled" || !master.recurrence?.length) return false;
+
+  const guess = instanceIdFor(t.eventId, master.start, t.date);
+  if (guess) {
+    const inst = await getEvent(token, calendarId, guess);
+    if (inst && inst.status !== "cancelled" && seoulDateOf(inst.originalStartTime ?? inst.start) === t.date) {
+      return deleteEvent(token, calendarId, guess);
+    }
+  }
+  // 회차를 다른 날로 옮긴 경우 등: 앞뒤 7일 회차 중 원래 날짜가 같은 것
+  const items = await listInstances(
+    token,
+    calendarId,
+    t.eventId,
+    `${addDaysIso(t.date, -7)}T00:00:00+09:00`,
+    `${addDaysIso(t.date, 8)}T00:00:00+09:00`,
+  );
+  const hit = items.find((x) => x.status !== "cancelled" && seoulDateOf(x.originalStartTime ?? x.start) === t.date);
+  return hit ? deleteEvent(token, calendarId, hit.id) : false;
 }
 
 /**

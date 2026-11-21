@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { decryptSecret, encryptSecret } from "./crypto";
-import { googleEventIdFor, lectureToGoogleEvent } from "./event";
+import { googleEventIdFor, googleTargetFromUid, instanceIdFor, lectureToGoogleEvent, seoulDateOf } from "./event";
 
 describe("encryptSecret / decryptSecret", () => {
   const k = randomBytes(32).toString("base64");
@@ -74,5 +74,40 @@ describe("googleEventIdFor", () => {
     const id = googleEventIdFor("3F2504E0-4F89-11D3-9A0C-0305E82C3301");
     expect(id).toBe("erp3f2504e04f8911d39a0c0305e82c3301");
     expect(id).toMatch(/^[a-v0-9]{5,1024}$/);
+  });
+});
+
+describe("구글에서 불러온 강의 → 구글 일정 찾기 (ERP에서 지우면 구글에서도 지우기)", () => {
+  it("단일 일정", () => {
+    expect(googleTargetFromUid("2qqcqb3fuu3ihl29spk777l8mf@google.com")).toEqual({
+      eventId: "2qqcqb3fuu3ihl29spk777l8mf",
+      date: null,
+    });
+  });
+  it("반복 일정 회차 (새 형식·옛 형식)", () => {
+    expect(googleTargetFromUid("4doondp7q386t9tuhu7vtl1pm4@google.com#2026-12-04")).toEqual({
+      eventId: "4doondp7q386t9tuhu7vtl1pm4",
+      date: "2026-12-04",
+    });
+    expect(googleTargetFromUid("4doondp7q386t9tuhu7vtl1pm4@google.com#2026-12-04T18:00:00")?.date).toBe("2026-12-04");
+  });
+  it("구글에서 만든 일정이 아니면 null", () => {
+    expect(googleTargetFromUid("abc@icloud.com")).toBeNull();
+    expect(googleTargetFromUid("lec-1@work-erp")).toBeNull();
+  });
+
+  it("회차 ID = 일정ID_원래시작(UTC) — 실제 구글 회차 ID와 같음", () => {
+    const start = { dateTime: "2026-12-01T18:00:00+09:00", timeZone: "Asia/Seoul" };
+    expect(instanceIdFor("4doondp7q386t9tuhu7vtl1pm4", start, "2026-12-04")).toBe("4doondp7q386t9tuhu7vtl1pm4_20261204T090000Z");
+    expect(instanceIdFor("3g6dildenun06d41h7qc1id2hk", { dateTime: "2026-11-01T03:00:00Z" }, "2026-12-06")).toBe(
+      "3g6dildenun06d41h7qc1id2hk_20261206T030000Z",
+    );
+  });
+  it("종일 반복 일정 회차 ID", () => {
+    expect(instanceIdFor("abc", { date: "2026-11-01" }, "2026-12-06")).toBe("abc_20261206");
+  });
+  it("seoulDateOf", () => {
+    expect(seoulDateOf({ dateTime: "2026-12-03T15:30:00Z" })).toBe("2026-12-04");
+    expect(seoulDateOf({ date: "2027-01-21" })).toBe("2027-01-21");
   });
 });
