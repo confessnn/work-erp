@@ -33,6 +33,22 @@ function plusHour(t: string) {
 
 const hhmmss = (t: string) => (t.length === 5 ? `${t}:00` : t.slice(0, 8));
 
+/** 강의 날짜·시간 → 구글 일정 시작/끝 (끝 시간이 없으면 1시간, 시간이 없으면 종일) */
+export function lectureTimes(l: Pick<Lecture, "lecture_date" | "start_time" | "end_time">): Pick<GoogleEvent, "start" | "end"> {
+  if (!l.start_time) return { start: { date: l.lecture_date }, end: { date: nextDay(l.lecture_date) } };
+  const s = hhmmss(l.start_time);
+  const e = l.end_time && l.end_time > l.start_time ? hhmmss(l.end_time) : `${plusHour(l.start_time)}:00`;
+  return { start: { dateTime: `${l.lecture_date}T${s}`, timeZone: TZ }, end: { dateTime: `${l.lecture_date}T${e}`, timeZone: TZ } };
+}
+
+/**
+ * 구글에서 불러온 강의를 ERP에서 고쳤을 때 구글 원본에 보낼 내용 (제목·날짜·시간·장소만).
+ * 설명(메모)은 사용자가 구글에 쓴 내용일 수 있어 건드리지 않는다.
+ */
+export function importedEventPatch(l: Pick<Lecture, "title" | "organization" | "lecture_date" | "start_time" | "end_time">) {
+  return { summary: l.title, ...(l.organization ? { location: l.organization } : {}), ...lectureTimes(l) };
+}
+
 /**
  * 강의 → 구글 일정.
  * showAmounts=false 이면 금액 정보를 일정에 전혀 넣지 않는다 (기본값).
@@ -44,17 +60,7 @@ export function lectureToGoogleEvent(
   >,
   showAmounts: boolean,
 ): GoogleEvent {
-  let start: GoogleEvent["start"];
-  let end: GoogleEvent["end"];
-  if (l.start_time) {
-    const s = hhmmss(l.start_time);
-    const e = l.end_time && l.end_time > l.start_time ? hhmmss(l.end_time) : `${plusHour(l.start_time)}:00`;
-    start = { dateTime: `${l.lecture_date}T${s}`, timeZone: TZ };
-    end = { dateTime: `${l.lecture_date}T${e}`, timeZone: TZ };
-  } else {
-    start = { date: l.lecture_date };
-    end = { date: nextDay(l.lecture_date) };
-  }
+  const { start, end } = lectureTimes(l);
 
   const lines: string[] = [];
   if (showAmounts) {

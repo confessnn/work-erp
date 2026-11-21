@@ -131,6 +131,8 @@ export async function updateLecture(id: string, _prev: FormState, fd: FormData):
   if (overlaps) return { overlaps };
   const { error } = await supabase.from("lectures").update(parsed.row).eq("id", id);
   if (error) return { error: `저장 실패: ${error.message}` };
+  // 구글에서 불러온 강의면 구글 원본도 고치도록 표시 (반영 전까지는 불러오기가 ERP 값을 덮어쓰지 않음)
+  await supabase.from("lectures").update({ google_import_dirty: true }).eq("id", id).not("external_uid", "is", null);
   await applyFeeToSameTitle(supabase, parsed.row, fd.get("apply_same_title") === "on", id);
   schedulePush(supabase);
   refresh();

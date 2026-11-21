@@ -3,7 +3,7 @@ import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Lecture } from "@/features/lectures/types";
 import { decryptSecret } from "./crypto";
-import { googleEventIdFor, googleTargetFromUid, instanceIdFor, lectureToGoogleEvent, seoulDateOf } from "./event";
+import { googleEventIdFor, googleTargetFromUid, importedEventPatch, instanceIdFor, lectureToGoogleEvent, seoulDateOf } from "./event";
 import {
   accessToken,
   CALENDAR_SCOPE,
@@ -15,6 +15,7 @@ import {
   GoogleApiError,
   listInstances,
   isGoogleConfigured,
+  patchEvent,
   upsertEvent,
 } from "./google-api";
 
@@ -24,6 +25,7 @@ export type PushResult = { created: number; updated: number; deleted: number; er
  * ERP → 구글 캘린더 맞추기 (멱등).
  * - 대상: ERP에서 직접 만든 강의만 (external_uid 없는 것). 구글에서 불러온 강의는 이미 구글에 있으므로 제외
  * - 새 강의 → 생성, 바뀐 강의(updated_at > google_synced_at) → 수정, 지운 강의 → 구글에서도 삭제
+ * - 구글에서 불러온 강의를 ERP에서 고쳤으면(google_import_dirty) 구글 원본의 제목·날짜·시간을 고친다
  * - 실패해도 다음 실행 때 남은 것을 다시 처리한다
  *
  * supabase 는 로그인한 사용자의 클라이언트 (RLS 로 본인 데이터만 보임)
@@ -83,6 +85,22 @@ export async function pushToGoogle(supabase: SupabaseClient, opts: { force?: boo
       }
     }
 
+    // 1-3) ERP에서 고친 '구글에서 불러온 강의' → 구글 원본 일정(반복이면 그 회차만) 수정
+    if (!recreate) {
+      const { data: dirty } = await supabase
+        .from("lectures")
+        .select("id, external_uid, title, organization, lecture_date, start_time, end_time")
+        .eq("google_import_dirty", true)
+        .not("external_uid", "is", null);
+      type Dirty = Pick<Lecture, "id" | "title" | "organization" | "lecture_date" | "start_time" | "end_time"> & { external_uid: string };
+      for (const l of (dirty ?? []) as Dirty[]) {
+        const id = await findImportedEventId(token, calendarId, l.external_uid);
+        if (id && (await patchEvent(token, calendarId, id, importedEventPatch(l)))) result.updated++;
+        // 구글에서 못 찾은 일정(다른 캘린더·이미 지워짐)은 더 시도하지 않는다
+        await supabase.from("lectures").update({ google_import_dirty: false }).eq("id", l.id);
+      }
+    }
+
     // 2) 생성/수정 대상
     const { data: rows } = await supabase
       .from("lectures")
@@ -126,23 +144,29 @@ const addDaysIso = (d: string, n: number) => {
 /**
  * 구글에서 불러온 강의의 원본 일정을 ERP 전용 캘린더에서 지운다. 지웠으면 true.
  * 권한(calendar.app.created)상 ERP 전용 캘린더의 일정만 지울 수 있다. 다른 캘린더에서 불러온 일정은 404 → 건너뜀.
- * - 단일 일정: 그대로 삭제
- * - 반복 일정 회차: 회차 ID(일정ID_원래시작)를 계산해 그 회차만 삭제. 안 맞으면 그 날짜 앞뒤 회차 목록에서 찾는다
  */
 async function deleteImportedEvent(token: string, calendarId: string, externalUid: string): Promise<boolean> {
+  const id = await findImportedEventId(token, calendarId, externalUid);
+  return id ? deleteEvent(token, calendarId, id) : false;
+}
+
+/**
+ * 구글에서 불러온 강의(external_uid)의 원본 일정 ID. 못 찾으면 null.
+ * - 단일 일정: 일정 ID 그대로
+ * - 반복 일정 회차: 회차 ID(일정ID_원래시작)를 계산하고, 안 맞으면 그 날짜 앞뒤 회차 목록에서 원래 날짜로 찾는다
+ */
+async function findImportedEventId(token: string, calendarId: string, externalUid: string): Promise<string | null> {
   const t = googleTargetFromUid(externalUid);
-  if (!t) return false;
-  if (!t.date) return deleteEvent(token, calendarId, t.eventId);
+  if (!t) return null;
+  if (!t.date) return t.eventId;
 
   const master = await getEvent(token, calendarId, t.eventId);
-  if (!master || master.status === "cancelled" || !master.recurrence?.length) return false;
+  if (!master || master.status === "cancelled" || !master.recurrence?.length) return null;
 
   const guess = instanceIdFor(t.eventId, master.start, t.date);
   if (guess) {
     const inst = await getEvent(token, calendarId, guess);
-    if (inst && inst.status !== "cancelled" && seoulDateOf(inst.originalStartTime ?? inst.start) === t.date) {
-      return deleteEvent(token, calendarId, guess);
-    }
+    if (inst && inst.status !== "cancelled" && seoulDateOf(inst.originalStartTime ?? inst.start) === t.date) return guess;
   }
   // 회차를 다른 날로 옮긴 경우 등: 앞뒤 7일 회차 중 원래 날짜가 같은 것
   const items = await listInstances(
@@ -153,7 +177,7 @@ async function deleteImportedEvent(token: string, calendarId: string, externalUi
     `${addDaysIso(t.date, 8)}T00:00:00+09:00`,
   );
   const hit = items.find((x) => x.status !== "cancelled" && seoulDateOf(x.originalStartTime ?? x.start) === t.date);
-  return hit ? deleteEvent(token, calendarId, hit.id) : false;
+  return hit?.id ?? null;
 }
 
 /**
@@ -172,6 +196,9 @@ export function schedulePush(supabase: SupabaseClient) {
  */
 export async function flushPendingGoogleDeletes(supabase: SupabaseClient) {
   if (!isGoogleConfigured()) return;
-  const { count } = await supabase.from("google_pending_deletes").select("*", { count: "exact", head: true });
-  if (count) schedulePush(supabase);
+  const [{ count }, { count: dirty }] = await Promise.all([
+    supabase.from("google_pending_deletes").select("*", { count: "exact", head: true }),
+    supabase.from("lectures").select("id", { count: "exact", head: true }).eq("google_import_dirty", true),
+  ]);
+  if (count || dirty) schedulePush(supabase);
 }

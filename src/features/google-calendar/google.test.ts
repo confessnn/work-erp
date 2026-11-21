@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { decryptSecret, encryptSecret } from "./crypto";
-import { googleEventIdFor, googleTargetFromUid, instanceIdFor, lectureToGoogleEvent, seoulDateOf } from "./event";
+import { googleEventIdFor, googleTargetFromUid, importedEventPatch, instanceIdFor, lectureToGoogleEvent, seoulDateOf } from "./event";
 
 describe("encryptSecret / decryptSecret", () => {
   const k = randomBytes(32).toString("base64");
@@ -109,5 +109,25 @@ describe("구글에서 불러온 강의 → 구글 일정 찾기 (ERP에서 지�
   it("seoulDateOf", () => {
     expect(seoulDateOf({ dateTime: "2026-12-03T15:30:00Z" })).toBe("2026-12-04");
     expect(seoulDateOf({ date: "2027-01-21" })).toBe("2027-01-21");
+  });
+});
+
+describe("importedEventPatch", () => {
+  it("시간 있는 강의: 제목·장소·시작/끝", () => {
+    expect(
+      importedEventPatch({ title: "백석문화대 ITQ", organization: "백석문화대", lecture_date: "2026-12-01", start_time: "18:00:00", end_time: "21:00:00" }),
+    ).toEqual({
+      summary: "백석문화대 ITQ",
+      location: "백석문화대",
+      start: { dateTime: "2026-12-01T18:00:00", timeZone: "Asia/Seoul" },
+      end: { dateTime: "2026-12-01T21:00:00", timeZone: "Asia/Seoul" },
+    });
+  });
+  it("종일 강의, 기관 없음", () => {
+    expect(importedEventPatch({ title: "순천향대ai", organization: null, lecture_date: "2026-12-21", start_time: null, end_time: null })).toEqual({
+      summary: "순천향대ai",
+      start: { date: "2026-12-21" },
+      end: { date: "2026-12-22" },
+    });
   });
 });
