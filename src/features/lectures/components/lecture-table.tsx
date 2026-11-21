@@ -20,7 +20,7 @@ export function LectureTable({ lectures, familyEvents = [] }: { lectures: Lectur
   ].sort((a, b) => a.key.localeCompare(b.key));
 
   return (
-    <ul className="space-y-2">
+    <ul data-stagger className="space-y-2">
       {rows.map((r) => (r.kind === "family" ? <FamilyRow key={`f${r.e.id}`} e={r.e} /> : <LectureRow key={r.l.id} l={r.l} />))}
     </ul>
   );
@@ -29,7 +29,7 @@ export function LectureTable({ lectures, familyEvents = [] }: { lectures: Lectur
 function FamilyRow({ e }: { e: FamilyEvent }) {
   const p = personOf(e.person);
   return (
-    <li className="card flex flex-wrap items-center gap-x-4 gap-y-2">
+    <li className="card lift flex flex-wrap items-center gap-x-4 gap-y-2">
       <div className="w-24 shrink-0 text-sm">
         <div className="font-semibold">{dateLabel(e.event_date)}</div>
         <div className="text-muted">{e.start_time ? `${timeLabel(e.start_time)}${e.end_time ? `–${timeLabel(e.end_time)}` : ""}` : "종일"}</div>
@@ -45,7 +45,7 @@ function FamilyRow({ e }: { e: FamilyEvent }) {
 
 function LectureRow({ l }: { l: Lecture }) {
   return (
-        <li key={l.id} className="card flex flex-wrap items-center gap-x-4 gap-y-2">
+        <li key={l.id} className="card lift flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="w-24 shrink-0 text-sm">
             <div className="font-semibold">{dateLabel(l.lecture_date)}</div>
             {l.start_time && (
