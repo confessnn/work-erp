@@ -49,6 +49,36 @@ supabase/migrations/    DB 변경 이력 (SQL)
 - 구글 드라이브를 쓰는 기능(서류함·아기 사진)은 서버에서 `features/google-drive/context.ts`의 `driveContext()`를 쓴다. 큰 파일은 브라우저 ↔ 드라이브 직접 전송(`features/documents/drive-browser.ts`).
 - 가족 공유(`features/share`)로 나가는 데이터에는 금액을 절대 넣지 않는다. 공유 데이터는 DB 함수 `get_shared_schedule`의 반환 컬럼으로만 정해진다.
 
+## 기능 지도 (먼저 여기서 고칠 폴더를 찾고, 그 폴더만 읽는다)
+| 기능 폴더 `src/features/` | 화면 | 하는 일 · 핵심 파일 |
+|---|---|---|
+| `lectures` | `/lectures` (첫 화면 달력, `view=list`면 목록) · `/lectures/[id]` | 강의 일정·강의료·세금(`tax.ts`)·수령. 달력 `components/lecture-calendar.tsx`, 수령 가능 판단 `paid-selection.ts`(강의료 0원이면 수령 불가) |
+| `dashboard` | `/` | 요약 계산 `summary.ts`. 이번 달 달력은 `LectureCalendar` 재사용 |
+| `family` | `/family*`, `/join/[token]` | 가족(아내) 계정·가족 일정·아내 구글 iCal 가져오기(`import.ts`, `auto-import.ts`). 사람 색·이름은 `types.ts`의 `PERSONS` 한 곳 |
+| `calendar-import` | `/lectures/import` | 구글 '강의 일정(ERP)' iCal → 강의 불러오기. 회차 uid는 `uid#날짜`(`ics.ts`의 `occurrenceKey`), 구글에서 지운 일정 정리(`sync.ts`의 `planRemovals`) |
+| `google-calendar` | `/integrations` | ERP → 구글 반영 `push.ts`(만든 강의 생성·수정·삭제, 불러온 강의 수정·삭제는 `google_import_dirty`·`google_import_deletes`). 권한은 `calendar.app.created`라 ERP 캘린더 일정만 고칠 수 있음 |
+| `reminders` | 일정 화면의 🔔 | 웹 푸시 1시간 전 알림. Supabase pg_cron `erp-reminders` → `/api/cron/reminders` |
+| `telegram` | `/integrations` | `@work_erp_bot` 아침 요약·알림·일정 빠른 추가(`quick-add.ts`) |
+| `baby` | `/baby` (메뉴 '임채현') | 사진·동영상을 대표 계정 드라이브에 날짜별 저장. 아내도 보기·올리기(`drive.ts`의 `babyDriveContext`), 원본·재생 `app/(app)/baby/photo/[id]/route.ts`(동영상은 Range 4MB씩) |
+| `documents` · `google-drive` | `/documents` | 서류함·강의별 제출 서류(드라이브). 큰 파일은 브라우저→드라이브 직접(`drive-browser.ts`) |
+| `bid-inbox` · `bid-viewer` | `/bids*`, `/join/bids/[token]` | 나라장터·국방전자조달 등 공고 수신(`fetch-all.ts`), 판정, 입찰가 계산기, 아침 메일(`morning.ts`), 동생용 열람 |
+| `records` | `/records*` | 수업 기록·관계도 그래프 |
+| `todos` | 대시보드 위젯 | 할 일 (`title`, `due_date`, `note`) |
+| `content` | `/content` | X·노션 콘텐츠 자동화 (크론 `content`) |
+| `share` | `/share-settings` | 가족 공유 링크·iCal 내보내기(금액 없음, `get_shared_schedule`) |
+| `api-credits` | 대시보드 카드 | Claude·OpenAI API 잔액 추정 |
+| `plan-usage` | (숨김) | 플랜 사용량 위젯. 사용자가 나중에 다시 켜기로 해서 일부러 남겨 둠 — 지우지 않는다 |
+
+- 크론(Vercel, UTC): `calendar-sync`·`bid-sync` 21:00, `bid-digest`·`api-credits` 22:00, `content` 23:30. 5분 간격 알림만 Supabase pg_cron.
+- 가족 데이터는 `my_family()`(가족을 만든 사람 uid) 기준 RLS. 대표 계정 비밀값이 필요한 서버 작업은 `CRON_SECRET`으로 잠근 DB 함수(`cron_*`, `family_owner_drive`)를 쓴다.
+
+## 토큰을 아끼는 작업 방법
+- 위 기능 지도로 폴더를 고른 뒤 그 폴더만 읽는다. 저장소 전체 검색·전체 파일 읽기는 피한다.
+- 테스트는 바뀐 폴더만 먼저: `npx vitest run src/features/<기능>`. 마지막에 `npx tsc --noEmit`·`npx eslint <바뀐 파일>`·전체 `npm test`.
+- `gh` CLI가 없다. PR 만들기·합치기는 브라우저(GitHub)로 하고, 합치기는 사용자가 "합쳐줘"라고 한 뒤에만.
+- DB 변경은 새 마이그레이션 파일 + Supabase에 적용하고, PR 본문에 "적용함"을 적는다.
+- 큰 파일 수정은 `Edit`(바뀌는 부분만)으로. 같은 파일을 다시 통째로 읽지 않는다.
+
 ## Git 협업
 - `main`에 직접 push하지 않는다. 작업 브랜치 → PR → 합치기.
 - 브랜치 이름: Claude는 `claude/<기능>`, Codex는 `codex/<기능>`.
