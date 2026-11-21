@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeIcsUrl, occurrenceKey, parseIcs } from "./ics";
+import { normalizeIcsUrl, occurrenceKey, parseIcs, parseIcsDetailed } from "./ics";
 
 const ICS = `BEGIN:VCALENDAR
 VERSION:2.0
@@ -112,6 +112,19 @@ describe("parseIcs", () => {
   it("날짜순 정렬", () => {
     const keys = events.map((e) => e.date + (e.start ?? ""));
     expect([...keys].sort()).toEqual(keys);
+  });
+});
+
+describe("parseIcsDetailed", () => {
+  it("다 읽으면 complete", () => {
+    expect(parseIcsDetailed(ICS, "2026-11-01", "2026-11-30").complete).toBe(true);
+  });
+  it("일정 수 한도에 걸리면 complete=false", () => {
+    expect(parseIcsDetailed(ICS, "2026-11-01", "2026-11-30", 2).complete).toBe(false);
+  });
+  it("아주 오래된 매일 반복은 회차 한도에 걸려 complete=false", () => {
+    const old = ICS.replace("RRULE:FREQ=WEEKLY;COUNT=4", "RRULE:FREQ=DAILY").replace(/20261102T/g, "20180101T");
+    expect(parseIcsDetailed(old, "2026-11-01", "2026-11-30").complete).toBe(false);
   });
 });
 

@@ -79,6 +79,20 @@ function toEvent(uid: string, summary: string, location: string | null, start: I
  * 반복 일정은 회차별로 펼치고, 회차 수정(RECURRENCE-ID)도 반영한다. 취소된 일정은 제외.
  */
 export function parseIcs(text: string, from: string, to: string, maxEvents = 1000): CalendarEvent[] {
+  return parseIcsDetailed(text, from, to, maxEvents).events;
+}
+
+/**
+ * parseIcs 와 같고, 범위 안 일정을 전부 읽었는지(complete)도 알려준다.
+ * 일정 수 한도(maxEvents)나 반복 회차 한도에 걸리면 complete=false → '구글에서 지워짐' 판단에 쓰면 안 된다.
+ */
+export function parseIcsDetailed(
+  text: string,
+  from: string,
+  to: string,
+  maxEvents = 1000,
+): { events: CalendarEvent[]; complete: boolean } {
+  let complete = true;
   const root = new ICAL.Component(ICAL.parse(text));
   for (const tz of root.getAllSubcomponents("vtimezone")) {
     const tzid = tz.getFirstPropertyValue("tzid");
@@ -111,7 +125,11 @@ export function parseIcs(text: string, from: string, to: string, maxEvents = 100
       const it = ev.iterator();
       let next: ICAL.Time | null;
       let guard = 0;
-      while ((next = it.next()) && guard++ < 2000) {
+      while ((next = it.next())) {
+        if (guard++ >= 2000) {
+          complete = false;
+          break;
+        }
         const occ = ev.getOccurrenceDetails(next);
         const ce = toEvent(
           occurrenceUid(ev.uid, next),
@@ -128,7 +146,10 @@ export function parseIcs(text: string, from: string, to: string, maxEvents = 100
       const ce = toEvent(uid, ev.summary ?? "", ev.location ?? null, ev.startDate, ev.endDate);
       if (inRange(ce.date)) out.push(ce);
     }
-    if (out.length >= maxEvents) break;
+    if (out.length >= maxEvents) {
+      complete = false;
+      break;
+    }
   }
 
   // 하루에 같은 반복 일정 회차가 둘 이상이면(시간 단위 반복 등) 두 번째부터 시각을 붙여 ID가 겹치지 않게 한다
@@ -138,7 +159,8 @@ export function parseIcs(text: string, from: string, to: string, maxEvents = 100
     seen.add(e.uid);
   }
 
-  return out.sort((a, b) => (a.date + (a.start ?? "")).localeCompare(b.date + (b.start ?? "")));
+  out.sort((a, b) => (a.date + (a.start ?? "")).localeCompare(b.date + (b.start ?? "")));
+  return { events: out, complete };
 }
 
 /** webcal:// → https:// , 그 외 http(s) 만 허용 */
