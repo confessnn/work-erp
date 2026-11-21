@@ -7,7 +7,7 @@ import { markPaidMany } from "../actions";
 import { monthGrid } from "../month-grid";
 import { datesLabel, unpaidOnDates } from "../paid-selection";
 import type { Lecture } from "../types";
-import { personOf, type FamilyEvent } from "@/features/family/types";
+import { PERSONS, personOf, type FamilyEvent } from "@/features/family/types";
 import { familyEventTarget, reminderKey } from "@/features/reminders/keys";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -219,10 +219,13 @@ export function LectureCalendar({
           </div>
         </div>
       ) : (
-        <div className="flex gap-3 text-xs text-muted">
-          <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-peach/45" />미수령</span>
-          <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-mint/50" />수령</span>
-          {familyEvents.length > 0 && <span>· 그 밖의 색은 강의 외 일정 (보라 = 아빠)</span>}
+        <div className="flex flex-wrap gap-3 text-xs text-muted">
+          <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-peach/45" />강의 미수령</span>
+          <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-mint/50" />강의 수령</span>
+          {familyEvents.length > 0 &&
+            PERSONS.filter((p) => familyEvents.some((e) => e.person === p.v)).map((p) => (
+              <span key={p.v} className="flex items-center gap-1"><i className={`h-3 w-3 rounded ${p.cls}`} />{p.label}</span>
+            ))}
         </div>
       )}
     </div>
