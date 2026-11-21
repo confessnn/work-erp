@@ -5,8 +5,10 @@ export type BabyInfo = { name: string | null; birthDate: string | null };
 
 export async function getBabyInfo(): Promise<BabyInfo> {
   const { supabase } = await requireUser();
-  const { data } = await supabase.from("user_settings").select("baby_name, baby_birth_date").maybeSingle();
-  return { name: data?.baby_name ?? null, birthDate: data?.baby_birth_date ?? null };
+  // 가족 구성원(아내)도 대표 계정에 적힌 이름·생일을 본다
+  const { data } = await supabase.rpc("family_baby_info");
+  const row = (data ?? [])[0] as { baby_name: string | null; baby_birth_date: string | null } | undefined;
+  return { name: row?.baby_name ?? null, birthDate: row?.baby_birth_date ?? null };
 }
 
 export type BabyPhoto = {

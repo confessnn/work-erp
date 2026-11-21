@@ -6,7 +6,7 @@ export type Person = "dad" | "mom" | "baby" | "all";
 export const PERSONS: { v: Person; label: string; cls: string }[] = [
   { v: "dad", label: "아빠", cls: "bg-sky" },
   { v: "mom", label: "엄마", cls: "bg-rose" },
-  { v: "baby", label: "아기", cls: "bg-lilac" },
+  { v: "baby", label: "임채현", cls: "bg-lilac" },
   { v: "all", label: "가족", cls: "bg-ochre/70" },
 ];
 export const personOf = (v: string) => PERSONS.find((p) => p.v === v) ?? PERSONS[3];

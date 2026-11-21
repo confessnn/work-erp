@@ -6,7 +6,7 @@ const MODEL = "claude-opus-5-5";
 const ERP_URL = "https://work-erp-one.vercel.app";
 
 export type Person = "dad" | "mom" | "baby" | "all";
-export const PERSON_LABEL: Record<Person, string> = { dad: "아빠", mom: "엄마", baby: "아기", all: "가족 모두" };
+export const PERSON_LABEL: Record<Person, string> = { dad: "아빠", mom: "엄마", baby: "임채현", all: "가족 모두" };
 
 export type Parsed = {
   is_event: boolean;
@@ -35,7 +35,7 @@ const SYSTEM = `당신은 한국어로 온 짧은 메시지를 달력 일정 하
 - is_event: 일정(약속·병원·모임·행사·할 일의 날짜)이면 true. 인사, 질문, 잡담처럼 일정이 아니면 false.
 - date: 'YYYY-MM-DD'. "오늘·내일·모레·글피·이번 주 금요일·다음 주 화요일·12월 3일·3일" 같은 말은 아래 '오늘'을 기준으로 바꿉니다. 날짜 말이 없으면 오늘. 월·일만 있고 이미 지난 날이면 내년으로 봅니다.
 - start_time, end_time: 'HH:MM' 24시간. 시간이 없으면 null(종일). "3시"처럼 오전·오후가 없으면 1~7시는 오후, 8~11시는 오전, 12시는 낮 12시로 봅니다. "3시~5시", "3시부터 2시간"이면 end_time을 채웁니다.
-- person: 기본 "dad". 아내·와이프·엄마의 일이면 "mom", 아기·아이·애기의 일이면 "baby", 가족 다 같이면 "all".
+- person: 기본 "dad". 아내·와이프·엄마의 일이면 "mom", 아기·아이·애기·채현이의 일이면 "baby", 가족 다 같이면 "all".
 - title: 달력에 보일 짧은 제목 (예: "치과", "아기 예방접종", "처가 저녁"). 날짜·시간 말은 빼고 씁니다.
 - memo: 장소·준비물 등 제목에 안 넣은 내용이 있으면 짧게, 없으면 null.
 - memo_for: 메시지가 새 일정이 아니라 아래 '이미 있는 일정' 중 하나에 대한 메모·준비물·챙길 것이면 그 일정의 번호, 아니면 null.

@@ -11,7 +11,7 @@ export type Overlap = {
   end_time: string | null;
 };
 
-const PERSON: Record<string, string> = { dad: "아빠", mom: "엄마", baby: "아기", all: "가족" };
+const PERSON: Record<string, string> = { dad: "아빠", mom: "엄마", baby: "임채현", all: "가족" };
 
 /** "15:00~16:00 치과 (아빠)" */
 export function overlapLabel(o: Overlap): string {
