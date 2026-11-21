@@ -73,7 +73,7 @@ export default async function BabyPage({ searchParams }: PageProps<"/baby">) {
                 ))}
               </nav>
               {photos.length ? (
-                <PhotoGallery photos={photos} birthDate={baby.birthDate} canEdit={isOwner} />
+                <PhotoGallery photos={photos} birthDate={baby.birthDate} showDriveLink={isOwner} />
               ) : (
                 <p className="card text-center text-muted">이 달에는 사진이 없습니다.</p>
               )}
