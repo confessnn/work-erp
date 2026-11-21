@@ -12,6 +12,13 @@ import { familyEventTarget, reminderKey } from "@/features/reminders/keys";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
+/** 한 칸 안에서 강의·가족 일정을 시간순으로 (종일 일정이 맨 위). 같은 시간이면 강의가 먼저 */
+const timeOrder = (t: string | null) => {
+  if (!t) return 0;
+  const [h, m] = t.split(":").map(Number);
+  return 1 + h * 60 + m;
+};
+
 /**
  * 한 달 달력. 평소에는 일정을 누르면 수정 화면으로 가고,
  * `수령 체크`를 켜면 날짜를 눌러 여러 날을 고른 뒤 한 번에 수령 처리한다.
@@ -140,7 +147,7 @@ export function LectureCalendar({
                       {on ? "✓" : c.day}
                     </span>
                   </div>
-                  <ul className="space-y-0.5">
+                  <ul className="flex flex-col gap-0.5">
                     {items.map((l) => {
                       const cls = `block overflow-hidden whitespace-nowrap rounded-md sm:text-ellipsis px-1 py-0.5 text-[11px] leading-tight sm:text-xs ${
                         l.is_paid ? "bg-mint/50" : hasFee(l) ? "bg-peach/45" : "bg-line"
@@ -153,7 +160,7 @@ export function LectureCalendar({
                         </>
                       );
                       return (
-                        <li key={l.id}>
+                        <li key={l.id} style={{ order: timeOrder(l.start_time) }}>
                           {selecting ? (
                             <span className={cls}>{label}</span>
                           ) : (
@@ -178,7 +185,7 @@ export function LectureCalendar({
                         </>
                       );
                       return (
-                        <li key={`f${e.id}`}>
+                        <li key={`f${e.id}`} style={{ order: timeOrder(e.start_time) }}>
                           {selecting ? (
                             <span className={`${cls} opacity-50`}>{label}</span>
                           ) : (
