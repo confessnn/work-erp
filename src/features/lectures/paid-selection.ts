@@ -1,11 +1,14 @@
 import type { Lecture } from "./types";
 
-type Row = Pick<Lecture, "id" | "lecture_date" | "is_paid" | "expected_net">;
+type Row = Pick<Lecture, "id" | "lecture_date" | "is_paid" | "expected_net" | "gross_amount">;
 
-/** 달력에서 고른 날짜들의 미수령 일정과 예상 수령액 합계 */
+/** 받을 강의료(세전)를 입력한 일정인지. 입력하지 않은 일정은 수령 체크를 할 수 없다 */
+export const hasFee = (l: Pick<Lecture, "gross_amount">) => Number(l.gross_amount) > 0;
+
+/** 달력에서 고른 날짜들의 미수령 일정(강의료를 입력한 것만)과 예상 수령액 합계 */
 export function unpaidOnDates<T extends Row>(lectures: T[], dates: Iterable<string>) {
   const set = new Set(dates);
-  const rows = lectures.filter((l) => set.has(l.lecture_date) && !l.is_paid);
+  const rows = lectures.filter((l) => set.has(l.lecture_date) && !l.is_paid && hasFee(l));
   return { ids: rows.map((l) => l.id), total: rows.reduce((s, l) => s + Number(l.expected_net), 0) };
 }
 

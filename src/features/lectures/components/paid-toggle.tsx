@@ -1,10 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { useTransition } from "react";
 import { setPaid } from "../actions";
 
-export function PaidToggle({ id, paid }: { id: string; paid: boolean }) {
+/**
+ * 수령 / 미수령 버튼. 받을 강의료를 입력하지 않은 미수령 일정은 누를 수 없고,
+ * 대신 강의료를 입력하러 가는 링크를 보여 준다.
+ */
+export function PaidToggle({ id, paid, hasFee = true }: { id: string; paid: boolean; hasFee?: boolean }) {
   const [pending, start] = useTransition();
+  if (!paid && !hasFee) {
+    return (
+      <Link href={`/lectures/${id}`} className="badge text-muted underline" title="강의료를 입력하면 수령 체크를 할 수 있어요">
+        강의료 입력
+      </Link>
+    );
+  }
   return (
     <button
       type="button"

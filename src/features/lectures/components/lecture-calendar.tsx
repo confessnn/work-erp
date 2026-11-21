@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { timeLabel, won } from "@/lib/format";
 import { markPaidMany } from "../actions";
 import { monthGrid } from "../month-grid";
-import { datesLabel, unpaidOnDates } from "../paid-selection";
+import { datesLabel, hasFee, unpaidOnDates } from "../paid-selection";
 import type { Lecture } from "../types";
 import { PERSONS, personOf, type FamilyEvent } from "@/features/family/types";
 import { familyEventTarget, reminderKey } from "@/features/reminders/keys";
@@ -49,8 +49,10 @@ export function LectureCalendar({
   const famByDate = new Map<string, FamilyEvent[]>();
   for (const e of familyEvents) famByDate.set(e.event_date, [...(famByDate.get(e.event_date) ?? []), e]);
 
+  // 수령 체크로 고를 수 있는 날: 강의료를 입력한 미수령 일정이 있는 날
+  const payable = (date: string) => (byDate.get(date) ?? []).some((l) => !l.is_paid && hasFee(l));
   const toggle = (date: string) => {
-    if (!byDate.has(date)) return;
+    if (!payable(date)) return;
     setPicked((prev) => {
       const next = new Set(prev);
       if (next.has(date)) next.delete(date);
@@ -76,7 +78,7 @@ export function LectureCalendar({
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {selecting ? (
-          <span className="font-medium">수령한 날짜를 눌러 고르세요. 다시 누르면 빠져요.</span>
+          <span className="font-medium">수령한 날짜를 눌러 고르세요. 다시 누르면 빠져요. 강의료를 입력하지 않은 일정은 고를 수 없어요.</span>
         ) : (
           <button
             type="button"
@@ -104,7 +106,7 @@ export function LectureCalendar({
               if (!c) return <div key={`e${wi}-${di}`} className="min-h-20 border-r border-line bg-bg last:border-r-0 sm:min-h-28" />;
               const items = byDate.get(c.date) ?? [];
               const on = picked.has(c.date);
-              const pickable = selecting && items.length > 0;
+              const pickable = selecting && payable(c.date);
               return (
                 <div
                   key={c.date}
@@ -126,7 +128,7 @@ export function LectureCalendar({
                   className={`min-h-20 min-w-0 border-r border-line p-0.5 last:border-r-0 sm:min-h-28 sm:p-1.5 ${
                     pickable ? "cursor-pointer select-none" : ""
                   } ${on ? "bg-accent-soft outline-2 -outline-offset-2 outline-accent" : ""} ${
-                    selecting && !items.length ? "opacity-50" : ""
+                    selecting && !pickable ? "opacity-50" : ""
                   }`}
                 >
                   <div className="mb-0.5 flex justify-center sm:justify-start">
@@ -141,7 +143,7 @@ export function LectureCalendar({
                   <ul className="space-y-0.5">
                     {items.map((l) => {
                       const cls = `block overflow-hidden whitespace-nowrap rounded-md sm:text-ellipsis px-1 py-0.5 text-[11px] leading-tight sm:text-xs ${
-                        l.is_paid ? "bg-mint/50" : "bg-peach/45"
+                        l.is_paid ? "bg-mint/50" : hasFee(l) ? "bg-peach/45" : "bg-line"
                       }`;
                       const label = (
                         <>
@@ -222,6 +224,7 @@ export function LectureCalendar({
         <div className="flex flex-wrap gap-3 text-xs text-muted">
           <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-peach/45" />강의 미수령</span>
           <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-mint/50" />강의 수령</span>
+          <span className="flex items-center gap-1"><i className="h-3 w-3 rounded bg-line" />강의료 미입력</span>
           {familyEvents.length > 0 &&
             PERSONS.filter((p) => familyEvents.some((e) => e.person === p.v)).map((p) => (
               <span key={p.v} className="flex items-center gap-1"><i className={`h-3 w-3 rounded ${p.cls}`} />{p.label}</span>
