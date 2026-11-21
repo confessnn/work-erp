@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <>
       <header className="sticky top-0 z-10 border-b border-line bg-bg/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center min-h-16 gap-4 px-4 py-3">
-          <span className="hidden text-lg font-semibold tracking-tight sm:inline">work-erp</span>
+          <span className="hidden text-[17px] font-extrabold tracking-wide text-fg sm:inline">WORK ERP</span>
           <AppNav items={items} />
           <form action={signOut} className="ml-auto">
             <button type="submit" className="whitespace-nowrap text-sm text-muted hover:underline">로그아웃</button>
