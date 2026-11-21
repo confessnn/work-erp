@@ -151,7 +151,9 @@ export async function deleteLecture(id: string) {
 export async function setPaid(id: string, paid: boolean) {
   const { supabase } = await requireUser();
   if (paid) {
-    const { data } = await supabase.from("lectures").select("expected_net").eq("id", id).single();
+    const { data } = await supabase.from("lectures").select("expected_net, gross_amount").eq("id", id).single();
+    // 받을 강의료를 입력하지 않은 일정은 수령 처리하지 않는다
+    if (!data || !(Number(data.gross_amount) > 0)) return;
     await supabase
       .from("lectures")
       .update({
@@ -178,7 +180,8 @@ export async function markPaidMany(ids: string[]): Promise<{ count: number; erro
     .from("lectures")
     .select("id, expected_net")
     .in("id", ids)
-    .eq("is_paid", false);
+    .eq("is_paid", false)
+    .gt("gross_amount", 0); // 강의료를 입력하지 않은 일정은 빼고
   if (error) return { count: 0, error: error.message };
 
   const today = todayInSeoul();

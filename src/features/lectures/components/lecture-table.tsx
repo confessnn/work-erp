@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { hasFee } from "../paid-selection";
 import { dateLabel, hoursLabel, timeLabel, won } from "@/lib/format";
 import { actualPaid } from "@/features/dashboard/summary";
 import { personOf, type FamilyEvent } from "@/features/family/types";
@@ -66,7 +67,7 @@ function LectureRow({ l }: { l: Lecture }) {
             <div className="font-semibold tabular-nums">{won(l.is_paid ? actualPaid(l) : l.expected_net)}</div>
             <div className="text-muted tabular-nums">세전 {won(l.gross_amount)}</div>
           </div>
-          <PaidToggle id={l.id} paid={l.is_paid} />
+          <PaidToggle id={l.id} paid={l.is_paid} hasFee={hasFee(l)} />
         </li>
   );
 }
