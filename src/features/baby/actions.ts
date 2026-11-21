@@ -28,10 +28,6 @@ export async function saveBabyInfo(fd: FormData) {
 
 type Ctx = BabyDriveContext;
 
-/** 날짜 바꾸기·삭제는 가족을 만든 사람만 */
-const ownerOnly = async () =>
-  (await getFamilyRole()).role === "member" ? { ok: false as const, error: "날짜 바꾸기와 삭제는 대표 계정에서만 할 수 있어요." } : null;
-
 /** work-erp/아기 사진 폴더 (없으면 생성) */
 async function babyRoot(ctx: Ctx) {
   if (await folderUsable(ctx.token, ctx.babyFolder)) return ctx.babyFolder as string;
@@ -141,8 +137,6 @@ export async function refreshBabyPage() {
 export async function changePhotoDate(id: string, newDate: string): Promise<Result> {
   try {
     if (!isDate(newDate)) return { ok: false, error: "날짜가 올바르지 않습니다." };
-    const denied = await ownerOnly();
-    if (denied) return denied;
     const ctx = await babyDriveContext();
     const { data: p } = await ctx.supabase.from("baby_photos").select("drive_file_id, taken_date").eq("id", id).single();
     if (!p) return { ok: false, error: "사진을 찾지 못했습니다." };
@@ -164,8 +158,6 @@ export async function changePhotoDate(id: string, newDate: string): Promise<Resu
 /** 사진 삭제: 앱 목록에서 지우고 드라이브 파일은 휴지통으로 (30일 안에 복구 가능) */
 export async function deleteBabyPhoto(id: string): Promise<Result> {
   try {
-    const denied = await ownerOnly();
-    if (denied) return denied;
     const ctx = await babyDriveContext();
     const { data: p } = await ctx.supabase.from("baby_photos").select("drive_file_id").eq("id", id).single();
     if (p) await trashFile(ctx.token, p.drive_file_id);

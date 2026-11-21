@@ -17,12 +17,12 @@ const timeOf = (iso: string | null) =>
 export function PhotoGallery({
   photos,
   birthDate,
-  canEdit = true,
+  showDriveLink = true,
 }: {
   photos: BabyPhoto[];
   birthDate: string | null;
-  /** 날짜 바꾸기·삭제 (대표 계정만) */
-  canEdit?: boolean;
+  /** 구글 드라이브에서 열기 링크 (드라이브 주인인 대표 계정만 열 수 있음) */
+  showDriveLink?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<BabyPhoto | null>(null);
@@ -83,7 +83,7 @@ export function PhotoGallery({
             <a href={`/baby/photo/${open.id}`} target="_blank" rel="noreferrer" className="btn-primary w-full">
               원본 크게 보기
             </a>
-            {canEdit && (
+            {showDriveLink && (
               <a
                 href={`https://drive.google.com/file/d/${open.drive_file_id}/view`}
                 target="_blank"
@@ -93,47 +93,41 @@ export function PhotoGallery({
                 구글 드라이브에서 열기
               </a>
             )}
-            {canEdit && (
-              <form
-                className="flex items-end gap-2"
-                action={(fd) =>
+            <form
+              className="flex items-end gap-2"
+              action={(fd) =>
+                start(async () => {
+                  const r = await changePhotoDate(open.id, String(fd.get("date")));
+                  if (!r.ok) return setErr(r.error);
+                  setOpen(null);
+                  router.refresh();
+                })
+              }
+            >
+              <label className="field flex-1">
+                <span>날짜 바꾸기 (드라이브 폴더도 이동)</span>
+                <input name="date" type="date" defaultValue={open.taken_date} className="input" />
+              </label>
+              <button type="submit" disabled={pending} className="chip">변경</button>
+            </form>
+            {err && <p className="text-sm text-danger">{err}</p>}
+            <div className="flex justify-between border-t border-line pt-3 text-sm">
+              <button
+                type="button"
+                disabled={pending}
+                className="text-danger underline"
+                onClick={() => {
+                  if (!confirm("이 사진을 삭제할까요? 드라이브에서는 휴지통으로 이동합니다(30일 안에 복구 가능).")) return;
                   start(async () => {
-                    const r = await changePhotoDate(open.id, String(fd.get("date")));
+                    const r = await deleteBabyPhoto(open.id);
                     if (!r.ok) return setErr(r.error);
                     setOpen(null);
                     router.refresh();
-                  })
-                }
+                  });
+                }}
               >
-                <label className="field flex-1">
-                  <span>날짜 바꾸기 (드라이브 폴더도 이동)</span>
-                  <input name="date" type="date" defaultValue={open.taken_date} className="input" />
-                </label>
-                <button type="submit" disabled={pending} className="chip">변경</button>
-              </form>
-            )}
-            {err && <p className="text-sm text-danger">{err}</p>}
-            <div className="flex justify-between border-t border-line pt-3 text-sm">
-              {canEdit ? (
-                <button
-                  type="button"
-                  disabled={pending}
-                  className="text-danger underline"
-                  onClick={() => {
-                    if (!confirm("이 사진을 삭제할까요? 드라이브에서는 휴지통으로 이동합니다(30일 안에 복구 가능).")) return;
-                    start(async () => {
-                      const r = await deleteBabyPhoto(open.id);
-                      if (!r.ok) return setErr(r.error);
-                      setOpen(null);
-                      router.refresh();
-                    });
-                  }}
-                >
-                  삭제
-                </button>
-              ) : (
-                <span />
-              )}
+                삭제
+              </button>
               <button type="button" className="underline" onClick={() => setOpen(null)}>
                 닫기
               </button>
