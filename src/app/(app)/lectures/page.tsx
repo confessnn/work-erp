@@ -23,8 +23,8 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
   const now = nowInSeoul();
   const period = parsePeriod(sp, now);
   const status = sp.status === "paid" || sp.status === "unpaid" ? sp.status : undefined;
-  // 달력은 한 달 단위로만 보여 준다. 연도별에서는 목록으로 둔다.
-  const calendar = sp.view === "calendar" && period.month !== undefined;
+  // 첫 화면은 달력. 목록은 view=list. 달력은 한 달 단위로만 보여 주므로 연도별에서는 목록으로 둔다.
+  const calendar = sp.view !== "list" && period.month !== undefined;
   // 수령 필터를 쓰지 않을 때는 가족 일정(아내·아기 등)도 같이 보여 준다
   const range = period.month
     ? {
@@ -49,7 +49,7 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
     if (p.view) params.set("view", p.view);
     return `/lectures?${params}`;
   };
-  const view = calendar ? "calendar" : undefined;
+  const view = calendar ? undefined : "list";
   const calendarMonth = period.month ?? (period.year === now.year ? now.month : 1);
 
   return (
@@ -71,13 +71,13 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <div className="flex rounded-full border border-line bg-surface p-0.5">
           <Link
-            href={q({ st: status })}
+            href={q({ st: status, view: "list" })}
             className={`rounded-full px-4 py-1.5 ${calendar ? "text-muted" : "bg-accent-soft font-semibold"}`}
           >
             목록
           </Link>
           <Link
-            href={q({ st: status, view: "calendar", month: calendarMonth })}
+            href={q({ st: status, month: calendarMonth })}
             className={`rounded-full px-4 py-1.5 ${calendar ? "bg-accent-soft font-semibold" : "text-muted"}`}
           >
             달력
