@@ -104,7 +104,7 @@ async function FeeStats({ period }: { period: PeriodParams }) {
       <PeriodNav base="/" period={period} />
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="총 강의료 (세전)" value={won(s.grossTotal)} sub={`${s.count}건 · ${hoursLabel(s.totalHours)}`} tone="lavender" />
+        <Stat label="총 강의료 (세전)" value={won(s.grossTotal)} sub={`${s.count}건 · ${hoursLabel(s.totalHours)}`} tone="navy" />
         <Stat label="예상 수령액 (세후)" value={won(s.expectedNet)} sub={`원천징수 ${won(s.taxTotal)}`} tone="ochre" />
         <Stat
           label="수령한 금액"
@@ -130,7 +130,7 @@ async function FeeStats({ period }: { period: PeriodParams }) {
       <section className="card">
         <h2 className="section-title mb-3">소득 구분별</h2>
         <table className="w-full text-sm">
-          <thead className="text-muted">
+          <thead className="border-b-2 border-accent text-muted">
             <tr><th className="text-left font-normal">구분</th><th className="num">세전</th><th className="num">원천징수</th><th className="num">예상 수령</th><th className="num">미수령</th></tr>
           </thead>
           <tbody>
@@ -151,7 +151,7 @@ async function FeeStats({ period }: { period: PeriodParams }) {
         <section className="card overflow-x-auto">
           <h2 className="section-title mb-3">월별</h2>
           <table className="w-full min-w-[32rem] text-sm">
-            <thead className="text-muted">
+            <thead className="border-b-2 border-accent text-muted">
               <tr><th className="text-left font-normal">월</th><th className="num">건수</th><th className="num">세전</th><th className="num">예상 수령</th><th className="num">수령</th><th className="num">미수령</th></tr>
             </thead>
             <tbody>
@@ -175,14 +175,21 @@ async function FeeStats({ period }: { period: PeriodParams }) {
   );
 }
 
-const STAT_TONE = { lavender: "bg-lavender", ochre: "bg-ochre", mint: "bg-mint", peach: "bg-peach" };
+/** 첫 카드(총액)는 남색으로 채우고, 나머지는 흰 카드 위쪽에 구분 색 띠를 둔다 */
+const STAT_TONE = {
+  navy: "bg-accent text-white",
+  ochre: "border border-line border-t-4 border-t-ochre bg-surface",
+  mint: "border border-line border-t-4 border-t-mint bg-surface",
+  peach: "border border-line border-t-4 border-t-peach bg-surface",
+};
 
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: keyof typeof STAT_TONE }) {
+export function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: keyof typeof STAT_TONE }) {
+  const onNavy = tone === "navy";
   return (
     <div className={`rounded-2xl p-4 sm:p-5 ${STAT_TONE[tone]}`}>
-      <div className="text-sm font-medium">{label}</div>
-      <div className="mt-1 text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">{value}</div>
-      {sub && <div className="mt-1 text-xs">{sub}</div>}
+      <div className={`text-sm font-semibold ${onNavy ? "text-accent-soft" : "text-muted"}`}>{label}</div>
+      <div className="mt-1 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">{value}</div>
+      {sub && <div className={`mt-1 text-xs ${onNavy ? "text-white/80" : "text-muted"}`}>{sub}</div>}
     </div>
   );
 }
