@@ -33,7 +33,7 @@ export default async function ImportPage({ searchParams }: PageProps<"/lectures/
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-title">캘린더에서 불러오기</h1>
-        <Link href="/lectures" className="text-sm text-muted hover:underline">← 일정 목록</Link>
+        <Link href="/lectures" className="text-sm text-muted hover:underline">← 일정</Link>
       </div>
 
       {msg && <p className="card text-sm">{msg}</p>}
