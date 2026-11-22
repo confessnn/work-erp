@@ -12,6 +12,8 @@ export type Todo = {
   source_key?: string | null;
   /** 할 일 메모 (담당자 연락처, 금액 등) */
   note?: string | null;
+  /** 가족에게 공유 중인지 */
+  shared?: boolean;
   /** 메모 줄이 나온 일정 이름 */
   source_title?: string | null;
   source_kind?: ScheduleKind | null;
@@ -31,7 +33,10 @@ export type PreviousRecord = { date: string; title: string; record: string; seri
 export type ScheduleKind = "lecture" | "family";
 
 /** DB에서 읽을 칸 */
-export const TODO_COLUMNS = "id, title, due_date, done_at, created_at, note, source_key, source_title, source_kind, source_id, source_end_at";
+export const TODO_COLUMNS = "id, title, due_date, done_at, created_at, note, shared, source_key, source_title, source_kind, source_id, source_end_at";
+
+/** 가족이 나에게 공유한 할 일 (who: 공유한 사람) */
+export type SharedTodo = Pick<Todo, "id" | "title" | "due_date" | "done_at" | "note"> & { who: string };
 
 export const NOTE_MAX = 1000;
 

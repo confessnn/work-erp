@@ -13,7 +13,7 @@ import { listLectures, listUpcoming } from "@/features/lectures/queries";
 import { flushPendingGoogleDeletes } from "@/features/google-calendar/push";
 import { RecentRecords } from "@/features/records/components/recent-records";
 import { TodoWidget } from "@/features/todos/components/todo-widget";
-import { listTodayTodos } from "@/features/todos/queries";
+import { hasFamilyPartner, listSharedTodos, listTodayTodos } from "@/features/todos/queries";
 import { requireUser } from "@/lib/supabase/server";
 import { hoursLabel, nowInSeoul, todayInSeoul, won } from "@/lib/format";
 
@@ -29,11 +29,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const today = todayInSeoul();
   const monthStart = `${now.year}-${String(now.month).padStart(2, "0")}-01`;
   const monthNext = now.month === 12 ? `${now.year + 1}-01-01` : `${now.year}-${String(now.month + 1).padStart(2, "0")}-01`;
-  const [thisMonth, familyEvents, reminderKeys, todos, { supabase }] = await Promise.all([
+  const [thisMonth, familyEvents, reminderKeys, todos, sharedTodos, canShare, { supabase }] = await Promise.all([
     listLectures(now),
     listFamilyEventsBetween(monthStart, monthNext),
     listMyReminderKeys(),
     listTodayTodos(today),
+    listSharedTodos(today),
+    hasFamilyPartner(),
     requireUser(),
   ]);
   // 구글 캘린더에서 지울 일정이 남아 있으면 화면을 보낸 뒤에 처리한다
@@ -46,7 +48,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         <Link href="/lectures/new" className="btn-primary">+ 일정 추가</Link>
       </div>
 
-      <TodoWidget key={today} initial={todos} today={today} />
+      <TodoWidget key={today} initial={todos} today={today} shared={sharedTodos} canShare={canShare} />
 
       <Suspense fallback={<Placeholder className="h-32" />}>
         <RecentRecords />

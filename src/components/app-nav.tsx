@@ -21,6 +21,7 @@ export const NAV: NavItem[] = [
 
 /** 초대받은 가족 계정의 메뉴 */
 export const MEMBER_NAV: NavItem[] = [
+  { href: "/todos", label: "할 일" },
   { href: "/family", label: "가족 달력" },
   { href: "/baby", label: "임채현" },
 ];

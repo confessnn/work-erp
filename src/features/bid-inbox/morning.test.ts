@@ -116,3 +116,11 @@ describe("아침 알림의 할 일", () => {
     expect(m.html).toContain("담당 &lt;손&gt; 팀장\n043-000-0000</div>");
   });
 });
+
+describe("공유받은 할 일", () => {
+  it("누가 공유했는지 붙인다 (메일·텔레그램)", () => {
+    const todos = [{ title: "기저귀 주문", due_date: "2026-11-22", note: null, who: "아내" }];
+    expect(buildMorningTelegram("2026-11-22", [], [], [], todos).join("\n")).toContain("☐ 기저귀 주문 [아내 공유]");
+    expect(buildMorning("2026-11-22", [], [], [], todos).html).toContain("[아내 공유]");
+  });
+});
