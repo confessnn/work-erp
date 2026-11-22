@@ -98,3 +98,30 @@ export function WeekBars({ rows }: { rows: { label: string; segments: Segment[];
     </div>
   );
 }
+
+export type GapRow = { label: string; on?: boolean; count: number; avg: number | null; min: number | null; max: number | null };
+
+/** 간격패턴: 하루마다 최단~최장 간격 막대와 평균 표시 */
+export function GapBars({ rows, color, fmt }: { rows: GapRow[]; color: string; fmt: (m: number) => string }) {
+  const top = Math.max(60, ...rows.map((r) => r.max ?? 0));
+  const pct = (m: number) => `${(m / top) * 100}%`;
+  return (
+    <ul className="space-y-2">
+      {rows.map((r) => (
+        <li key={r.label} className="flex items-center gap-2 text-sm">
+          <span className={`w-14 shrink-0 text-right text-xs tabular-nums ${r.on ? "font-semibold text-fg" : "text-muted"}`}>{r.label}</span>
+          <span className="relative h-5 flex-1 rounded-md bg-fg/5">
+            {r.min !== null && r.max !== null && (
+              <span className="absolute inset-y-1 rounded-sm" style={{ left: pct(r.min), width: `calc(${pct(r.max - r.min)} + 3px)`, background: `${color}66` }} />
+            )}
+            {r.avg !== null && <span className="absolute inset-y-0 w-1 rounded-sm" style={{ left: pct(r.avg), background: color }} title={`평균 ${fmt(r.avg)}`} />}
+          </span>
+          <span className="w-28 shrink-0 text-right text-xs tabular-nums">
+            {r.avg !== null ? fmt(r.avg) : "–"}
+            <span className="block text-muted">{r.count}회</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
