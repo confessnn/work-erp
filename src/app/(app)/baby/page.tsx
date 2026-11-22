@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BabyTabs } from "@/features/baby-care/components/baby-tabs";
 import { saveBabyInfo } from "@/features/baby/actions";
 import { ageLabel } from "@/features/baby/age";
 import { PhotoGallery } from "@/features/baby/components/photo-gallery";
@@ -24,9 +25,10 @@ export default async function BabyPage({ searchParams }: PageProps<"/baby">) {
 
   return (
     <>
-      <div>
+      <div className="space-y-2">
         <h1 className="page-title">{title}</h1>
         {baby.birthDate && <p className="text-sm text-muted">오늘 {ageLabel(baby.birthDate, today)}</p>}
+        <BabyTabs active="photos" />
       </div>
 
       {status !== "ready" ? (
