@@ -2,8 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { Suspense } from "react";
-import { parsePeriod, PeriodNav, type PeriodParams } from "@/components/period-nav";
-import { getFamilyRole, listFamilyEventsBetween } from "@/features/family/queries";
+import {
+  parsePeriod,
+  PeriodNav,
+  type PeriodParams,
+} from "@/components/period-nav";
+import {
+  getFamilyRole,
+  listFamilyEventsBetween,
+} from "@/features/family/queries";
 import { listMyReminderKeys } from "@/features/reminders/queries";
 import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
@@ -12,8 +19,14 @@ import { LectureTable } from "@/features/lectures/components/lecture-table";
 import { listLectures, listUpcoming } from "@/features/lectures/queries";
 import { flushPendingGoogleDeletes } from "@/features/google-calendar/push";
 import { RecentRecords } from "@/features/records/components/recent-records";
+import { getBabyInfo } from "@/features/baby/queries";
+import { listBabyTodosForWidget } from "@/features/baby-care/queries";
 import { TodoWidget } from "@/features/todos/components/todo-widget";
-import { hasFamilyPartner, listSharedTodos, listTodayTodos } from "@/features/todos/queries";
+import {
+  hasFamilyPartner,
+  listSharedTodos,
+  listTodayTodos,
+} from "@/features/todos/queries";
 import { requireUser } from "@/lib/supabase/server";
 import { hoursLabel, nowInSeoul, todayInSeoul, won } from "@/lib/format";
 
@@ -28,8 +41,21 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   const period = parsePeriod(await searchParams, now);
   const today = todayInSeoul();
   const monthStart = `${now.year}-${String(now.month).padStart(2, "0")}-01`;
-  const monthNext = now.month === 12 ? `${now.year + 1}-01-01` : `${now.year}-${String(now.month + 1).padStart(2, "0")}-01`;
-  const [thisMonth, familyEvents, reminderKeys, todos, sharedTodos, canShare, { supabase }] = await Promise.all([
+  const monthNext =
+    now.month === 12
+      ? `${now.year + 1}-01-01`
+      : `${now.year}-${String(now.month + 1).padStart(2, "0")}-01`;
+  const [
+    thisMonth,
+    familyEvents,
+    reminderKeys,
+    todos,
+    sharedTodos,
+    canShare,
+    { supabase },
+    babyTodos,
+    babyInfo,
+  ] = await Promise.all([
     listLectures(now),
     listFamilyEventsBetween(monthStart, monthNext),
     listMyReminderKeys(),
@@ -37,6 +63,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     listSharedTodos(today),
     hasFamilyPartner(),
     requireUser(),
+    listBabyTodosForWidget(today),
+    getBabyInfo(),
   ]);
   // 구글 캘린더에서 지울 일정이 남아 있으면 화면을 보낸 뒤에 처리한다
   after(() => flushPendingGoogleDeletes(supabase).catch(() => {}));
@@ -45,10 +73,20 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-title">대시보드</h1>
-        <Link href="/lectures/new" className="btn-primary">+ 일정 추가</Link>
+        <Link href="/lectures/new" className="btn-primary">
+          + 일정 추가
+        </Link>
       </div>
 
-      <TodoWidget key={today} initial={todos} today={today} shared={sharedTodos} canShare={canShare} />
+      <TodoWidget
+        key={today}
+        initial={todos}
+        today={today}
+        shared={sharedTodos}
+        canShare={canShare}
+        baby={babyTodos}
+        babyName={babyInfo.name ?? "아기"}
+      />
 
       <Suspense fallback={<Placeholder className="h-32" />}>
         <RecentRecords />
@@ -57,11 +95,21 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="section-title">{now.month}월 일정</h2>
-          <Link href="/lectures?view=calendar" className="text-sm text-muted hover:underline">
+          <Link
+            href="/lectures?view=calendar"
+            className="text-sm text-muted hover:underline"
+          >
             다른 달 보기 ›
           </Link>
         </div>
-        <LectureCalendar year={now.year} month={now.month} lectures={thisMonth} today={today} familyEvents={familyEvents} reminderKeys={reminderKeys} />
+        <LectureCalendar
+          year={now.year}
+          month={now.month}
+          lectures={thisMonth}
+          today={today}
+          familyEvents={familyEvents}
+          reminderKeys={reminderKeys}
+        />
       </section>
 
       <div className="space-y-2">
@@ -71,7 +119,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           </Suspense>
         </div>
         <p className="text-xs text-muted">
-          API 잔액과 충전 시점은 입력값에서 사용액을 빼 계산한 추정치이고, 사용액은 UTC 날짜 기준입니다. Claude 사용액은 보통 4시간, 길면 24시간 늦게 반영됩니다. 실제 잔액과 다르면 다시 입력하세요.
+          API 잔액과 충전 시점은 입력값에서 사용액을 빼 계산한 추정치이고,
+          사용액은 UTC 날짜 기준입니다. Claude 사용액은 보통 4시간, 길면 24시간
+          늦게 반영됩니다. 실제 잔액과 다르면 다시 입력하세요.
         </p>
       </div>
 
@@ -91,7 +141,12 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
 
 /** 불러오는 동안 자리만 잡아 두는 회색 칸 */
 function Placeholder({ className = "" }: { className?: string }) {
-  return <div aria-hidden className={`animate-pulse rounded-2xl bg-line/60 ${className}`} />;
+  return (
+    <div
+      aria-hidden
+      className={`animate-pulse rounded-2xl bg-line/60 ${className}`}
+    />
+  );
 }
 
 async function Upcoming() {
@@ -115,25 +170,47 @@ async function FeeStats({ period }: { period: PeriodParams }) {
       <PeriodNav base="/" period={period} />
 
       <section data-stagger className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="총 강의료 (세전)" value={won(s.grossTotal)} sub={`${s.count}건 · ${hoursLabel(s.totalHours)}`} tone="navy" />
-        <Stat label="예상 수령액 (세후)" value={won(s.expectedNet)} sub={`원천징수 ${won(s.taxTotal)}`} tone="ochre" />
+        <Stat
+          label="총 강의료 (세전)"
+          value={won(s.grossTotal)}
+          sub={`${s.count}건 · ${hoursLabel(s.totalHours)}`}
+          tone="navy"
+        />
+        <Stat
+          label="예상 수령액 (세후)"
+          value={won(s.expectedNet)}
+          sub={`원천징수 ${won(s.taxTotal)}`}
+          tone="ochre"
+        />
         <Stat
           label="수령한 금액"
           value={won(s.receivedTotal)}
           sub={`${s.paidCount}건${diff !== 0 ? ` · 예상 대비 ${diff > 0 ? "+" : ""}${won(diff)}` : ""}`}
           tone="mint"
         />
-        <Stat label="미수령 금액" value={won(s.unpaidTotal)} sub={`${s.unpaidCount}건`} tone="peach" />
+        <Stat
+          label="미수령 금액"
+          value={won(s.unpaidTotal)}
+          sub={`${s.unpaidCount}건`}
+          tone="peach"
+        />
       </section>
 
       {s.expectedNet > 0 && (
         <section className="card space-y-2">
           <div className="flex justify-between text-sm">
             <span>수령 진행률</span>
-            <span className="tabular-nums">{Math.round((s.receivedExpected / s.expectedNet) * 100)}%</span>
+            <span className="tabular-nums">
+              {Math.round((s.receivedExpected / s.expectedNet) * 100)}%
+            </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-line">
-            <div className="h-full bg-success" style={{ width: `${(s.receivedExpected / s.expectedNet) * 100}%` }} />
+            <div
+              className="h-full bg-success"
+              style={{
+                width: `${(s.receivedExpected / s.expectedNet) * 100}%`,
+              }}
+            />
           </div>
         </section>
       )}
@@ -142,12 +219,20 @@ async function FeeStats({ period }: { period: PeriodParams }) {
         <h2 className="section-title mb-3">소득 구분별</h2>
         <table className="w-full text-sm">
           <thead className="border-b-2 border-accent text-muted">
-            <tr><th className="text-left font-normal">구분</th><th className="num">세전</th><th className="num">원천징수</th><th className="num">예상 수령</th><th className="num">미수령</th></tr>
+            <tr>
+              <th className="text-left font-normal">구분</th>
+              <th className="num">세전</th>
+              <th className="num">원천징수</th>
+              <th className="num">예상 수령</th>
+              <th className="num">미수령</th>
+            </tr>
           </thead>
           <tbody>
             {byType.map(({ t, s }) => (
               <tr key={t} className="border-t border-line">
-                <td className="py-2">{t === "business" ? "사업소득 3.3%" : "기타소득 8.8%"}</td>
+                <td className="py-2">
+                  {t === "business" ? "사업소득 3.3%" : "기타소득 8.8%"}
+                </td>
                 <td className="num">{won(s.grossTotal)}</td>
                 <td className="num">{won(s.taxTotal)}</td>
                 <td className="num">{won(s.expectedNet)}</td>
@@ -163,13 +248,28 @@ async function FeeStats({ period }: { period: PeriodParams }) {
           <h2 className="section-title mb-3">월별</h2>
           <table className="w-full min-w-[32rem] text-sm">
             <thead className="border-b-2 border-accent text-muted">
-              <tr><th className="text-left font-normal">월</th><th className="num">건수</th><th className="num">세전</th><th className="num">예상 수령</th><th className="num">수령</th><th className="num">미수령</th></tr>
+              <tr>
+                <th className="text-left font-normal">월</th>
+                <th className="num">건수</th>
+                <th className="num">세전</th>
+                <th className="num">예상 수령</th>
+                <th className="num">수령</th>
+                <th className="num">미수령</th>
+              </tr>
             </thead>
             <tbody>
               {summarizeByMonth(lectures).map(({ month, summary: m }) => (
-                <tr key={month} className={`border-t border-line ${m.count ? "" : "text-muted"}`}>
+                <tr
+                  key={month}
+                  className={`border-t border-line ${m.count ? "" : "text-muted"}`}
+                >
                   <td className="py-2">
-                    <Link href={`/?y=${period.year}&m=${month}`} className="hover:underline">{month}월</Link>
+                    <Link
+                      href={`/?y=${period.year}&m=${month}`}
+                      className="hover:underline"
+                    >
+                      {month}월
+                    </Link>
                   </td>
                   <td className="num">{m.count}</td>
                   <td className="num">{won(m.grossTotal)}</td>
@@ -194,13 +294,37 @@ const STAT_TONE = {
   peach: "border border-line border-t-4 border-t-peach bg-surface",
 };
 
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: keyof typeof STAT_TONE }) {
+function Stat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: keyof typeof STAT_TONE;
+}) {
   const onNavy = tone === "navy";
   return (
-    <div className={`lift rounded-2xl p-4 sm:p-5 ${STAT_TONE[tone]} ${tone === "navy" ? "shadow-[0_12px_28px_rgba(16,36,69,0.25)]" : ""}`}>
-      <div className={`text-sm font-semibold ${onNavy ? "text-accent-soft" : "text-muted"}`}>{label}</div>
-      <div className="mt-1 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">{value}</div>
-      {sub && <div className={`mt-1 text-xs ${onNavy ? "text-white/80" : "text-muted"}`}>{sub}</div>}
+    <div
+      className={`lift rounded-2xl p-4 sm:p-5 ${STAT_TONE[tone]} ${tone === "navy" ? "shadow-[0_12px_28px_rgba(16,36,69,0.25)]" : ""}`}
+    >
+      <div
+        className={`text-sm font-semibold ${onNavy ? "text-accent-soft" : "text-muted"}`}
+      >
+        {label}
+      </div>
+      <div className="mt-1 text-xl font-bold tracking-tight tabular-nums sm:text-2xl">
+        {value}
+      </div>
+      {sub && (
+        <div
+          className={`mt-1 text-xs ${onNavy ? "text-white/80" : "text-muted"}`}
+        >
+          {sub}
+        </div>
+      )}
     </div>
   );
 }

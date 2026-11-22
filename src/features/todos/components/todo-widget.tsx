@@ -14,6 +14,8 @@ import {
   setTodoDone,
   setTodoShared,
 } from "../actions";
+import type { BabyTodo } from "@/features/baby-care/baby-todos";
+import { setBabyTodoDone } from "@/features/baby-care/todo-actions";
 import { addDays, NOTE_MAX, progress, RECORD_MAX, recordTarget, sourceLabel, type SharedTodo, type Todo } from "../todos";
 
 /**
@@ -24,12 +26,15 @@ import { addDays, NOTE_MAX, progress, RECORD_MAX, recordTarget, sourceLabel, typ
  * ‹ › 로 날짜를 넘기면 그날의 할 일을 보고, 미래 날짜에 미리 적어 둘 수 있다.
  * '공유'를 켠 할 일은 가족(가족을 만든 사람 ↔ 초대받은 가족)의 '공유받은 할 일'에 보인다.
  * 공유받은 할 일은 보고 완료 체크만 할 수 있다.
+ * 아기 할 일(임채현 → 할 일)은 부부 공용 한 건이라, 여기서 체크해도 가족 모두에게 같이 완료된다.
  */
 export function TodoWidget({
   initial,
   today,
   shared: sharedInitial = [],
   canShare = false,
+  baby: babyInitial = [],
+  babyName = "아기",
 }: {
   initial: Todo[];
   today: string;
@@ -37,8 +42,12 @@ export function TodoWidget({
   shared?: SharedTodo[];
   /** 가족이 있어야 공유 버튼을 보여 준다 */
   canShare?: boolean;
+  /** 아기 할 일 (가족 공용) */
+  baby?: BabyTodo[];
+  babyName?: string;
 }) {
   const [shared, setShared] = useState(sharedInitial);
+  const [baby, setBaby] = useState(babyInitial);
   const [day, setDay] = useState(today);
   const [items, setItems] = useState(initial);
   const [todayItems, setTodayItems] = useState(initial);
@@ -69,6 +78,17 @@ export function TodoWidget({
   /** 기록(일정 할 일)이나 메모(다른 할 일)를 쓰고 있는 할 일 id와 쓰던 내용 */
   const [editing, setEditing] = useState<{ id: string; kind: "record" | "note"; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const toggleBaby = (t: BabyTodo) => {
+    const before = baby;
+    setBaby(baby.map((x) => (x.id === t.id ? { ...x, done_at: x.done_at ? null : new Date().toISOString() } : x)));
+    start(async () => {
+      const r = await setBabyTodoDone(t.id, !t.done_at);
+      if (!r.ok) {
+        setBaby(before);
+        setError(r.message);
+      }
+    });
+  };
   const { done, total } = progress(items);
 
   /** 화면을 먼저 바꾸고, 저장이 실패하면 되돌린다 */
@@ -309,6 +329,43 @@ export function TodoWidget({
             );
           })}
         </ul>
+      )}
+
+      {baby.length > 0 && (
+        <div className="space-y-1 border-t border-line pt-3">
+          <h3 className="flex items-center text-sm font-semibold">
+            👶 {babyName} 할 일
+            <Link href="/baby/todos" prefetch={false} className="ml-auto text-xs font-normal text-muted hover:underline">
+              고치기·추가 →
+            </Link>
+          </h3>
+          <ul className="divide-y divide-line">
+            {baby.map((t) => (
+              <li key={t.id} className="py-2">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={!!t.done_at}
+                    onChange={() => toggleBaby(t)}
+                    aria-label={`${t.title} ${t.done_at ? "안 한 것으로" : "완료"}`}
+                    className="h-5 w-5 shrink-0 cursor-pointer accent-[var(--color-success)]"
+                  />
+                  <span className={`min-w-0 flex-1 break-words text-sm ${t.done_at ? "text-muted line-through" : ""}`}>
+                    {t.title}
+                    {t.due_date !== today && (
+                      <span className={`ml-2 text-xs ${t.due_date < today && !t.done_at ? "text-warn" : "text-muted"}`}>
+                        {t.due_date < today ? "밀림 · " : ""}
+                        {dateLabel(t.due_date)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="badge shrink-0 bg-peach/40 text-xs">부부 공용</span>
+                </div>
+                {t.note && <p className="mt-1 ml-8 whitespace-pre-wrap break-words rounded-lg border border-line px-3 py-2 text-xs">{t.note}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {shared.length > 0 && (

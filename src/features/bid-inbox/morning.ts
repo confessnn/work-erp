@@ -19,10 +19,11 @@ export type AgendaItem = {
 };
 
 /** 그날까지 안 끝낸 할 일 (cron_morning_todos) */
-export type MorningTodo = { title: string; due_date: string; note?: string | null; who?: string | null };
+/** who: 공유한 가족, tag: 묶음 이름(예: 아기 할 일이면 아기 이름) */
+export type MorningTodo = { title: string; due_date: string; note?: string | null; who?: string | null; tag?: string | null };
 
 /** 가족이 공유한 할 일이면 누가 공유했는지 */
-const whoTag = (t: MorningTodo) => (t.who ? ` [${t.who} 공유]` : "");
+const whoTag = (t: MorningTodo) => (t.tag ? ` [${t.tag}]` : t.who ? ` [${t.who} 공유]` : "");
 
 const ERP_URL = "https://work-erp-one.vercel.app";
 
