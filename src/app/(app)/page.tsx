@@ -29,6 +29,7 @@ import {
 } from "@/features/todos/queries";
 import { requireUser } from "@/lib/supabase/server";
 import { hoursLabel, nowInSeoul, todayInSeoul, won } from "@/lib/format";
+import { holidaysOfMonth } from "@/lib/holidays";
 
 /**
  * 대시보드. 휴대폰에서 빨리 뜨도록 할 일·이번 달 달력만 먼저 그리고,
@@ -109,6 +110,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           today={today}
           familyEvents={familyEvents}
           reminderKeys={reminderKeys}
+          holidays={await holidaysOfMonth(now.year, now.month)}
         />
       </section>
 

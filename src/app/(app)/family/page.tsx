@@ -7,6 +7,7 @@ import { getFamilyRole, listFamilyMonth } from "@/features/family/queries";
 import { PushSetup } from "@/features/reminders/components/push-setup";
 import { listMyReminderKeys } from "@/features/reminders/queries";
 import { nowInSeoul, todayInSeoul } from "@/lib/format";
+import { holidaysOfMonth } from "@/lib/holidays";
 
 export default async function FamilyPage({ searchParams }: PageProps<"/family">) {
   const sp = await searchParams;
@@ -57,6 +58,7 @@ export default async function FamilyPage({ searchParams }: PageProps<"/family">)
         today={todayInSeoul()}
         lectureHref={false}
         reminderKeys={reminderKeys}
+        holidays={await holidaysOfMonth(year, month)}
       />
     </>
   );
