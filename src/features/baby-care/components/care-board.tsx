@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { dateLabel } from "@/lib/format";
+import { DiaperIcon, KindIcon } from "./kind-icon";
 import { TimeSlider } from "./time-slider";
 import { deleteCareLog, endSleep, saveCareLog, type CareInput } from "../actions";
 import {
@@ -109,7 +110,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
       {/* 마지막 기록: 보고 있는 날짜와 상관없이 가장 최근 기록 */}
       {day !== today && <p className="-mb-4 text-xs text-muted">아래 세 칸은 보고 있는 날짜와 상관없이 가장 최근 기록이에요.</p>}
       <section className="grid grid-cols-3 gap-2" aria-label="가장 최근 기록 (날짜와 상관없음)">
-        <LastCard icon="🧷" title="마지막 기저귀" log={latest.diaper} now={now} />
+        <LastCard icon={<DiaperIcon />} title="마지막 기저귀" log={latest.diaper} now={now} />
         <LastCard icon="🍼" title="마지막 수유" log={latest.feed} now={now} />
         <LastCard icon="😴" title={sleeping ? "자는 중" : "마지막 잠"} log={latest.sleep} now={now} sleep />
       </section>
@@ -129,7 +130,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
             className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-surface px-1 py-3 text-xs hover:bg-accent-soft"
           >
             <span className="text-2xl" aria-hidden>
-              {k.icon}
+              <KindIcon kind={k.key} />
             </span>
             {k.label}
           </button>
@@ -183,7 +184,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
                   <button type="button" onClick={() => edit(l)} className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-accent-soft/50">
                     <span className="w-12 shrink-0 pt-0.5 text-sm tabular-nums text-muted">{seoulTime(l.started_at)}</span>
                     <span className="text-lg" aria-hidden>
-                      {k.icon}
+                      <KindIcon kind={l.kind} />
                     </span>
                     <span className="min-w-0 flex-1 text-sm">
                       <b>{k.label}</b> {describe(l, now)}
@@ -214,7 +215,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
   );
 }
 
-function LastCard({ icon, title, log, now, sleep }: { icon: string; title: string; log: BabyLog | null; now: number; sleep?: boolean }) {
+function LastCard({ icon, title, log, now, sleep }: { icon: React.ReactNode; title: string; log: BabyLog | null; now: number; sleep?: boolean }) {
   let main = "기록 없음";
   let sub = "";
   if (log) {
@@ -289,7 +290,7 @@ function CareForm({
         }}
       >
         <h3 className="section-title">
-          {k.icon} {k.label} {editing.id ? "기록 고치기" : "기록"}
+          <KindIcon kind={v.kind} /> {k.label} {editing.id ? "기록 고치기" : "기록"}
         </h3>
 
         <TimeSlider value={v.started} onChange={moveStart} />

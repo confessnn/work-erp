@@ -26,7 +26,7 @@ export const KINDS: { key: CareKind; label: string; icon: string; field: "ml" | 
   { key: "breast", label: "모유", icon: "🤱", field: "breast" },
   { key: "pumped", label: "유축수유", icon: "🥛", field: "ml" },
   { key: "pump", label: "유축", icon: "🫙", field: "pump" },
-  { key: "diaper", label: "기저귀", icon: "🧷", field: "diaper" },
+  { key: "diaper", label: "기저귀", icon: "🩲", field: "diaper" },
   { key: "sleep", label: "수면", icon: "😴", field: "sleep" },
   { key: "weight", label: "몸무게", icon: "⚖️", field: "kg" },
   { key: "medicine", label: "투약", icon: "💊", field: "medicine" },
