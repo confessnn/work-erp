@@ -19,7 +19,10 @@ export type AgendaItem = {
 };
 
 /** 그날까지 안 끝낸 할 일 (cron_morning_todos) */
-export type MorningTodo = { title: string; due_date: string; note?: string | null };
+export type MorningTodo = { title: string; due_date: string; note?: string | null; who?: string | null };
+
+/** 가족이 공유한 할 일이면 누가 공유했는지 */
+const whoTag = (t: MorningTodo) => (t.who ? ` [${t.who} 공유]` : "");
 
 const ERP_URL = "https://work-erp-one.vercel.app";
 
@@ -71,7 +74,7 @@ export function buildMorning(today: string, agenda: AgendaItem[], notices: Diges
     problemsHtml(problems),
     dayHtml(`오늘 ${dateLabel(today)}`, todays),
     ...(todos.length
-      ? [`<h3>할 일 ${todos.length}개</h3><ul style="padding-left:18px">${todos.map((t) => `<li>☐ ${escapeHtml(t.title)}<span style="color:#b45309">${lateTag(t, today)}</span>${t.note ? `<div style="color:#6b7280;font-size:13px;white-space:pre-wrap">${escapeHtml(t.note)}</div>` : ""}</li>`).join("")}</ul>`]
+      ? [`<h3>할 일 ${todos.length}개</h3><ul style="padding-left:18px">${todos.map((t) => `<li>☐ ${escapeHtml(t.title)}<span style="color:#6b7280">${escapeHtml(whoTag(t))}</span><span style="color:#b45309">${lateTag(t, today)}</span>${t.note ? `<div style="color:#6b7280;font-size:13px;white-space:pre-wrap">${escapeHtml(t.note)}</div>` : ""}</li>`).join("")}</ul>`]
       : []),
     dayHtml(`내일 ${dateLabel(tomorrow)}`, tomorrows),
     `<p><a href="${ERP_URL}/lectures?view=calendar">ERP 달력 열기</a></p>`,
@@ -124,7 +127,7 @@ export function buildMorningTelegram(today: string, agenda: AgendaItem[], notice
   const blocks = [
     head,
     tgDay("오늘", agenda.filter((a) => a.event_date === today)),
-    ...(todos.length ? [[`<b>할 일 ${todos.length}개</b>`, ...todos.map((t) => `☐ ${escapeTg(t.title)}${lateTag(t, today)}${t.note ? `\n<i>${escapeTg(t.note)}</i>` : ""}`)].join("\n")] : []),
+    ...(todos.length ? [[`<b>할 일 ${todos.length}개</b>`, ...todos.map((t) => `☐ ${escapeTg(t.title)}${escapeTg(whoTag(t))}${lateTag(t, today)}${t.note ? `\n<i>${escapeTg(t.note)}</i>` : ""}`)].join("\n")] : []),
     tgDay(`내일 ${dateLabel(tomorrow)}`, agenda.filter((a) => a.event_date === tomorrow)),
   ];
   if (notices.length === 0) blocks.push("<b>새 입찰 공고</b>\n새 공고 없음");

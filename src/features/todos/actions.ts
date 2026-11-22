@@ -93,10 +93,11 @@ export async function saveTodoNote(id: string, raw: string): Promise<Result> {
  */
 export async function listTodosOn(day: string): Promise<{ ok: true; todos: Todo[] } | { ok: false; message: string }> {
   if (!DAY.test(day)) return { ok: false, message: "날짜가 올바르지 않아요." };
-  const { supabase } = await requireUser();
+  const { supabase, userId } = await requireUser();
   const { data, error } = await supabase
     .from("todos")
     .select(TODO_COLUMNS)
+    .eq("user_id", userId)
     .is("dismissed_at", null)
     .eq("due_date", day)
     .order("created_at")
@@ -104,4 +105,25 @@ export async function listTodosOn(day: string): Promise<{ ok: true; todos: Todo[
   if (error) return { ok: false, message: error.message };
   const rows = (data ?? []) as Todo[];
   return { ok: true, todos: [...rows.filter((t) => !t.done_at), ...rows.filter((t) => t.done_at)] };
+}
+
+/** 내 할 일을 가족에게 공유하거나 공유를 끈다 */
+export async function setTodoShared(id: string, shared: boolean): Promise<Result> {
+  const { supabase, userId } = await requireUser();
+  const { error } = await supabase.from("todos").update({ shared }).eq("id", id).eq("user_id", userId);
+  if (error) return { ok: false, message: error.message };
+  revalidatePath("/");
+  revalidatePath("/todos");
+  return { ok: true };
+}
+
+/** 가족이 공유한 할 일 완료 체크 (쓴 사람이 아니어도 체크만 가능) */
+export async function setSharedTodoDone(id: string, done: boolean): Promise<Result> {
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase.rpc("set_shared_todo_done", { p_id: id, p_done: done });
+  if (error) return { ok: false, message: error.message };
+  if (!data) return { ok: false, message: "공유가 꺼졌거나 지워진 할 일이에요." };
+  revalidatePath("/");
+  revalidatePath("/todos");
+  return { ok: true };
 }

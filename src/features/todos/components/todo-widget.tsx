@@ -3,8 +3,18 @@
 import Link from "next/link";
 import { useState, useTransition, type FormEvent } from "react";
 import { dateLabel } from "@/lib/format";
-import { addTodo, deleteTodo, listTodosOn, postponeTodo, saveScheduleRecord, saveTodoNote, setTodoDone } from "../actions";
-import { addDays, NOTE_MAX, progress, RECORD_MAX, recordTarget, sourceLabel, type Todo } from "../todos";
+import {
+  addTodo,
+  deleteTodo,
+  listTodosOn,
+  postponeTodo,
+  saveScheduleRecord,
+  saveTodoNote,
+  setSharedTodoDone,
+  setTodoDone,
+  setTodoShared,
+} from "../actions";
+import { addDays, NOTE_MAX, progress, RECORD_MAX, recordTarget, sourceLabel, type SharedTodo, type Todo } from "../todos";
 
 /**
  * 대시보드 '오늘 할 일' 위젯: 적고, 체크하고, 내일로 미루고, 지운다. 누르면 바로 바뀌고 서버에는 뒤에서 저장한다.
@@ -12,8 +22,23 @@ import { addDays, NOTE_MAX, progress, RECORD_MAX, recordTarget, sourceLabel, typ
  * 일정 자체 할 일은 끝났다고 체크하면 기록 칸이 열리고, 기록은 그 일정에 저장된다.
  * 다른 할 일에는 메모(담당자 연락처, 금액 등)를 붙일 수 있다.
  * ‹ › 로 날짜를 넘기면 그날의 할 일을 보고, 미래 날짜에 미리 적어 둘 수 있다.
+ * '공유'를 켠 할 일은 가족(가족을 만든 사람 ↔ 초대받은 가족)의 '공유받은 할 일'에 보인다.
+ * 공유받은 할 일은 보고 완료 체크만 할 수 있다.
  */
-export function TodoWidget({ initial, today }: { initial: Todo[]; today: string }) {
+export function TodoWidget({
+  initial,
+  today,
+  shared: sharedInitial = [],
+  canShare = false,
+}: {
+  initial: Todo[];
+  today: string;
+  /** 가족이 나에게 공유한 할 일 */
+  shared?: SharedTodo[];
+  /** 가족이 있어야 공유 버튼을 보여 준다 */
+  canShare?: boolean;
+}) {
+  const [shared, setShared] = useState(sharedInitial);
   const [day, setDay] = useState(today);
   const [items, setItems] = useState(initial);
   const [todayItems, setTodayItems] = useState(initial);
@@ -103,6 +128,23 @@ export function TodoWidget({ initial, today }: { initial: Todo[]; today: string 
     );
   };
   const remove = (t: Todo) => run(items.filter((x) => x.id !== t.id), () => deleteTodo(t.id));
+  const toggleShare = (t: Todo) =>
+    run(
+      items.map((x) => (x.id === t.id ? { ...x, shared: !x.shared } : x)),
+      () => setTodoShared(t.id, !t.shared),
+    );
+  const toggleShared = (t: SharedTodo) => {
+    const before = shared;
+    setShared(shared.map((x) => (x.id === t.id ? { ...x, done_at: x.done_at ? null : new Date().toISOString() } : x)));
+    setError(null);
+    start(async () => {
+      const r = await setSharedTodoDone(t.id, !t.done_at);
+      if (!r.ok) {
+        setShared(before);
+        setError(r.message);
+      }
+    });
+  };
   const postpone = (t: Todo) => run(items.filter((x) => x.id !== t.id), () => postponeTodo(t.id, day));
 
   return (
@@ -189,6 +231,17 @@ export function TodoWidget({ initial, today }: { initial: Todo[]; today: string 
                       {canRecord ? (t.record ? "기록 고치기" : "기록") : t.note ? "메모 고치기" : "메모"}
                     </button>
                   )}
+                  {canShare && (
+                    <button
+                      type="button"
+                      onClick={() => toggleShare(t)}
+                      aria-pressed={!!t.shared}
+                      title={t.shared ? "가족에게 공유 중 (누르면 공유 끄기)" : "가족에게 공유하기"}
+                      className={`shrink-0 text-xs hover:underline ${t.shared ? "font-semibold text-success" : "text-muted"}`}
+                    >
+                      {t.shared ? "공유 중" : "공유"}
+                    </button>
+                  )}
                   {!t.done_at && (
                     <button type="button" onClick={() => postpone(t)} className="shrink-0 text-xs text-muted hover:underline">
                       {isToday ? "내일로" : "다음 날로"}
@@ -256,6 +309,38 @@ export function TodoWidget({ initial, today }: { initial: Todo[]; today: string 
             );
           })}
         </ul>
+      )}
+
+      {shared.length > 0 && (
+        <div className="space-y-1 border-t border-line pt-3">
+          <h3 className="text-sm font-semibold">공유받은 할 일</h3>
+          <ul className="divide-y divide-line">
+            {shared.map((t) => (
+              <li key={t.id} className="py-2">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={!!t.done_at}
+                    onChange={() => toggleShared(t)}
+                    aria-label={`${t.title} ${t.done_at ? "안 한 것으로" : "완료"}`}
+                    className="h-5 w-5 shrink-0 cursor-pointer accent-[var(--color-success)]"
+                  />
+                  <span className={`min-w-0 flex-1 break-words text-sm ${t.done_at ? "text-muted line-through" : ""}`}>
+                    {t.title}
+                    {t.due_date !== today && (
+                      <span className={`ml-2 text-xs ${t.due_date < today && !t.done_at ? "text-warn" : "text-muted"}`}>
+                        {t.due_date < today ? "밀림 · " : ""}
+                        {dateLabel(t.due_date)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="badge shrink-0 bg-lavender/40 text-xs">{t.who}</span>
+                </div>
+                {t.note && <p className="mt-1 ml-8 whitespace-pre-wrap break-words rounded-lg border border-line px-3 py-2 text-xs">{t.note}</p>}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );
