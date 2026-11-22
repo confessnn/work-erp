@@ -60,6 +60,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `reminders` | 일정 화면의 🔔 | 웹 푸시 1시간 전 알림. Supabase pg_cron `erp-reminders` → `/api/cron/reminders` |
 | `telegram` | `/integrations` | `@work_erp_bot` 아침 요약·알림·일정 빠른 추가(`quick-add.ts`) |
 | `baby` | `/baby` (메뉴 '임채현') | 사진·동영상을 대표 계정 드라이브에 날짜별 저장. 아내도 보기·올리기(`drive.ts`의 `babyDriveContext`), 원본·재생 `app/(app)/baby/photo/[id]/route.ts`(동영상은 Range 4MB씩) |
+| `baby-care` | `/baby/care` (메뉴 '임채현'의 첫 탭) | 육아 기록 `baby_logs`: 수유·기저귀·수면 등, 가족(나·아내) 공용. 하루 요약·마지막 기록 계산은 `care.ts` |
 | `documents` · `google-drive` | `/documents` | 서류함·강의별 제출 서류(드라이브). 큰 파일은 브라우저→드라이브 직접(`drive-browser.ts`) |
 | `bid-inbox` · `bid-viewer` | `/bids*`, `/join/bids/[token]` | 나라장터·국방전자조달 등 공고 수신(`fetch-all.ts`), 판정, 입찰가 계산기, 아침 메일(`morning.ts`), 동생용 열람 |
 | `records` | `/records*` | 수업 기록·관계도 그래프 |

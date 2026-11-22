@@ -11,7 +11,7 @@ export const NAV: NavItem[] = [
   { href: "/lectures", label: "일정" },
   { href: "/records", label: "기록" },
   { href: "/documents", label: "서류함" },
-  { href: "/baby", label: "임채현" },
+  { href: "/baby/care", label: "임채현" },
   { href: "/bids", label: "공고" },
   { href: "/content", label: "콘텐츠" },
   { href: "/tools", label: "수업도구" },
@@ -23,7 +23,7 @@ export const NAV: NavItem[] = [
 export const MEMBER_NAV: NavItem[] = [
   { href: "/todos", label: "할 일" },
   { href: "/family", label: "가족 달력" },
-  { href: "/baby", label: "임채현" },
+  { href: "/baby/care", label: "임채현" },
 ];
 
 /** 초대받은 공고 열람자(동생) 계정의 메뉴 */
@@ -35,7 +35,9 @@ export function AppNav({ items = NAV }: { items?: NavItem[] }) {
     <nav className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 text-sm whitespace-nowrap [scrollbar-width:none]">
       {items.map((n) => {
         // 가족 일정 화면(/family/...)도 '일정' 탭으로 친다
-        const active = n.href === "/" ? path === "/" : path.startsWith(n.href) || (n.href === "/lectures" && path.startsWith("/family"));
+        // 같은 메뉴 안의 다른 화면(예: /baby 사진, /baby/care 기록)에서도 메뉴가 켜지도록 첫 경로 칸으로 비교
+        const section = `/${n.href.split("/")[1]}`;
+        const active = n.href === "/" ? path === "/" : path.startsWith(section) || (n.href === "/lectures" && path.startsWith("/family"));
         return (
           <Link
             key={n.href}
