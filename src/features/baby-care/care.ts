@@ -11,6 +11,7 @@ export type BabyLog = {
   ended_at: string | null;
   amount_ml: number | null;
   value: number | null;
+  height_cm: number | null; // 키 (몸무게 기록에 같이)
   side: "left" | "right" | "both" | null;
   diaper: "pee" | "poo" | "both" | null;
   poo_color: PooColor | null;
@@ -18,7 +19,7 @@ export type BabyLog = {
   note: string | null;
 };
 
-export const LOG_COLUMNS = "id, kind, started_at, ended_at, amount_ml, value, side, diaper, poo_color, label, note";
+export const LOG_COLUMNS = "id, kind, started_at, ended_at, amount_ml, value, height_cm, side, diaper, poo_color, label, note";
 
 /** 버튼 순서 = 화면 순서. field: 입력 칸 종류 */
 export const KINDS: { key: CareKind; label: string; icon: string; field: "ml" | "pump" | "breast" | "diaper" | "sleep" | "kg" | "temp" | "medicine" | "solid" | "text" }[] = [
@@ -28,7 +29,7 @@ export const KINDS: { key: CareKind; label: string; icon: string; field: "ml" | 
   { key: "pump", label: "유축", icon: "🫙", field: "pump" },
   { key: "diaper", label: "기저귀", icon: "🩲", field: "diaper" },
   { key: "sleep", label: "수면", icon: "😴", field: "sleep" },
-  { key: "weight", label: "몸무게", icon: "⚖️", field: "kg" },
+  { key: "weight", label: "키·몸무게", icon: "📏", field: "kg" },
   { key: "medicine", label: "투약", icon: "💊", field: "medicine" },
   { key: "bath", label: "목욕", icon: "🛁", field: "text" },
   { key: "hospital", label: "병원", icon: "🏥", field: "text" },
@@ -141,6 +142,7 @@ export function describe(l: BabyLog, now: number) {
     if (l.kind === "temperature") parts.push(`${Number(l.value)}℃`);
     if (l.kind === "solid") parts.push(`${Number(l.value)}g`);
   }
+  if (l.kind === "weight" && l.height_cm !== null) parts.push(`${Number(l.height_cm)}cm`);
   if (l.label) parts.push(l.label);
   return parts.join(" · ");
 }

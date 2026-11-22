@@ -80,6 +80,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
         ended: l.ended_at ? toLocalInput(l.ended_at) : null,
         amount_ml: l.amount_ml,
         value: l.value,
+        height_cm: l.height_cm,
         side: l.side,
         diaper: l.diaper,
         poo_color: l.poo_color,
@@ -403,18 +404,52 @@ function CareForm({
           </div>
         )}
 
-        {(field === "kg" || field === "temp") && (
+        {field === "kg" && (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="field">
+              <span>몸무게 (kg)</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step={0.01}
+                min={0}
+                max={99}
+                value={v.value ?? ""}
+                onChange={(e) => set({ value: e.target.value === "" ? null : Number(e.target.value) })}
+                placeholder="예: 4.25"
+                className="input"
+              />
+            </label>
+            <label className="field">
+              <span>키 (cm)</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step={0.1}
+                min={0}
+                max={200}
+                value={v.height_cm ?? ""}
+                onChange={(e) => set({ height_cm: e.target.value === "" ? null : Number(e.target.value) })}
+                placeholder="예: 55.5"
+                className="input"
+              />
+            </label>
+            <p className="col-span-2 text-xs text-muted">둘 중 하나만 재도 저장할 수 있어요.</p>
+          </div>
+        )}
+
+        {field === "temp" && (
           <label className="field">
-            <span>{field === "kg" ? "몸무게 (kg)" : "체온 (℃)"}</span>
+            <span>체온 (℃)</span>
             <input
               type="number"
               inputMode="decimal"
-              step={field === "kg" ? 0.01 : 0.1}
+              step={0.1}
               min={0}
-              max={field === "kg" ? 99 : 45}
+              max={45}
               value={v.value ?? ""}
               onChange={(e) => set({ value: e.target.value === "" ? null : Number(e.target.value) })}
-              placeholder={field === "kg" ? "예: 4.25" : "예: 36.8"}
+              placeholder="예: 36.8"
               className="input"
               required
             />

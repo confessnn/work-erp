@@ -8,6 +8,7 @@ const log = (o: Partial<BabyLog>): BabyLog => ({
   ended_at: null,
   amount_ml: null,
   value: null,
+  height_cm: null,
   side: null,
   diaper: null,
   poo_color: null,
@@ -107,5 +108,13 @@ group("whenLabel", () => {
     expect(whenLabel("2026-11-22T02:16:00Z", NOW)).toBe("오늘 11:16");
     expect(whenLabel("2026-11-21T14:30:00Z", NOW)).toBe("어제 23:30");
     expect(whenLabel("2026-11-19T12:50:00Z", NOW)).toBe("11/19 21:50");
+  });
+});
+
+group("키·몸무게", () => {
+  it("몸무게와 키를 함께, 또는 하나만 보여 준다", () => {
+    expect(describe(log({ kind: "weight", value: 4.25, height_cm: 55.5 }), NOW)).toBe("4.25kg · 55.5cm");
+    expect(describe(log({ kind: "weight", height_cm: 56 }), NOW)).toBe("56cm");
+    expect(describe(log({ kind: "weight", value: 4.3 }), NOW)).toBe("4.3kg");
   });
 });
