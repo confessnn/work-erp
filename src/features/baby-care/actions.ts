@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
-import { fromLocalInput, KINDS, type CareKind } from "./care";
+import { fromLocalInput, KINDS, POO_COLORS, TIMED_KINDS, type CareKind } from "./care";
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -14,6 +14,7 @@ export type CareInput = {
   value?: number | null;
   side?: string | null;
   diaper?: string | null;
+  poo_color?: string | null;
   label?: string | null;
   note?: string | null;
 };
@@ -40,11 +41,16 @@ function toRow(input: CareInput) {
   const row = {
     kind: input.kind,
     started_at,
-    ended_at: ["sleep", "breast"].includes(input.kind) ? ended_at : null,
-    amount_ml: ["formula", "pumped", "water"].includes(input.kind) ? num(input.amount_ml, 5000) : null,
+    ended_at: TIMED_KINDS.includes(input.kind) ? ended_at : null,
+    amount_ml: ["formula", "pumped", "pump", "water"].includes(input.kind) ? num(input.amount_ml, 5000) : null,
     value: ["weight", "temperature", "solid"].includes(input.kind) ? num(input.value, 999) : null,
-    side: input.kind === "breast" && ["left", "right", "both"].includes(String(input.side)) ? input.side : null,
+    side: ["breast", "pump"].includes(input.kind) && ["left", "right", "both"].includes(String(input.side)) ? input.side : null,
     diaper: input.kind === "diaper" && ["pee", "poo", "both"].includes(String(input.diaper)) ? input.diaper : null,
+    // 대변 색은 대변이 있을 때만
+    poo_color:
+      input.kind === "diaper" && ["poo", "both"].includes(String(input.diaper)) && POO_COLORS.some((c) => c.key === input.poo_color)
+        ? input.poo_color
+        : null,
     label: ["medicine", "solid", "hospital", "other", "bath"].includes(input.kind) ? text(input.label, 100) : null,
     note: text(input.note, 1000),
   };

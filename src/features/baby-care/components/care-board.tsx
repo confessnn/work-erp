@@ -4,16 +4,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { dateLabel } from "@/lib/format";
+import { TimeSlider } from "./time-slider";
 import { deleteCareLog, endSleep, saveCareLog, type CareInput } from "../actions";
 import {
+  addMinutesLocal,
   agoLabel,
   daySummary,
   describe,
   durationLabel,
   KINDS,
   kindInfo,
+  POO_COLORS,
+  pooColor,
   seoulDate,
   seoulTime,
+  TIMED_KINDS,
   toLocalInput,
   type BabyLog,
   type CareKind,
@@ -23,6 +28,7 @@ type Latest = { diaper: BabyLog | null; feed: BabyLog | null; sleep: BabyLog | n
 type Editing = { id: string | null; input: CareInput };
 
 const ML_CHIPS = [40, 60, 80, 100, 120, 150, 180];
+const MINUTE_CHIPS = [5, 10, 15, 20, 30];
 
 function shiftDay(day: string, n: number) {
   const [y, m, d] = day.split("-").map(Number);
@@ -58,6 +64,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
       input.ended = day === today ? toLocalInput(new Date(now).toISOString()) : `${day}T12:15`;
       input.side = "left";
     }
+    if (kind === "pump") input.side = "both";
     setEditing({ id: null, input });
   }
 
@@ -73,6 +80,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
         value: l.value,
         side: l.side,
         diaper: l.diaper,
+        poo_color: l.poo_color,
         label: l.label,
         note: l.note,
       },
@@ -148,9 +156,13 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
           <Tile label="기저귀" value={`${s.diapers}번`} sub={`소변 ${s.pee} · 대변 ${s.poo}`} />
           <Tile label="수면" value={durationLabel(s.sleepMin)} />
           <Tile
-            label="분유 · 유축"
+            label="분유 · 유축수유"
             value={`${s.formulaMl} · ${s.pumpedMl}ml`}
-            sub={[s.waterMl && `물 ${s.waterMl}ml`, s.solidG && `이유식 ${s.solidG}g`].filter(Boolean).join(" · ") || undefined}
+            sub={
+              [s.pumpCount && `유축 ${s.pumpMl}ml (${s.pumpCount}회)`, s.waterMl && `물 ${s.waterMl}ml`, s.solidG && `이유식 ${s.solidG}g`]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            }
           />
         </div>
       </section>
@@ -163,6 +175,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
           <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
             {list.map((l) => {
               const k = kindInfo(l.kind);
+              const poo = l.kind === "diaper" && l.diaper !== "pee" ? pooColor(l.poo_color) : null;
               return (
                 <li key={l.id}>
                   <button type="button" onClick={() => edit(l)} className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-accent-soft/50">
@@ -172,6 +185,8 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
                     </span>
                     <span className="min-w-0 flex-1 text-sm">
                       <b>{k.label}</b> {describe(l, now)}
+                      {poo && <span className="ml-1 inline-block size-3 rounded-full align-middle" style={{ background: poo.hex }} aria-hidden />}
+                      {l.ended_at && l.kind !== "sleep" && <span className="ml-1 text-xs text-muted">~{seoulTime(l.ended_at)}</span>}
                       {l.note && <span className="mt-0.5 block whitespace-pre-wrap break-words text-xs text-muted">{l.note}</span>}
                     </span>
                   </button>
@@ -251,6 +266,15 @@ function CareForm({
   const set = (patch: Partial<CareInput>) => setV((x) => ({ ...x, ...patch }));
   const k = kindInfo(v.kind);
   const field = k.field;
+  /** 시작을 옮기면 끝도 같은 만큼 옮겨 걸린 시간을 지킨다 (수면 제외) */
+  const moveStart = (started: string) =>
+    setV((x) => {
+      if (!x.ended || x.kind === "sleep" || !started) return { ...x, started };
+      const d = (Date.parse(`${started}:00+09:00`) - Date.parse(`${x.started}:00+09:00`)) / 60_000;
+      return { ...x, started, ended: Number.isFinite(d) ? (addMinutesLocal(x.ended, d) ?? x.ended) : x.ended };
+    });
+  const timed = TIMED_KINDS.includes(v.kind) && field !== "sleep";
+  const minutes = v.ended && v.started ? (Date.parse(`${v.ended}:00+09:00`) - Date.parse(`${v.started}:00+09:00`)) / 60_000 : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center" onClick={onClose}>
@@ -266,19 +290,49 @@ function CareForm({
           {k.icon} {k.label} {editing.id ? "기록 고치기" : "기록"}
         </h3>
 
+        <TimeSlider value={v.started} onChange={moveStart} />
         <label className="field">
-          <span>{field === "sleep" ? "잠든 시각" : field === "breast" ? "시작" : "시각"}</span>
-          <input type="datetime-local" value={v.started} onChange={(e) => set({ started: e.target.value })} className="input" required />
+          <span>{field === "sleep" ? "잠든 시각" : timed ? "시작" : "시각"}</span>
+          <input type="datetime-local" value={v.started} onChange={(e) => moveStart(e.target.value)} className="input" required />
         </label>
 
-        {(field === "sleep" || field === "breast") && (
+        {field === "sleep" && (
           <label className="field">
-            <span>{field === "sleep" ? "깬 시각 (자는 중이면 비워 두세요)" : "끝"}</span>
+            <span>깬 시각 (자는 중이면 비워 두세요)</span>
             <input type="datetime-local" value={v.ended ?? ""} onChange={(e) => set({ ended: e.target.value || null })} className="input" />
           </label>
         )}
 
-        {field === "breast" && (
+        {timed && (
+          <div className="space-y-2">
+            <label className="field">
+              <span>
+                끝 {field === "breast" ? "" : "(선택)"}
+                {minutes !== null && minutes >= 0 && <b className="ml-1 text-fg">· {durationLabel(minutes)}</b>}
+              </span>
+              <input type="datetime-local" value={v.ended ?? ""} onChange={(e) => set({ ended: e.target.value || null })} className="input" />
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {MINUTE_CHIPS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => set({ ended: addMinutesLocal(v.started, m) })}
+                  className={`chip text-sm ${minutes === m ? "chip-on" : ""}`}
+                >
+                  {m}분
+                </button>
+              ))}
+              {v.ended && (
+                <button type="button" onClick={() => set({ ended: null })} className="chip text-sm text-muted">
+                  시간 지우기
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {(field === "breast" || field === "pump") && (
           <Choice
             value={v.side ?? ""}
             options={[
@@ -302,7 +356,27 @@ function CareForm({
           />
         )}
 
-        {field === "ml" && (
+        {field === "diaper" && (v.diaper === "poo" || v.diaper === "both") && (
+          <div className="space-y-1.5">
+            <div className="text-sm text-muted">대변 색 {pooColor(v.poo_color) && <b className="text-fg">· {pooColor(v.poo_color)!.label}</b>}</div>
+            <div className="flex flex-wrap gap-3">
+              {POO_COLORS.map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  title={c.label}
+                  aria-label={c.label}
+                  aria-pressed={v.poo_color === c.key}
+                  onClick={() => set({ poo_color: v.poo_color === c.key ? null : c.key })}
+                  className={`size-10 rounded-full border-2 transition ${v.poo_color === c.key ? "scale-110 border-fg" : "border-transparent"}`}
+                  style={{ background: c.hex }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(field === "ml" || field === "pump") && (
           <div className="space-y-2">
             <label className="field">
               <span>양 (ml)</span>

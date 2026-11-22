@@ -1,7 +1,7 @@
 // 육아 기록 (supabase/migrations/20261122040000_baby_care_logs.sql). 시각은 모두 한국 시간 기준으로 나눈다.
 
 export type CareKind =
-  | "formula" | "breast" | "pumped" | "diaper" | "sleep" | "weight" | "medicine"
+  | "formula" | "breast" | "pumped" | "pump" | "diaper" | "sleep" | "weight" | "medicine"
   | "bath" | "hospital" | "water" | "solid" | "temperature" | "other";
 
 export type BabyLog = {
@@ -13,17 +13,19 @@ export type BabyLog = {
   value: number | null;
   side: "left" | "right" | "both" | null;
   diaper: "pee" | "poo" | "both" | null;
+  poo_color: PooColor | null;
   label: string | null;
   note: string | null;
 };
 
-export const LOG_COLUMNS = "id, kind, started_at, ended_at, amount_ml, value, side, diaper, label, note";
+export const LOG_COLUMNS = "id, kind, started_at, ended_at, amount_ml, value, side, diaper, poo_color, label, note";
 
 /** 버튼 순서 = 화면 순서. field: 입력 칸 종류 */
-export const KINDS: { key: CareKind; label: string; icon: string; field: "ml" | "breast" | "diaper" | "sleep" | "kg" | "temp" | "medicine" | "solid" | "text" }[] = [
+export const KINDS: { key: CareKind; label: string; icon: string; field: "ml" | "pump" | "breast" | "diaper" | "sleep" | "kg" | "temp" | "medicine" | "solid" | "text" }[] = [
   { key: "formula", label: "분유", icon: "🍼", field: "ml" },
   { key: "breast", label: "모유", icon: "🤱", field: "breast" },
   { key: "pumped", label: "유축수유", icon: "🥛", field: "ml" },
+  { key: "pump", label: "유축", icon: "🫙", field: "pump" },
   { key: "diaper", label: "기저귀", icon: "🧷", field: "diaper" },
   { key: "sleep", label: "수면", icon: "😴", field: "sleep" },
   { key: "weight", label: "몸무게", icon: "⚖️", field: "kg" },
@@ -40,6 +42,27 @@ export const kindInfo = (k: CareKind) => KINDS.find((x) => x.key === k) ?? KINDS
 export const FEED_KINDS: CareKind[] = ["formula", "breast", "pumped"];
 export const SIDE_LABEL = { left: "왼쪽", right: "오른쪽", both: "양쪽" } as const;
 export const DIAPER_LABEL = { pee: "소변", poo: "대변", both: "소변+대변" } as const;
+
+/** 대변 색 (DB 값 → 이름·화면 색) */
+export const POO_COLORS = [
+  { key: "yellow", label: "노랑", hex: "#c9954a" },
+  { key: "brown", label: "갈색", hex: "#7b5230" },
+  { key: "dark", label: "짙은 갈색", hex: "#4a3820" },
+  { key: "green", label: "초록", hex: "#6b7b2e" },
+  { key: "red", label: "빨강", hex: "#b4563e" },
+  { key: "white", label: "회백색", hex: "#c4bcbb" },
+] as const;
+export type PooColor = (typeof POO_COLORS)[number]["key"];
+export const pooColor = (k: string | null | undefined) => POO_COLORS.find((c) => c.key === k) ?? null;
+
+/** 끝난 시각을 적을 수 있는 종류 (수유 시간·유축 시간·잠) */
+export const TIMED_KINDS: CareKind[] = ["formula", "breast", "pumped", "pump", "sleep"];
+
+/** datetime-local 값에 분을 더한다 (한국 시간 그대로) */
+export function addMinutesLocal(v: string, minutes: number): string | null {
+  const iso = fromLocalInput(v);
+  return iso ? toLocalInput(new Date(Date.parse(iso) + minutes * MIN).toISOString()) : null;
+}
 
 const MIN = 60_000;
 
@@ -87,12 +110,16 @@ export function durationLabel(minutes: number) {
 /** 기록 한 줄 설명 (금액 없음) */
 export function describe(l: BabyLog, now: number) {
   const parts: string[] = [];
-  if (l.amount_ml !== null && ["formula", "pumped", "water"].includes(l.kind)) parts.push(`${l.amount_ml}ml`);
-  if (l.kind === "breast") {
-    if (l.side) parts.push(SIDE_LABEL[l.side]);
-    if (l.ended_at) parts.push(durationLabel((Date.parse(l.ended_at) - Date.parse(l.started_at)) / MIN));
+  if (l.amount_ml !== null && ["formula", "pumped", "pump", "water"].includes(l.kind)) parts.push(`${l.amount_ml}ml`);
+  if (["breast", "pump"].includes(l.kind) && l.side) parts.push(SIDE_LABEL[l.side]);
+  if (["formula", "breast", "pumped", "pump"].includes(l.kind) && l.ended_at) {
+    parts.push(durationLabel((Date.parse(l.ended_at) - Date.parse(l.started_at)) / MIN));
   }
-  if (l.kind === "diaper" && l.diaper) parts.push(DIAPER_LABEL[l.diaper]);
+  if (l.kind === "diaper" && l.diaper) {
+    parts.push(DIAPER_LABEL[l.diaper]);
+    const c = l.diaper !== "pee" ? pooColor(l.poo_color) : null;
+    if (c) parts.push(`${c.label}색`.replace("색색", "색"));
+  }
   if (l.kind === "sleep") {
     parts.push(
       l.ended_at
@@ -116,6 +143,8 @@ export type DaySummary = {
   feedMl: number; // 분유 + 유축수유
   formulaMl: number;
   pumpedMl: number;
+  pumpMl: number; // 유축(엄마가 짠 양). 수유량에는 안 들어간다
+  pumpCount: number;
   feeds: number; // 수유 횟수 (분유·모유·유축)
   breastCount: number;
   breastMin: number;
@@ -130,7 +159,7 @@ export function daySummary(logs: BabyLog[], day: string, now: number): DaySummar
   const s0 = Date.parse(start);
   const s1 = Math.min(Date.parse(end), now);
   const inDay = (l: BabyLog) => seoulDate(l.started_at) === day;
-  const sum: DaySummary = { diapers: 0, pee: 0, poo: 0, feedMl: 0, formulaMl: 0, pumpedMl: 0, feeds: 0, breastCount: 0, breastMin: 0, sleepMin: 0, waterMl: 0, solidG: 0 };
+  const sum: DaySummary = { diapers: 0, pee: 0, poo: 0, feedMl: 0, formulaMl: 0, pumpedMl: 0, pumpMl: 0, pumpCount: 0, feeds: 0, breastCount: 0, breastMin: 0, sleepMin: 0, waterMl: 0, solidG: 0 };
 
   for (const l of logs) {
     if (l.kind === "sleep") {
@@ -156,6 +185,10 @@ export function daySummary(logs: BabyLog[], day: string, now: number): DaySummar
         sum.feeds++;
         sum.pumpedMl += ml;
         sum.feedMl += ml;
+        break;
+      case "pump":
+        sum.pumpCount++;
+        sum.pumpMl += ml;
         break;
       case "breast":
         sum.feeds++;
