@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
-import { fromLocalInput, KINDS, type CareKind } from "./care";
+import { fromLocalInput, KINDS, POO_COLORS, TIMED_KINDS, type CareKind } from "./care";
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -12,8 +12,10 @@ export type CareInput = {
   ended?: string | null;
   amount_ml?: number | null;
   value?: number | null;
+  height_cm?: number | null;
   side?: string | null;
   diaper?: string | null;
+  poo_color?: string | null;
   label?: string | null;
   note?: string | null;
 };
@@ -40,17 +42,25 @@ function toRow(input: CareInput) {
   const row = {
     kind: input.kind,
     started_at,
-    ended_at: ["sleep", "breast"].includes(input.kind) ? ended_at : null,
-    amount_ml: ["formula", "pumped", "water"].includes(input.kind) ? num(input.amount_ml, 5000) : null,
+    ended_at: TIMED_KINDS.includes(input.kind) ? ended_at : null,
+    amount_ml: ["formula", "pumped", "pump", "water"].includes(input.kind) ? num(input.amount_ml, 5000) : null,
     value: ["weight", "temperature", "solid"].includes(input.kind) ? num(input.value, 999) : null,
-    side: input.kind === "breast" && ["left", "right", "both"].includes(String(input.side)) ? input.side : null,
+    height_cm: input.kind === "weight" ? num(input.height_cm, 200) : null,
+    side: ["breast", "pump"].includes(input.kind) && ["left", "right", "both"].includes(String(input.side)) ? input.side : null,
     diaper: input.kind === "diaper" && ["pee", "poo", "both"].includes(String(input.diaper)) ? input.diaper : null,
+    // 대변 색은 대변이 있을 때만
+    poo_color:
+      input.kind === "diaper" && ["poo", "both"].includes(String(input.diaper)) && POO_COLORS.some((c) => c.key === input.poo_color)
+        ? input.poo_color
+        : null,
     label: ["medicine", "solid", "hospital", "other", "bath"].includes(input.kind) ? text(input.label, 100) : null,
     note: text(input.note, 1000),
   };
   if (row.amount_ml !== null) row.amount_ml = Math.round(row.amount_ml);
   if (input.kind === "diaper" && !row.diaper) return { error: "소변·대변을 골라 주세요." } as const;
-  if (["weight", "temperature"].includes(input.kind) && row.value === null) return { error: "값을 적어 주세요." } as const;
+  if (input.kind === "temperature" && row.value === null) return { error: "체온을 적어 주세요." } as const;
+  if (input.kind === "weight" && row.value === null && row.height_cm === null) return { error: "키나 몸무게를 적어 주세요." } as const;
+  if (row.height_cm !== null) row.height_cm = Math.round(row.height_cm * 10) / 10;
   return { row } as const;
 }
 

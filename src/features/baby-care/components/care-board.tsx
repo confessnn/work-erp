@@ -4,17 +4,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { dateLabel } from "@/lib/format";
+import { DiaperIcon, KindIcon } from "./kind-icon";
+import { TimeSlider } from "./time-slider";
 import { deleteCareLog, endSleep, saveCareLog, type CareInput } from "../actions";
 import {
+  addMinutesLocal,
   agoLabel,
   daySummary,
   describe,
   durationLabel,
   KINDS,
   kindInfo,
+  POO_COLORS,
+  pooColor,
   seoulDate,
   seoulTime,
+  TIMED_KINDS,
   toLocalInput,
+  whenLabel,
   type BabyLog,
   type CareKind,
 } from "../care";
@@ -23,6 +30,7 @@ type Latest = { diaper: BabyLog | null; feed: BabyLog | null; sleep: BabyLog | n
 type Editing = { id: string | null; input: CareInput };
 
 const ML_CHIPS = [40, 60, 80, 100, 120, 150, 180];
+const MINUTE_CHIPS = [5, 10, 15, 20, 30];
 
 function shiftDay(day: string, n: number) {
   const [y, m, d] = day.split("-").map(Number);
@@ -58,6 +66,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
       input.ended = day === today ? toLocalInput(new Date(now).toISOString()) : `${day}T12:15`;
       input.side = "left";
     }
+    if (kind === "pump") input.side = "both";
     setEditing({ id: null, input });
   }
 
@@ -71,8 +80,10 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
         ended: l.ended_at ? toLocalInput(l.ended_at) : null,
         amount_ml: l.amount_ml,
         value: l.value,
+        height_cm: l.height_cm,
         side: l.side,
         diaper: l.diaper,
+        poo_color: l.poo_color,
         label: l.label,
         note: l.note,
       },
@@ -97,9 +108,10 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
 
   return (
     <div className="space-y-6">
-      {/* 마지막 기록 */}
-      <section className="grid grid-cols-3 gap-2">
-        <LastCard icon="🧷" title="마지막 기저귀" log={latest.diaper} now={now} />
+      {/* 마지막 기록: 보고 있는 날짜와 상관없이 가장 최근 기록 */}
+      {day !== today && <p className="-mb-4 text-xs text-muted">아래 세 칸은 보고 있는 날짜와 상관없이 가장 최근 기록이에요.</p>}
+      <section className="grid grid-cols-3 gap-2" aria-label="가장 최근 기록 (날짜와 상관없음)">
+        <LastCard icon={<DiaperIcon />} title="마지막 기저귀" log={latest.diaper} now={now} />
         <LastCard icon="🍼" title="마지막 수유" log={latest.feed} now={now} />
         <LastCard icon="😴" title={sleeping ? "자는 중" : "마지막 잠"} log={latest.sleep} now={now} sleep />
       </section>
@@ -119,7 +131,7 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
             className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-surface px-1 py-3 text-xs hover:bg-accent-soft"
           >
             <span className="text-2xl" aria-hidden>
-              {k.icon}
+              <KindIcon kind={k.key} />
             </span>
             {k.label}
           </button>
@@ -148,9 +160,13 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
           <Tile label="기저귀" value={`${s.diapers}번`} sub={`소변 ${s.pee} · 대변 ${s.poo}`} />
           <Tile label="수면" value={durationLabel(s.sleepMin)} />
           <Tile
-            label="분유 · 유축"
+            label="분유 · 유축수유"
             value={`${s.formulaMl} · ${s.pumpedMl}ml`}
-            sub={[s.waterMl && `물 ${s.waterMl}ml`, s.solidG && `이유식 ${s.solidG}g`].filter(Boolean).join(" · ") || undefined}
+            sub={
+              [s.pumpCount && `유축 ${s.pumpMl}ml (${s.pumpCount}회)`, s.waterMl && `물 ${s.waterMl}ml`, s.solidG && `이유식 ${s.solidG}g`]
+                .filter(Boolean)
+                .join(" · ") || undefined
+            }
           />
         </div>
       </section>
@@ -163,15 +179,18 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
           <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
             {list.map((l) => {
               const k = kindInfo(l.kind);
+              const poo = l.kind === "diaper" && l.diaper !== "pee" ? pooColor(l.poo_color) : null;
               return (
                 <li key={l.id}>
                   <button type="button" onClick={() => edit(l)} className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-accent-soft/50">
                     <span className="w-12 shrink-0 pt-0.5 text-sm tabular-nums text-muted">{seoulTime(l.started_at)}</span>
                     <span className="text-lg" aria-hidden>
-                      {k.icon}
+                      <KindIcon kind={l.kind} />
                     </span>
                     <span className="min-w-0 flex-1 text-sm">
                       <b>{k.label}</b> {describe(l, now)}
+                      {poo && <span className="ml-1 inline-block size-3 rounded-full align-middle" style={{ background: poo.hex }} aria-hidden />}
+                      {l.ended_at && l.kind !== "sleep" && <span className="ml-1 text-xs text-muted">~{seoulTime(l.ended_at)}</span>}
                       {l.note && <span className="mt-0.5 block whitespace-pre-wrap break-words text-xs text-muted">{l.note}</span>}
                     </span>
                   </button>
@@ -197,17 +216,17 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
   );
 }
 
-function LastCard({ icon, title, log, now, sleep }: { icon: string; title: string; log: BabyLog | null; now: number; sleep?: boolean }) {
+function LastCard({ icon, title, log, now, sleep }: { icon: React.ReactNode; title: string; log: BabyLog | null; now: number; sleep?: boolean }) {
   let main = "기록 없음";
   let sub = "";
   if (log) {
     if (sleep && !log.ended_at) {
       main = durationLabel((now - Date.parse(log.started_at)) / 60_000) + "째";
-      sub = `${seoulTime(log.started_at)}에 잠듦`;
+      sub = `${whenLabel(log.started_at, now)}에 잠듦`;
     } else {
       const at = sleep && log.ended_at ? log.ended_at : log.started_at;
       main = agoLabel(at, now);
-      sub = `${seoulTime(at)}${sleep ? " 깸" : ""} · ${describe(log, now) || kindInfo(log.kind).label}`;
+      sub = `${whenLabel(at, now)}${sleep ? " 깸" : ""} · ${describe(log, now) || kindInfo(log.kind).label}`;
     }
   }
   return (
@@ -251,6 +270,15 @@ function CareForm({
   const set = (patch: Partial<CareInput>) => setV((x) => ({ ...x, ...patch }));
   const k = kindInfo(v.kind);
   const field = k.field;
+  /** 시작을 옮기면 끝도 같은 만큼 옮겨 걸린 시간을 지킨다 (수면 제외) */
+  const moveStart = (started: string) =>
+    setV((x) => {
+      if (!x.ended || x.kind === "sleep" || !started) return { ...x, started };
+      const d = (Date.parse(`${started}:00+09:00`) - Date.parse(`${x.started}:00+09:00`)) / 60_000;
+      return { ...x, started, ended: Number.isFinite(d) ? (addMinutesLocal(x.ended, d) ?? x.ended) : x.ended };
+    });
+  const timed = TIMED_KINDS.includes(v.kind) && field !== "sleep";
+  const minutes = v.ended && v.started ? (Date.parse(`${v.ended}:00+09:00`) - Date.parse(`${v.started}:00+09:00`)) / 60_000 : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center" onClick={onClose}>
@@ -263,22 +291,52 @@ function CareForm({
         }}
       >
         <h3 className="section-title">
-          {k.icon} {k.label} {editing.id ? "기록 고치기" : "기록"}
+          <KindIcon kind={v.kind} /> {k.label} {editing.id ? "기록 고치기" : "기록"}
         </h3>
 
+        <TimeSlider value={v.started} onChange={moveStart} />
         <label className="field">
-          <span>{field === "sleep" ? "잠든 시각" : field === "breast" ? "시작" : "시각"}</span>
-          <input type="datetime-local" value={v.started} onChange={(e) => set({ started: e.target.value })} className="input" required />
+          <span>{field === "sleep" ? "잠든 시각" : timed ? "시작" : "시각"}</span>
+          <input type="datetime-local" value={v.started} onChange={(e) => moveStart(e.target.value)} className="input" required />
         </label>
 
-        {(field === "sleep" || field === "breast") && (
+        {field === "sleep" && (
           <label className="field">
-            <span>{field === "sleep" ? "깬 시각 (자는 중이면 비워 두세요)" : "끝"}</span>
+            <span>깬 시각 (자는 중이면 비워 두세요)</span>
             <input type="datetime-local" value={v.ended ?? ""} onChange={(e) => set({ ended: e.target.value || null })} className="input" />
           </label>
         )}
 
-        {field === "breast" && (
+        {timed && (
+          <div className="space-y-2">
+            <label className="field">
+              <span>
+                끝 {field === "breast" ? "" : "(선택)"}
+                {minutes !== null && minutes >= 0 && <b className="ml-1 text-fg">· {durationLabel(minutes)}</b>}
+              </span>
+              <input type="datetime-local" value={v.ended ?? ""} onChange={(e) => set({ ended: e.target.value || null })} className="input" />
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {MINUTE_CHIPS.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => set({ ended: addMinutesLocal(v.started, m) })}
+                  className={`chip text-sm ${minutes === m ? "chip-on" : ""}`}
+                >
+                  {m}분
+                </button>
+              ))}
+              {v.ended && (
+                <button type="button" onClick={() => set({ ended: null })} className="chip text-sm text-muted">
+                  시간 지우기
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {(field === "breast" || field === "pump") && (
           <Choice
             value={v.side ?? ""}
             options={[
@@ -302,7 +360,27 @@ function CareForm({
           />
         )}
 
-        {field === "ml" && (
+        {field === "diaper" && (v.diaper === "poo" || v.diaper === "both") && (
+          <div className="space-y-1.5">
+            <div className="text-sm text-muted">대변 색 {pooColor(v.poo_color) && <b className="text-fg">· {pooColor(v.poo_color)!.label}</b>}</div>
+            <div className="flex flex-wrap gap-3">
+              {POO_COLORS.map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  title={c.label}
+                  aria-label={c.label}
+                  aria-pressed={v.poo_color === c.key}
+                  onClick={() => set({ poo_color: v.poo_color === c.key ? null : c.key })}
+                  className={`size-10 rounded-full border-2 transition ${v.poo_color === c.key ? "scale-110 border-fg" : "border-transparent"}`}
+                  style={{ background: c.hex }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(field === "ml" || field === "pump") && (
           <div className="space-y-2">
             <label className="field">
               <span>양 (ml)</span>
@@ -326,18 +404,52 @@ function CareForm({
           </div>
         )}
 
-        {(field === "kg" || field === "temp") && (
+        {field === "kg" && (
+          <div className="grid grid-cols-2 gap-2">
+            <label className="field">
+              <span>몸무게 (kg)</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step={0.01}
+                min={0}
+                max={99}
+                value={v.value ?? ""}
+                onChange={(e) => set({ value: e.target.value === "" ? null : Number(e.target.value) })}
+                placeholder="예: 4.25"
+                className="input"
+              />
+            </label>
+            <label className="field">
+              <span>키 (cm)</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step={0.1}
+                min={0}
+                max={200}
+                value={v.height_cm ?? ""}
+                onChange={(e) => set({ height_cm: e.target.value === "" ? null : Number(e.target.value) })}
+                placeholder="예: 55.5"
+                className="input"
+              />
+            </label>
+            <p className="col-span-2 text-xs text-muted">둘 중 하나만 재도 저장할 수 있어요.</p>
+          </div>
+        )}
+
+        {field === "temp" && (
           <label className="field">
-            <span>{field === "kg" ? "몸무게 (kg)" : "체온 (℃)"}</span>
+            <span>체온 (℃)</span>
             <input
               type="number"
               inputMode="decimal"
-              step={field === "kg" ? 0.01 : 0.1}
+              step={0.1}
               min={0}
-              max={field === "kg" ? 99 : 45}
+              max={45}
               value={v.value ?? ""}
               onChange={(e) => set({ value: e.target.value === "" ? null : Number(e.target.value) })}
-              placeholder={field === "kg" ? "예: 4.25" : "예: 36.8"}
+              placeholder="예: 36.8"
               className="input"
               required
             />

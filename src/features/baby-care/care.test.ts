@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from "vitest";
-import { agoLabel, daySummary, describe, durationLabel, fromLocalInput, latest, toLocalInput, type BabyLog } from "./care";
+import { addMinutesLocal, agoLabel, whenLabel, daySummary, describe, durationLabel, fromLocalInput, latest, toLocalInput, type BabyLog } from "./care";
 
 const log = (o: Partial<BabyLog>): BabyLog => ({
   id: Math.random().toString(36),
@@ -8,8 +8,10 @@ const log = (o: Partial<BabyLog>): BabyLog => ({
   ended_at: null,
   amount_ml: null,
   value: null,
+  height_cm: null,
   side: null,
   diaper: null,
+  poo_color: null,
   label: null,
   note: null,
   ...o,
@@ -74,5 +76,45 @@ group("latest / agoLabel / 표시", () => {
     expect(toLocalInput("2026-11-22T15:30:00Z")).toBe("2026-11-23T00:30");
     expect(fromLocalInput("2026-11-23T00:30")).toBe("2026-11-22T15:30:00.000Z");
     expect(fromLocalInput("아무거나")).toBeNull();
+  });
+});
+
+group("유축·수유 시간·대변 색", () => {
+  it("유축은 짠 양으로 따로 세고 수유량에는 넣지 않는다", () => {
+    const s = daySummary([log({ kind: "pump", amount_ml: 50 }), log({ kind: "formula", amount_ml: 100 })], "2026-11-22", NOW);
+    expect(s.feedMl).toBe(100);
+    expect(s.feeds).toBe(1);
+    expect(s.pumpMl).toBe(50);
+    expect(s.pumpCount).toBe(1);
+  });
+  it("분유·유축에 끝난 시각이 있으면 걸린 시간을 보여 준다", () => {
+    expect(describe(log({ kind: "formula", amount_ml: 70, ended_at: "2026-11-22T01:10:00Z" }), NOW)).toBe("70ml · 10분");
+    expect(describe(log({ kind: "pump", amount_ml: 50, side: "both", ended_at: "2026-11-22T01:20:00Z" }), NOW)).toBe("50ml · 양쪽 · 20분");
+  });
+  it("대변 색은 대변일 때만 보인다", () => {
+    expect(describe(log({ kind: "diaper", diaper: "poo", poo_color: "green" }), NOW)).toBe("대변 · 초록색");
+    expect(describe(log({ kind: "diaper", diaper: "pee", poo_color: "green" }), NOW)).toBe("소변");
+  });
+  it("addMinutesLocal: 자정을 넘겨도 한국 시간으로 더한다", () => {
+    expect(addMinutesLocal("2026-11-21T23:55", 10)).toBe("2026-11-22T00:05");
+    expect(addMinutesLocal("2026-11-22T00:05", -10)).toBe("2026-11-21T23:55");
+    expect(addMinutesLocal("bad", 10)).toBeNull();
+  });
+});
+
+group("whenLabel", () => {
+  // NOW = 서울 2026-11-22 21:00
+  it("오늘·어제·그 전 날짜를 붙인다", () => {
+    expect(whenLabel("2026-11-22T02:16:00Z", NOW)).toBe("오늘 11:16");
+    expect(whenLabel("2026-11-21T14:30:00Z", NOW)).toBe("어제 23:30");
+    expect(whenLabel("2026-11-19T12:50:00Z", NOW)).toBe("11/19 21:50");
+  });
+});
+
+group("키·몸무게", () => {
+  it("몸무게와 키를 함께, 또는 하나만 보여 준다", () => {
+    expect(describe(log({ kind: "weight", value: 4.25, height_cm: 55.5 }), NOW)).toBe("4.25kg · 55.5cm");
+    expect(describe(log({ kind: "weight", height_cm: 56 }), NOW)).toBe("56cm");
+    expect(describe(log({ kind: "weight", value: 4.3 }), NOW)).toBe("4.3kg");
   });
 });
