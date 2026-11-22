@@ -38,6 +38,23 @@ export const KINDS: { key: CareKind; label: string; icon: string; field: "ml" | 
   { key: "temperature", label: "체온", icon: "🌡️", field: "temp" },
   { key: "other", label: "기타", icon: "📝", field: "text" },
 ];
+/** 패턴 그림의 종류별 색 */
+export const KIND_COLOR: Record<CareKind, string> = {
+  formula: "#f0b429",
+  breast: "#ec6f82",
+  pumped: "#9bc53d",
+  pump: "#d982c2",
+  diaper: "#b08060",
+  sleep: "#7477c4",
+  weight: "#8d99ae",
+  medicine: "#3fa36b",
+  bath: "#55a6e0",
+  hospital: "#e05d5d",
+  water: "#7cc6f2",
+  solid: "#4fc1b9",
+  temperature: "#f28c38",
+  other: "#9aa0a6",
+};
 export const kindInfo = (k: CareKind) => KINDS.find((x) => x.key === k) ?? KINDS[KINDS.length - 1];
 
 export const FEED_KINDS: CareKind[] = ["formula", "breast", "pumped"];

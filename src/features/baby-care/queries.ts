@@ -83,3 +83,18 @@ export async function listRecentFeeds(today: string, n: number): Promise<BabyLog
   if (error) throw new Error(error.message);
   return (data ?? []) as BabyLog[];
 }
+
+/** from~to(한국 날짜, 둘 다 포함) 기록. 자정을 넘긴 잠이 들어가도록 하루 앞부터 읽는다 */
+export async function listCareRange(from: string, to: string): Promise<BabyLog[]> {
+  const { supabase } = await requireUser();
+  const start = new Date(Date.parse(seoulDayRange(from).start) - 24 * 3_600_000).toISOString();
+  const { data, error } = await supabase
+    .from("baby_logs")
+    .select(LOG_COLUMNS)
+    .gte("started_at", start)
+    .lt("started_at", seoulDayRange(to).end)
+    .order("started_at", { ascending: true })
+    .limit(3000);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BabyLog[];
+}
