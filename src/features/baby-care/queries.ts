@@ -1,6 +1,7 @@
 import "server-only";
 import { requireUser } from "@/lib/supabase/server";
 import { BABY_TODO_COLUMNS, type BabyTodo } from "./baby-todos";
+import { LINK_COLUMNS, type BabyLink } from "./links";
 import { LOG_COLUMNS, seoulDayRange, type BabyLog, type CareKind } from "./care";
 
 /**
@@ -134,4 +135,12 @@ export async function listBabyTodosForWidget(today: string): Promise<BabyTodo[]>
   }
   const rows = (data ?? []) as BabyTodo[];
   return [...rows.filter((t) => !t.done_at), ...rows.filter((t) => t.done_at)];
+}
+
+/** 아기 링크 (최근에 넣은 것부터) */
+export async function listBabyLinks(): Promise<BabyLink[]> {
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase.from("baby_links").select(LINK_COLUMNS).order("created_at", { ascending: false }).limit(300);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BabyLink[];
 }
