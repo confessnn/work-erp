@@ -11,6 +11,7 @@ import { LectureTable } from "@/features/lectures/components/lecture-table";
 import { listLectures } from "@/features/lectures/queries";
 import { nowInSeoul, todayInSeoul, won } from "@/lib/format";
 import { listFamilyEventsBetween } from "@/features/family/queries";
+import { holidaysOfMonth } from "@/lib/holidays";
 
 const STATUS = [
   { v: undefined, label: "전체" },
@@ -95,7 +96,15 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
       </div>
 
       {calendar ? (
-        <LectureCalendar year={period.year} month={period.month!} lectures={lectures} today={todayInSeoul()} familyEvents={familyEvents} reminderKeys={reminderKeys} />
+        <LectureCalendar
+          year={period.year}
+          month={period.month!}
+          lectures={lectures}
+          today={todayInSeoul()}
+          familyEvents={familyEvents}
+          reminderKeys={reminderKeys}
+          holidays={await holidaysOfMonth(period.year, period.month!)}
+        />
       ) : (
         <LectureTable lectures={lectures} familyEvents={familyEvents} />
       )}

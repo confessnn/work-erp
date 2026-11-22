@@ -4,6 +4,7 @@ import { monthGrid } from "@/features/lectures/month-grid";
 import { ReminderBell } from "@/features/reminders/components/reminder-bell";
 import { familyEventTarget, reminderKey, type ReminderTarget } from "@/features/reminders/keys";
 import { LECTURE_CLS, PERSONS, personOf, type FamilyEvent, type FamilyLecture } from "../types";
+import { shortHoliday, type Holidays } from "@/lib/holiday-label";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -64,6 +65,7 @@ export function FamilyCalendar({
   today,
   lectureHref,
   reminderKeys = [],
+  holidays = {},
 }: {
   year: number;
   month: number;
@@ -73,6 +75,8 @@ export function FamilyCalendar({
   lectureHref: boolean;
   /** 내가 알림을 켠 일정 (reminderKey 형식) */
   reminderKeys?: string[];
+  /** 대한민국 공휴일 (날짜 → 이름) */
+  holidays?: Holidays;
 }) {
   const items = merge(events, lectures, lectureHref);
   const reminded = new Set(reminderKeys);
@@ -101,12 +105,17 @@ export function FamilyCalendar({
                   >
                     <span
                       className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs tabular-nums hover:bg-accent-soft ${
-                        c.date === today ? "bg-accent font-semibold text-white hover:bg-accent" : di === 0 ? "text-danger" : ""
+                        c.date === today ? "bg-accent font-semibold text-white hover:bg-accent" : di === 0 || holidays[c.date] ? "text-danger" : ""
                       }`}
                     >
                       {c.day}
                     </span>
                   </Link>
+                  {holidays[c.date] && (
+                    <div title={holidays[c.date]} className="truncate text-center text-[10px] leading-tight text-danger sm:text-left sm:text-[11px]">
+                      {shortHoliday(holidays[c.date])}
+                    </div>
+                  )}
                   <ul className="space-y-0.5">
                     {(byDate.get(c.date) ?? []).map((it) => {
                       const on = reminded.has(reminderKey(it.target.kind, it.target.ref));

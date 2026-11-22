@@ -9,6 +9,7 @@ import { datesLabel, hasFee, unpaidOnDates } from "../paid-selection";
 import type { Lecture } from "../types";
 import { PERSONS, personOf, type FamilyEvent } from "@/features/family/types";
 import { familyEventTarget, reminderKey } from "@/features/reminders/keys";
+import { shortHoliday, type Holidays } from "@/lib/holiday-label";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -30,6 +31,7 @@ export function LectureCalendar({
   today,
   familyEvents = [],
   reminderKeys = [],
+  holidays = {},
 }: {
   year: number;
   month: number;
@@ -39,6 +41,8 @@ export function LectureCalendar({
   familyEvents?: FamilyEvent[];
   /** 휴대폰 알림을 켠 일정 (reminderKey 형식). 켠 일정 앞에 🔔 */
   reminderKeys?: string[];
+  /** 대한민국 공휴일 (날짜 → 이름) */
+  holidays?: Holidays;
 }) {
   const reminded = new Set(reminderKeys);
   const famOn = (e: FamilyEvent) => {
@@ -141,12 +145,17 @@ export function LectureCalendar({
                   <div className="mb-0.5 flex justify-center sm:justify-start">
                     <span
                       className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs tabular-nums ${
-                        c.date === today ? "bg-accent font-semibold text-white" : di === 0 ? "text-danger" : ""
+                        c.date === today ? "bg-accent font-semibold text-white" : di === 0 || holidays[c.date] ? "text-danger" : ""
                       }`}
                     >
                       {on ? "✓" : c.day}
                     </span>
                   </div>
+                  {holidays[c.date] && (
+                    <div title={holidays[c.date]} className="truncate text-center text-[10px] leading-tight text-danger sm:text-left sm:text-[11px]">
+                      {shortHoliday(holidays[c.date])}
+                    </div>
+                  )}
                   <ul className="flex flex-col gap-0.5">
                     {items.map((l) => {
                       const cls = `block overflow-hidden whitespace-nowrap rounded-md sm:text-ellipsis px-1 py-0.5 text-[11px] leading-tight sm:text-xs ${
