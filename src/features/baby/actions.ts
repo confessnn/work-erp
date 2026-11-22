@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import { createFolder, folderUsable, getFile, trashFile } from "@/features/documents/drive";
 import { failResult } from "@/features/google-drive/context";
-import { getFamilyRole } from "@/features/family/queries";
 import { babyDriveContext, type BabyDriveContext } from "./drive";
 import { GoogleApiError } from "@/features/google-calendar/google-api";
 import { monthKey } from "./age";
@@ -12,25 +11,24 @@ import { monthKey } from "./age";
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const isDate = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
 
+/** 아기 정보 저장. 가족(아내)도 고칠 수 있고, 값은 가족을 만든 사람 설정에 저장한다 (DB 함수 set_family_baby_info) */
 export async function saveBabyInfo(fd: FormData) {
-  if ((await getFamilyRole()).role === "member") return;
-  const { supabase, userId } = await requireUser();
-  const name = String(fd.get("baby_name") ?? "").trim().slice(0, 30) || null;
+  const { supabase } = await requireUser();
+  const name = String(fd.get("baby_name") ?? "").trim().slice(0, 30);
   const birth = String(fd.get("baby_birth_date") ?? "");
   const sex = String(fd.get("baby_sex") ?? "");
   const weeks = Number(fd.get("baby_gest_weeks") || NaN);
   const days = Number(fd.get("baby_gest_days") || 0);
   const weeksOk = Number.isInteger(weeks) && weeks >= 22 && weeks <= 44;
-  await supabase.from("user_settings").upsert({
-    user_id: userId,
-    baby_name: name,
-    baby_birth_date: isDate(birth) ? birth : null,
-    baby_sex: sex === "male" || sex === "female" ? sex : null,
+  const { error } = await supabase.rpc("set_family_baby_info", {
+    p_name: name,
+    p_birth: isDate(birth) ? birth : null,
+    p_sex: sex === "male" || sex === "female" ? sex : null,
     // 출생 주수: 37주 전에 태어났으면 성장 백분위를 교정 나이로 비교한다
-    baby_gest_weeks: weeksOk ? weeks : null,
-    baby_gest_days: weeksOk && Number.isInteger(days) && days >= 0 && days <= 6 ? days : null,
-    updated_at: new Date().toISOString(),
+    p_gest_weeks: weeksOk ? weeks : null,
+    p_gest_days: weeksOk && Number.isInteger(days) && days >= 0 && days <= 6 ? days : null,
   });
+  if (error) throw new Error(`아기 정보를 저장하지 못했어요: ${error.message}`);
   revalidatePath("/baby", "layout");
 }
 

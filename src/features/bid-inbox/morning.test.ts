@@ -123,4 +123,8 @@ describe("공유받은 할 일", () => {
     expect(buildMorningTelegram("2026-11-22", [], [], [], todos).join("\n")).toContain("☐ 기저귀 주문 [아내 공유]");
     expect(buildMorning("2026-11-22", [], [], [], todos).html).toContain("[아내 공유]");
   });
+  it("아기 할 일은 아기 이름을 붙인다", () => {
+    const todos = [{ title: "예방접종 예약", due_date: "2026-11-22", note: null, tag: "임채현" }];
+    expect(buildMorningTelegram("2026-11-22", [], [], [], todos).join("\n")).toContain("☐ 예방접종 예약 [임채현]");
+  });
 });

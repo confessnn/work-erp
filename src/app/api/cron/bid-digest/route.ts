@@ -56,13 +56,15 @@ async function sendTelegram(db: SupabaseClient, secret: string, user: string, ch
  */
 async function mailDigest(db: SupabaseClient, secret: string, user: string, summaryProblem: string | null) {
   const today = todayInSeoul();
-  const [notices, status, agenda, todoRows, sharedRows] = await Promise.all([
+  const [notices, status, agenda, todoRows, sharedRows, babyRows] = await Promise.all([
     db.rpc("cron_digest_notices", { p_secret: secret, p_user: user }),
     db.rpc("cron_bid_status", { p_secret: secret, p_user: user }),
     db.rpc("cron_morning_agenda", { p_secret: secret, p_user: user, p_from: today, p_to: nextDay(today) }),
     db.rpc("cron_morning_todos", { p_secret: secret, p_user: user, p_day: today }),
     // 가족(예: 아내)이 공유한 할 일
     db.rpc("cron_morning_shared_todos", { p_secret: secret, p_user: user, p_day: today }),
+    // 아기 할 일 (부부 공용)
+    db.rpc("cron_morning_baby_todos", { p_secret: secret, p_user: user, p_day: today }),
   ]);
   if (notices.error) throw new Error(notices.error.message);
   if (status.error) throw new Error(status.error.message);
@@ -78,7 +80,11 @@ async function mailDigest(db: SupabaseClient, secret: string, user: string, summ
   ].flatMap((p) => (p ? [p] : []));
   const items = (agenda.data ?? []) as AgendaItem[];
   // 공유받은 할 일은 못 읽어도 아침 알림은 보낸다
-  const todos = [...((todoRows.data ?? []) as MorningTodo[]), ...((sharedRows.error ? [] : sharedRows.data ?? []) as MorningTodo[])];
+  const todos = [
+    ...((todoRows.data ?? []) as MorningTodo[]),
+    ...((sharedRows.error ? [] : (sharedRows.data ?? [])) as MorningTodo[]),
+    ...((babyRows.error ? [] : (babyRows.data ?? [])) as MorningTodo[]),
+  ];
 
   const tg = await sendTelegram(db, secret, user, buildMorningTelegram(today, items, rows, problems, todos));
   let via = "텔레그램";
