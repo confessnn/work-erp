@@ -39,3 +39,47 @@ export async function getLatestCare() {
   const [diaper, feed, sleep] = await Promise.all([last(["diaper"]), last(["formula", "breast", "pumped"]), last(["sleep"])]);
   return { diaper, feed, sleep };
 }
+
+/** 키·몸무게 기록 전부 (오래된 것부터) */
+export async function listMeasurements(): Promise<BabyLog[]> {
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase
+    .from("baby_logs")
+    .select(LOG_COLUMNS)
+    .eq("kind", "weight")
+    .order("started_at", { ascending: true })
+    .limit(1000);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BabyLog[];
+}
+
+/** 가장 최근 몸무게(kg). 키만 잰 기록은 건너뛴다 */
+export async function latestWeightKg(): Promise<{ kg: number; at: string } | null> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase
+    .from("baby_logs")
+    .select("value, started_at")
+    .eq("kind", "weight")
+    .not("value", "is", null)
+    .lte("started_at", new Date().toISOString())
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ? { kg: Number(data.value), at: data.started_at as string } : null;
+}
+
+/** 최근 n일(오늘 포함) 수유 기록 (분유·유축수유·모유) */
+export async function listRecentFeeds(today: string, n: number): Promise<BabyLog[]> {
+  const { supabase } = await requireUser();
+  const { start } = seoulDayRange(today);
+  const from = new Date(Date.parse(start) - (n - 1) * 24 * 3_600_000).toISOString();
+  const { data, error } = await supabase
+    .from("baby_logs")
+    .select(LOG_COLUMNS)
+    .in("kind", ["formula", "pumped", "breast"])
+    .gte("started_at", from)
+    .order("started_at", { ascending: true })
+    .limit(2000);
+  if (error) throw new Error(error.message);
+  return (data ?? []) as BabyLog[];
+}

@@ -50,9 +50,29 @@ export default async function BabyPage({ searchParams }: PageProps<"/baby">) {
                   <span>태어난 날</span>
                   <input name="baby_birth_date" type="date" defaultValue={baby.birthDate ?? ""} className="input" />
                 </label>
+                <label className="field">
+                  <span>성별</span>
+                  <select name="baby_sex" defaultValue={baby.sex ?? ""} className="input">
+                    <option value="">모름</option>
+                    <option value="male">남자</option>
+                    <option value="female">여자</option>
+                  </select>
+                </label>
+                <div className="field">
+                  <span>출생 주수 (선택)</span>
+                  <div className="flex items-center gap-1">
+                    <input name="baby_gest_weeks" aria-label="주" type="number" inputMode="numeric" min={22} max={44} defaultValue={baby.gestWeeks ?? ""} placeholder="36" className="input w-20" />
+                    주
+                    <input name="baby_gest_days" aria-label="일" type="number" inputMode="numeric" min={0} max={6} defaultValue={baby.gestDays ?? ""} placeholder="4" className="input w-16" />
+                    일
+                  </div>
+                </div>
                 <button type="submit" className="btn-primary">저장</button>
               </form>
-              <p className="mt-2 text-xs text-muted">태어난 날을 넣으면 날짜마다 &apos;생후 N일&apos;과 백일·첫 돌 같은 기념일을 표시합니다.</p>
+              <p className="mt-2 text-xs text-muted">
+                태어난 날을 넣으면 날짜마다 &apos;생후 N일&apos;과 백일·첫 돌 같은 기념일을 표시합니다. 성별은 성장 백분위(WHO 기준) 계산에 씁니다.
+                37주 전에 태어났으면 출생 주수를 넣어 주세요. 성장 비교를 &apos;교정 나이&apos;로 합니다.
+              </p>
             </details>
           )}
 
