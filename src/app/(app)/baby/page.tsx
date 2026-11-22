@@ -58,10 +58,15 @@ export default async function BabyPage({ searchParams }: PageProps<"/baby">) {
                     <option value="female">여자</option>
                   </select>
                 </label>
-                <label className="field">
+                <div className="field">
                   <span>출생 주수 (선택)</span>
-                  <input name="baby_gest_weeks" type="number" inputMode="numeric" min={22} max={44} defaultValue={baby.gestWeeks ?? ""} placeholder="예: 38" className="input w-28" />
-                </label>
+                  <div className="flex items-center gap-1">
+                    <input name="baby_gest_weeks" aria-label="주" type="number" inputMode="numeric" min={22} max={44} defaultValue={baby.gestWeeks ?? ""} placeholder="36" className="input w-20" />
+                    주
+                    <input name="baby_gest_days" aria-label="일" type="number" inputMode="numeric" min={0} max={6} defaultValue={baby.gestDays ?? ""} placeholder="4" className="input w-16" />
+                    일
+                  </div>
+                </div>
                 <button type="submit" className="btn-primary">저장</button>
               </form>
               <p className="mt-2 text-xs text-muted">

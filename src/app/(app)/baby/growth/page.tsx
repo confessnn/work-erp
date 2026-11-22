@@ -38,7 +38,7 @@ export default async function BabyGrowthPage() {
           .
         </section>
       ) : (
-        <Growth birthDate={baby.birthDate!} sex={baby.sex!} gestWeeks={baby.gestWeeks} measures={measures} />
+        <Growth birthDate={baby.birthDate!} sex={baby.sex!} gestWeeks={baby.gestWeeks} gestDays={baby.gestDays} measures={measures} />
       )}
 
       <FeedGuide today={today} weight={weight} feeds={feeds} />
@@ -53,16 +53,29 @@ export default async function BabyGrowthPage() {
 
 type Row = { log: BabyLog; date: string; age: number; days: number | null; corrected: boolean };
 
-function Growth({ birthDate, sex, gestWeeks, measures }: { birthDate: string; sex: Sex; gestWeeks: number | null; measures: BabyLog[] }) {
+function Growth({
+  birthDate,
+  sex,
+  gestWeeks,
+  gestDays,
+  measures,
+}: {
+  birthDate: string;
+  sex: Sex;
+  gestWeeks: number | null;
+  gestDays: number | null;
+  measures: BabyLog[];
+}) {
   const rows: Row[] = measures.map((log) => {
     const date = seoulDate(log.started_at);
-    return { log, date, ...compareAge(birthDate, date, gestWeeks) };
+    return { log, date, ...compareAge(birthDate, date, gestWeeks, gestDays) };
   });
   const lastOf = (m: Measure) => [...rows].reverse().find((r) => (m === "weight" ? r.log.value : r.log.height_cm) !== null) ?? null;
   const val = (r: Row, m: Measure) => Number(m === "weight" ? r.log.value : r.log.height_cm);
   const unit = (m: Measure) => (m === "weight" ? "kg" : "cm");
   const name = (m: Measure) => (m === "weight" ? "몸무게" : "키");
-  const nowAge = compareAge(birthDate, todayInSeoul(), gestWeeks);
+  const nowAge = compareAge(birthDate, todayInSeoul(), gestWeeks, gestDays);
+  const gestLabel = gestWeeks ? `${gestWeeks}주${gestDays ? ` ${gestDays}일` : ""}` : "";
   const early = rows.some((r) => r.days === null && r.age >= 0);
 
   const card = (m: Measure) => {
@@ -106,7 +119,7 @@ function Growth({ birthDate, sex, gestWeeks, measures }: { birthDate: string; se
       {(nowAge.corrected || gestWeeks === null) && (
         <p className="text-sm text-muted">
           {nowAge.corrected
-            ? `${gestWeeks}주에 태어나서 교정 나이로 비교해요 (오늘 실제 ${nowAge.age}일 · 교정 ${nowAge.days ?? "예정일 전"}${nowAge.days !== null ? "일" : ""}).`
+            ? `${gestLabel}에 태어나서 교정 나이로 비교해요 (오늘 실제 ${nowAge.age}일 · 교정 ${nowAge.days ?? "예정일 전"}${nowAge.days !== null ? "일" : ""}).`
             : "37주 전에 태어났다면 사진 탭 '아기 정보'에 출생 주수를 넣어 주세요. 교정 나이로 더 정확하게 비교해요."}
         </p>
       )}

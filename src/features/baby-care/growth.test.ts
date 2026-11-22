@@ -39,6 +39,11 @@ describe("나이·교정 나이", () => {
     expect(compareAge("2026-10-07", "2026-11-22", 34)).toEqual({ age: 46, corrected: true, days: 4 });
     expect(compareAge("2026-10-07", "2026-10-20", 34).days).toBeNull();
   });
+  it("36주 4일은 24일을 빼고, 37주 0일부터는 빼지 않는다", () => {
+    expect(compareAge("2026-10-07", "2026-11-21", 36, 4)).toEqual({ age: 45, corrected: true, days: 21 });
+    expect(compareAge("2026-10-07", "2026-10-07", 36, 4).days).toBeNull();
+    expect(compareAge("2026-10-07", "2026-11-21", 37, 0).corrected).toBe(false);
+  });
 });
 
 describe("기타", () => {

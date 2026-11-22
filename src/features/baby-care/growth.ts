@@ -17,12 +17,13 @@ export function daysBetween(from: string, to: string) {
 }
 
 /**
- * 비교에 쓰는 나이(일). 37주 전에 태어난 이른둥이는 40주 기준으로 덜 자란 날만큼 빼서 '교정 나이'로 비교한다.
- * 교정 나이가 0일보다 작으면(예정일 전) null.
+ * 비교에 쓰는 나이(일). 37주 전에 태어난 이른둥이는 40주 기준으로 덜 자란 날만큼 빼서 '교정 나이'로 비교한다
+ * (예: 36주 4일 → 24일을 뺀다). 교정 나이가 0일보다 작으면(예정일 전) null.
  */
-export function compareAge(birthDate: string, date: string, gestWeeks: number | null) {
+export function compareAge(birthDate: string, date: string, gestWeeks: number | null, gestDays: number | null = null) {
   const age = daysBetween(birthDate, date);
-  const shift = gestWeeks && gestWeeks < 37 ? (40 - gestWeeks) * 7 : 0;
+  const gest = gestWeeks ? gestWeeks * 7 + (gestDays ?? 0) : null;
+  const shift = gest !== null && gest < 37 * 7 ? 40 * 7 - gest : 0;
   const d = age - shift;
   return { age, corrected: shift > 0, days: d >= 0 && d <= MAX_DAY ? d : null };
 }

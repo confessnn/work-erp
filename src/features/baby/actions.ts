@@ -19,13 +19,16 @@ export async function saveBabyInfo(fd: FormData) {
   const birth = String(fd.get("baby_birth_date") ?? "");
   const sex = String(fd.get("baby_sex") ?? "");
   const weeks = Number(fd.get("baby_gest_weeks") || NaN);
+  const days = Number(fd.get("baby_gest_days") || 0);
+  const weeksOk = Number.isInteger(weeks) && weeks >= 22 && weeks <= 44;
   await supabase.from("user_settings").upsert({
     user_id: userId,
     baby_name: name,
     baby_birth_date: isDate(birth) ? birth : null,
     baby_sex: sex === "male" || sex === "female" ? sex : null,
     // 출생 주수: 37주 전에 태어났으면 성장 백분위를 교정 나이로 비교한다
-    baby_gest_weeks: Number.isInteger(weeks) && weeks >= 22 && weeks <= 44 ? weeks : null,
+    baby_gest_weeks: weeksOk ? weeks : null,
+    baby_gest_days: weeksOk && Number.isInteger(days) && days >= 0 && days <= 6 ? days : null,
     updated_at: new Date().toISOString(),
   });
   revalidatePath("/baby", "layout");
