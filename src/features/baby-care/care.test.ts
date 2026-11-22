@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from "vitest";
-import { addMinutesLocal, agoLabel, daySummary, describe, durationLabel, fromLocalInput, latest, toLocalInput, type BabyLog } from "./care";
+import { addMinutesLocal, agoLabel, whenLabel, daySummary, describe, durationLabel, fromLocalInput, latest, toLocalInput, type BabyLog } from "./care";
 
 const log = (o: Partial<BabyLog>): BabyLog => ({
   id: Math.random().toString(36),
@@ -98,5 +98,14 @@ group("유축·수유 시간·대변 색", () => {
     expect(addMinutesLocal("2026-11-21T23:55", 10)).toBe("2026-11-22T00:05");
     expect(addMinutesLocal("2026-11-22T00:05", -10)).toBe("2026-11-21T23:55");
     expect(addMinutesLocal("bad", 10)).toBeNull();
+  });
+});
+
+group("whenLabel", () => {
+  // NOW = 서울 2026-11-22 21:00
+  it("오늘·어제·그 전 날짜를 붙인다", () => {
+    expect(whenLabel("2026-11-22T02:16:00Z", NOW)).toBe("오늘 11:16");
+    expect(whenLabel("2026-11-21T14:30:00Z", NOW)).toBe("어제 23:30");
+    expect(whenLabel("2026-11-19T12:50:00Z", NOW)).toBe("11/19 21:50");
   });
 });

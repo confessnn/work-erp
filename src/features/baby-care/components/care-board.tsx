@@ -20,6 +20,7 @@ import {
   seoulTime,
   TIMED_KINDS,
   toLocalInput,
+  whenLabel,
   type BabyLog,
   type CareKind,
 } from "../care";
@@ -105,8 +106,9 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
 
   return (
     <div className="space-y-6">
-      {/* 마지막 기록 */}
-      <section className="grid grid-cols-3 gap-2">
+      {/* 마지막 기록: 보고 있는 날짜와 상관없이 가장 최근 기록 */}
+      {day !== today && <p className="-mb-4 text-xs text-muted">아래 세 칸은 보고 있는 날짜와 상관없이 가장 최근 기록이에요.</p>}
+      <section className="grid grid-cols-3 gap-2" aria-label="가장 최근 기록 (날짜와 상관없음)">
         <LastCard icon="🧷" title="마지막 기저귀" log={latest.diaper} now={now} />
         <LastCard icon="🍼" title="마지막 수유" log={latest.feed} now={now} />
         <LastCard icon="😴" title={sleeping ? "자는 중" : "마지막 잠"} log={latest.sleep} now={now} sleep />
@@ -218,11 +220,11 @@ function LastCard({ icon, title, log, now, sleep }: { icon: string; title: strin
   if (log) {
     if (sleep && !log.ended_at) {
       main = durationLabel((now - Date.parse(log.started_at)) / 60_000) + "째";
-      sub = `${seoulTime(log.started_at)}에 잠듦`;
+      sub = `${whenLabel(log.started_at, now)}에 잠듦`;
     } else {
       const at = sleep && log.ended_at ? log.ended_at : log.started_at;
       main = agoLabel(at, now);
-      sub = `${seoulTime(at)}${sleep ? " 깸" : ""} · ${describe(log, now) || kindInfo(log.kind).label}`;
+      sub = `${whenLabel(at, now)}${sleep ? " 깸" : ""} · ${describe(log, now) || kindInfo(log.kind).label}`;
     }
   }
   return (

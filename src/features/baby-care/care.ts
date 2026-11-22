@@ -90,6 +90,15 @@ export function fromLocalInput(v: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** 날짜를 붙인 시각: "오늘 11:16", "어제 23:30", "11/19 21:50" (한국 시간) */
+export function whenLabel(iso: string, now: number) {
+  const d = seoulDate(iso);
+  const today = seoulDate(new Date(now));
+  const yesterday = seoulDate(new Date(now - 24 * 60 * MIN));
+  const day = d === today ? "오늘" : d === yesterday ? "어제" : `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
+  return `${day} ${seoulTime(iso)}`;
+}
+
 /** "3시간 12분 전", "방금" */
 export function agoLabel(iso: string, now: number) {
   const m = Math.max(0, Math.floor((now - Date.parse(iso)) / MIN));
