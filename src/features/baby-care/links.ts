@@ -94,3 +94,12 @@ export function parseDescribe(text: string): { title: string | null; description
   const description = text.includes("설명") ? (/설명\s*[:：]\s*([\s\S]+)/.exec(text)?.[1]?.trim() ?? null) : text.trim() || null;
   return { title: line("제목")?.slice(0, 200) ?? null, description: description?.slice(0, 1000) ?? null };
 }
+
+/** 목록에서 i번째를 to번째로 옮긴 새 목록 (범위를 벗어나면 그대로) */
+export function moveItem<T>(list: T[], i: number, to: number): T[] {
+  if (i === to || i < 0 || i >= list.length || to < 0 || to >= list.length) return list;
+  const next = [...list];
+  const [x] = next.splice(i, 1);
+  next.splice(to, 0, x);
+  return next;
+}

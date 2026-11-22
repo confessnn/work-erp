@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { BabyLink } from "../links";
-import { addBabyLink, deleteBabyLink, refreshBabyLink, updateBabyLink } from "../link-actions";
+import { moveItem, type BabyLink } from "../links";
+import { addBabyLink, deleteBabyLink, refreshBabyLink, reorderBabyLinks, updateBabyLink } from "../link-actions";
 
 const host = (url: string) => {
   try {
@@ -21,6 +21,8 @@ export function BabyLinkBoard({ initial }: { initial: BabyLink[] }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null); // 읽는 중인 링크 id 또는 "new"
   const [pending, start] = useTransition();
+  // 순서 바꾸기: 바꾸는 동안의 목록 (저장하면 links에 반영, 취소하면 버림)
+  const [ordering, setOrdering] = useState<BabyLink[] | null>(null);
 
   const run = (key: string, fn: () => Promise<{ ok: boolean; message?: string; link?: BabyLink }>, after: (l?: BabyLink) => void) =>
     start(async () => {
@@ -62,11 +64,65 @@ export function BabyLinkBoard({ initial }: { initial: BabyLink[] }) {
           </button>
         </div>
         <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} placeholder="메모 (선택)" className="input w-full" />
-        <p className="text-xs text-muted">넣으면 사이트를 읽어서 어떤 곳인지 짧은 설명을 붙여요(몇 초 걸려요). 아내와 같이 봐요.</p>
+        <p className="text-xs text-muted">넣으면 사이트를 읽어서 어떤 곳인지 짧은 설명을 붙여요(몇 초 걸려요). 새 링크는 맨 위에 붙어요. 아내와 같이 봐요.</p>
       </form>
       {error && <p className="text-sm text-danger">{error}</p>}
 
-      {links.length === 0 ? (
+      {links.length > 1 && !ordering && (
+        <div className="flex justify-end">
+          <button type="button" onClick={() => (setEditing(null), setOrdering(links))} className="chip text-sm">
+            ↕ 순서 바꾸기
+          </button>
+        </div>
+      )}
+
+      {ordering ? (
+        <section className="space-y-2">
+          <p className="text-sm text-muted">▲▼로 한 칸씩, ⤒로 맨 위로 옮긴 뒤 저장하세요. 아내 화면도 같은 순서로 바뀌어요.</p>
+          <ul className="divide-y divide-line rounded-2xl border border-line bg-surface">
+            {ordering.map((l, i) => (
+              <li key={l.id} className="flex items-center gap-2 px-3 py-2">
+                <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted">{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate text-sm">{l.title ?? host(l.url)}</span>
+                {[
+                  ["⤒", "맨 위로", 0],
+                  ["▲", "위로", i - 1],
+                  ["▼", "아래로", i + 1],
+                ].map(([icon, label, to]) => (
+                  <button
+                    key={label as string}
+                    type="button"
+                    aria-label={`${l.title ?? host(l.url)} ${label}`}
+                    disabled={to === i || (to as number) < 0 || (to as number) >= ordering.length}
+                    onClick={() => setOrdering(moveItem(ordering, i, to as number))}
+                    className="chip h-8 w-8 shrink-0 justify-center p-0 disabled:opacity-30"
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </li>
+            ))}
+          </ul>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                run("order", () => reorderBabyLinks(ordering.map((l) => l.id)), () => {
+                  setLinks(ordering);
+                  setOrdering(null);
+                })
+              }
+              className="btn-primary flex-1"
+            >
+              {busy === "order" ? "저장 중…" : "순서 저장"}
+            </button>
+            <button type="button" disabled={pending} onClick={() => setOrdering(null)} className="chip">
+              취소
+            </button>
+          </div>
+        </section>
+      ) : links.length === 0 ? (
         <p className="card text-center text-sm text-muted">아직 링크가 없어요. 예방접종 안내, 육아 정보, 자주 사는 쇼핑몰 같은 사이트를 넣어 두세요.</p>
       ) : (
         <ul className="space-y-2">

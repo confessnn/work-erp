@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { charsetOf, extractPage, isPrivateAddress, normalizeUrl, parseDescribe } from "./links";
+import { charsetOf, extractPage, isPrivateAddress, moveItem, normalizeUrl, parseDescribe } from "./links";
 
 describe("normalizeUrl", () => {
   it("https를 붙이고 #뒤를 뗀다", () => {
@@ -47,5 +47,14 @@ describe("기타", () => {
       title: "예방접종도우미",
       description: "질병관리청의 예방접종 일정 안내 사이트예요.",
     });
+  });
+});
+
+describe("moveItem", () => {
+  it("위·아래·맨 위로 옮기고, 범위 밖이면 그대로", () => {
+    expect(moveItem(["a", "b", "c"], 2, 1)).toEqual(["a", "c", "b"]);
+    expect(moveItem(["a", "b", "c"], 0, 1)).toEqual(["b", "a", "c"]);
+    expect(moveItem(["a", "b", "c"], 2, 0)).toEqual(["c", "a", "b"]);
+    expect(moveItem(["a", "b", "c"], 0, -1)).toEqual(["a", "b", "c"]);
   });
 });

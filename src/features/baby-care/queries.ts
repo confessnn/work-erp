@@ -137,10 +137,13 @@ export async function listBabyTodosForWidget(today: string): Promise<BabyTodo[]>
   return [...rows.filter((t) => !t.done_at), ...rows.filter((t) => t.done_at)];
 }
 
-/** 아기 링크 (최근에 넣은 것부터) */
+/** 아기 링크: 순서를 안 정한 새 링크가 맨 위(최근 것부터), 그다음 직접 정한 순서 */
 export async function listBabyLinks(): Promise<BabyLink[]> {
   const { supabase } = await requireUser();
-  const { data, error } = await supabase.from("baby_links").select(LINK_COLUMNS).order("created_at", { ascending: false }).limit(300);
+  const { data, error } = await supabase.from("baby_links")
+    .select(LINK_COLUMNS)
+    .order("position", { ascending: true, nullsFirst: true })
+    .order("created_at", { ascending: false }).limit(300);
   if (error) throw new Error(error.message);
   return (data ?? []) as BabyLink[];
 }

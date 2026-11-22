@@ -65,3 +65,15 @@ export async function deleteBabyLink(id: string): Promise<Result> {
   revalidatePath("/baby/links");
   return { ok: true };
 }
+
+/** 화면에서 정한 순서 저장 (가족 링크만 바뀐다: DB 함수가 호출한 사람 권한으로 실행) */
+export async function reorderBabyLinks(ids: string[]): Promise<Result> {
+  if (!Array.isArray(ids) || ids.length > 300 || ids.some((id) => typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id))) {
+    return { ok: false, message: "순서를 확인해 주세요." };
+  }
+  const { supabase } = await requireUser();
+  const { error } = await supabase.rpc("reorder_baby_links", { p_ids: ids });
+  if (error) return { ok: false, message: `순서를 저장하지 못했어요: ${error.message}` };
+  revalidatePath("/baby/links");
+  return { ok: true };
+}
