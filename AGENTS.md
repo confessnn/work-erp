@@ -23,7 +23,7 @@ src/
     types.ts            DB 행 타입
     components/         기능 전용 UI
     *.ts + *.test.ts    순수 계산 로직과 테스트
-  components/           여러 기능이 같이 쓰는 UI (app-nav.tsx = 메뉴 목록)
+  components/           여러 기능이 같이 쓰는 UI (nav-items.ts = 메뉴 목록, app-nav.tsx = 메뉴 화면)
   lib/                  supabase 클라이언트, 포맷 함수
   proxy.ts              (구 middleware) 세션 갱신 + 비로그인 시 /login
 supabase/migrations/    DB 변경 이력 (SQL)
@@ -35,7 +35,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
    (`lectures` 마이그레이션을 복사해서 시작). 기존 마이그레이션 파일은 절대 수정하지 않는다.
 2. `src/features/<기능>/` 폴더에 types → queries → actions → components 순으로 작성.
 3. 계산 로직은 순수 함수로 분리하고 `*.test.ts` 작성.
-4. 페이지는 `src/app/(app)/<경로>/page.tsx`, 메뉴는 `src/components/app-nav.tsx`의 `NAV`에 한 줄 추가.
+4. 페이지는 `src/app/(app)/<경로>/page.tsx`, 메뉴는 `src/components/nav-items.ts`의 `NAV`에 한 줄 추가 (사용자가 설정 화면에서 순서·숨김을 바꾼다. 새 메뉴는 맨 뒤에 붙는다).
 5. `npm test && npm run lint && npm run build` 모두 통과 확인.
 
 ## 규칙
@@ -68,6 +68,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `content` | `/content` | X·노션 콘텐츠 자동화 (크론 `content`) |
 | `share` | `/share-settings` | 가족 공유 링크·iCal 내보내기(금액 없음, `get_shared_schedule`) |
 | `api-credits` | 대시보드 카드 | Claude·OpenAI API 잔액 추정 |
+| `settings` | `/settings` (상단 ⚙) | 설정(관리자): 상단 메뉴 순서·숨김 `user_settings.nav_prefs`, 적용 `components/nav-items.ts`의 `applyNavPrefs` |
 | `plan-usage` | (숨김) | 플랜 사용량 위젯. 사용자가 나중에 다시 켜기로 해서 일부러 남겨 둠 — 지우지 않는다 |
 
 - 크론(Vercel, UTC): `calendar-sync`·`bid-sync` 21:00, `bid-digest`·`api-credits` 22:00, `content` 23:30. 5분 간격 알림만 Supabase pg_cron.
