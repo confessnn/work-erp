@@ -41,7 +41,20 @@ function shiftDay(day: string, n: number) {
  * 육아 기록 화면: 마지막 기저귀·수유·잠, 기록 버튼, 하루 요약, 그날 기록 목록.
  * 가족(나·아내)이 같은 기록을 함께 쓴다.
  */
-export function CareBoard({ day, today, logs, latest }: { day: string; today: string; logs: BabyLog[]; latest: Latest }) {
+export function CareBoard({
+  day,
+  today,
+  logs,
+  latest,
+  guideMl,
+}: {
+  day: string;
+  today: string;
+  logs: BabyLog[];
+  latest: Latest;
+  /** 마지막 몸무게로 계산한 하루 수유 기준량 (성장 탭과 같은 계산) */
+  guideMl: number | null;
+}) {
   const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -156,7 +169,11 @@ export function CareBoard({ day, today, logs, latest }: { day: string; today: st
           )}
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Tile label="총 수유량" value={`${s.feedMl}ml`} sub={`수유 ${s.feeds}회${s.breastCount ? ` · 모유 ${s.breastCount}회 ${durationLabel(s.breastMin)}` : ""}`} />
+          <Tile
+            label="총 수유량"
+            value={`${s.feedMl}ml`}
+            sub={`수유 ${s.feeds}회${s.breastCount ? ` · 모유 ${s.breastCount}회 ${durationLabel(s.breastMin)}` : ""}${guideMl ? ` · 기준 약 ${guideMl}ml` : ""}`}
+          />
           <Tile label="기저귀" value={`${s.diapers}번`} sub={`소변 ${s.pee} · 대변 ${s.poo}`} />
           <Tile label="수면" value={durationLabel(s.sleepMin)} />
           <Tile
