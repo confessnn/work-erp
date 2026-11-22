@@ -3,33 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type NavItem = { href: string; label: string };
+import type { NavItem } from "./nav-items";
 
-/** 상단 메뉴. 기능을 추가하면 여기에 한 줄 추가. */
-export const NAV: NavItem[] = [
-  { href: "/", label: "대시보드" },
-  { href: "/lectures", label: "일정" },
-  { href: "/records", label: "기록" },
-  { href: "/documents", label: "서류함" },
-  { href: "/baby/care", label: "임채현" },
-  { href: "/bids", label: "공고" },
-  { href: "/content", label: "콘텐츠" },
-  { href: "/tools", label: "수업도구" },
-  { href: "/share-settings", label: "공유" },
-  { href: "/integrations", label: "연동" },
-];
+// 메뉴 목록은 nav-items.ts (서버에서 설정 화면의 순서·숨김을 적용한 뒤 넘겨 준다)
 
-/** 초대받은 가족 계정의 메뉴 */
-export const MEMBER_NAV: NavItem[] = [
-  { href: "/todos", label: "할 일" },
-  { href: "/family", label: "가족 달력" },
-  { href: "/baby/care", label: "임채현" },
-];
-
-/** 초대받은 공고 열람자(동생) 계정의 메뉴 */
-export const BID_VIEWER_NAV: NavItem[] = [{ href: "/bids", label: "한일ENG 공고" }];
-
-export function AppNav({ items = NAV }: { items?: NavItem[] }) {
+export function AppNav({ items }: { items: NavItem[] }) {
   const path = usePathname();
   return (
     <nav className="-mx-1 flex min-w-0 gap-1 overflow-x-auto px-1 text-sm whitespace-nowrap [scrollbar-width:none]">
