@@ -12,6 +12,7 @@ const log = (o: Partial<BabyLog>): BabyLog => ({
   side: null,
   diaper: null,
   poo_color: null,
+  supplements: [],
   label: null,
   note: null,
   ...o,
@@ -116,5 +117,15 @@ group("키·몸무게", () => {
     expect(describe(log({ kind: "weight", value: 4.25, height_cm: 55.5 }), NOW)).toBe("4.25kg · 55.5cm");
     expect(describe(log({ kind: "weight", height_cm: 56 }), NOW)).toBe("56cm");
     expect(describe(log({ kind: "weight", value: 4.3 }), NOW)).toBe("4.3kg");
+  });
+});
+
+group("영양제", () => {
+  it("철분제·유산균은 분유·유축수유에만 붙고 하루 횟수를 센다", () => {
+    const f = log({ kind: "formula", amount_ml: 80, supplements: ["iron", "probiotic"] });
+    expect(describe(f, NOW)).toBe("80ml · +철분제 · +유산균");
+    const s = daySummary([f, log({ kind: "pumped", amount_ml: 60, supplements: ["iron"] })], "2026-11-22", NOW);
+    expect(s.iron).toBe(2);
+    expect(s.probiotic).toBe(1);
   });
 });

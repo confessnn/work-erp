@@ -15,11 +15,12 @@ export type BabyLog = {
   side: "left" | "right" | "both" | null;
   diaper: "pee" | "poo" | "both" | null;
   poo_color: PooColor | null;
+  supplements: Supplement[]; // 분유·유축수유에 넣은 철분제·유산균
   label: string | null;
   note: string | null;
 };
 
-export const LOG_COLUMNS = "id, kind, started_at, ended_at, amount_ml, value, height_cm, side, diaper, poo_color, label, note";
+export const LOG_COLUMNS = "id, kind, started_at, ended_at, amount_ml, value, height_cm, side, diaper, poo_color, supplements, label, note";
 
 /** 버튼 순서 = 화면 순서. field: 입력 칸 종류 */
 export const KINDS: { key: CareKind; label: string; icon: string; field: "ml" | "pump" | "breast" | "diaper" | "sleep" | "kg" | "temp" | "medicine" | "solid" | "text" }[] = [
@@ -58,6 +59,15 @@ export const KIND_COLOR: Record<CareKind, string> = {
 export const kindInfo = (k: CareKind) => KINDS.find((x) => x.key === k) ?? KINDS[KINDS.length - 1];
 
 export const FEED_KINDS: CareKind[] = ["formula", "breast", "pumped"];
+
+/** 분유·유축수유에 같이 넣는 영양제 */
+export const SUPPLEMENTS = [
+  { key: "iron", label: "철분제", icon: "🩸" },
+  { key: "probiotic", label: "유산균", icon: "🦠" },
+] as const;
+export type Supplement = (typeof SUPPLEMENTS)[number]["key"];
+/** 영양제를 넣을 수 있는 수유 종류 */
+export const SUPPLEMENT_KINDS: CareKind[] = ["formula", "pumped"];
 export const SIDE_LABEL = { left: "왼쪽", right: "오른쪽", both: "양쪽" } as const;
 export const DIAPER_LABEL = { pee: "소변", poo: "대변", both: "소변+대변" } as const;
 
@@ -142,6 +152,7 @@ export function describe(l: BabyLog, now: number) {
   if (["formula", "breast", "pumped", "pump"].includes(l.kind) && l.ended_at) {
     parts.push(durationLabel((Date.parse(l.ended_at) - Date.parse(l.started_at)) / MIN));
   }
+  if (SUPPLEMENT_KINDS.includes(l.kind)) for (const sp of SUPPLEMENTS) if (l.supplements?.includes(sp.key)) parts.push(`+${sp.label}`);
   if (l.kind === "diaper" && l.diaper) {
     parts.push(DIAPER_LABEL[l.diaper]);
     const c = l.diaper !== "pee" ? pooColor(l.poo_color) : null;
@@ -179,6 +190,8 @@ export type DaySummary = {
   sleepMin: number; // 그날 안에 든 잠 시간 (자정을 넘긴 잠은 나눠 센다, 자는 중이면 지금까지)
   waterMl: number;
   solidG: number;
+  iron: number; // 철분제 넣은 수유 횟수
+  probiotic: number; // 유산균 넣은 수유 횟수
 };
 
 /** 하루 요약 */
@@ -187,7 +200,7 @@ export function daySummary(logs: BabyLog[], day: string, now: number): DaySummar
   const s0 = Date.parse(start);
   const s1 = Math.min(Date.parse(end), now);
   const inDay = (l: BabyLog) => seoulDate(l.started_at) === day;
-  const sum: DaySummary = { diapers: 0, pee: 0, poo: 0, feedMl: 0, formulaMl: 0, pumpedMl: 0, pumpMl: 0, pumpCount: 0, feeds: 0, breastCount: 0, breastMin: 0, sleepMin: 0, waterMl: 0, solidG: 0 };
+  const sum: DaySummary = { diapers: 0, pee: 0, poo: 0, feedMl: 0, formulaMl: 0, pumpedMl: 0, pumpMl: 0, pumpCount: 0, feeds: 0, breastCount: 0, breastMin: 0, sleepMin: 0, waterMl: 0, solidG: 0, iron: 0, probiotic: 0 };
 
   for (const l of logs) {
     if (l.kind === "sleep") {
@@ -198,6 +211,10 @@ export function daySummary(logs: BabyLog[], day: string, now: number): DaySummar
     }
     if (!inDay(l)) continue;
     const ml = l.amount_ml ?? 0;
+    if (SUPPLEMENT_KINDS.includes(l.kind)) {
+      if (l.supplements?.includes("iron")) sum.iron++;
+      if (l.supplements?.includes("probiotic")) sum.probiotic++;
+    }
     switch (l.kind) {
       case "diaper":
         sum.diapers++;

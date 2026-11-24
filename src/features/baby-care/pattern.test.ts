@@ -13,6 +13,7 @@ const log = (o: Partial<BabyLog>): BabyLog => ({
   side: null,
   diaper: null,
   poo_color: null,
+  supplements: [],
   label: null,
   note: null,
   ...o,

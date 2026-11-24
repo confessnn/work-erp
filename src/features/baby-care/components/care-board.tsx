@@ -19,6 +19,8 @@ import {
   pooColor,
   seoulDate,
   seoulTime,
+  SUPPLEMENT_KINDS,
+  SUPPLEMENTS,
   TIMED_KINDS,
   toLocalInput,
   whenLabel,
@@ -97,6 +99,7 @@ export function CareBoard({
         side: l.side,
         diaper: l.diaper,
         poo_color: l.poo_color,
+        supplements: l.supplements ?? [],
         label: l.label,
         note: l.note,
       },
@@ -180,7 +183,10 @@ export function CareBoard({
             label="분유 · 유축수유"
             value={`${s.formulaMl} · ${s.pumpedMl}ml`}
             sub={
-              [s.pumpCount && `유축 ${s.pumpMl}ml (${s.pumpCount}회)`, s.waterMl && `물 ${s.waterMl}ml`, s.solidG && `이유식 ${s.solidG}g`]
+              [
+                s.iron && `철분제 ${s.iron}회`,
+                s.probiotic && `유산균 ${s.probiotic}회`,
+                s.pumpCount && `유축 ${s.pumpMl}ml (${s.pumpCount}회)`, s.waterMl && `물 ${s.waterMl}ml`, s.solidG && `이유식 ${s.solidG}g`]
                 .filter(Boolean)
                 .join(" · ") || undefined
             }
@@ -417,6 +423,28 @@ function CareForm({
                   {ml}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {SUPPLEMENT_KINDS.includes(v.kind) && (
+          <div className="space-y-1.5">
+            <div className="text-sm text-muted">같이 넣은 것</div>
+            <div className="grid grid-cols-2 gap-2">
+              {SUPPLEMENTS.map((sp) => {
+                const on = !!v.supplements?.includes(sp.key);
+                return (
+                  <button
+                    key={sp.key}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => set({ supplements: on ? (v.supplements ?? []).filter((x) => x !== sp.key) : [...(v.supplements ?? []), sp.key] })}
+                    className={`choice ${on ? "choice-on" : ""}`}
+                  >
+                    {on ? "✓" : sp.icon} {sp.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
