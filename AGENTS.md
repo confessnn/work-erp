@@ -64,7 +64,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `documents` · `google-drive` | `/documents` | 서류함·강의별 제출 서류(드라이브). 큰 파일은 브라우저→드라이브 직접(`drive-browser.ts`) |
 | `bid-inbox` · `bid-viewer` | `/bids*`, `/join/bids/[token]` | 나라장터·국방전자조달 등 공고 수신(`fetch-all.ts`), 판정, 입찰가 계산기, 아침 메일(`morning.ts`), 동생용 열람 |
 | `records` | `/records*` | 수업 기록·관계도 그래프 |
-| `brain` | `/brain`·`/brain/note/[id]`·`/brain/graph` (메뉴 '세컨드브레인') | 옵시디언 볼트(구글 드라이브 폴더) 보기. '동기화'로 .md 를 `brain_notes`에 사본 저장(`sync.ts`의 `planSync`), PARA·[[링크]]·태그 `vault.ts`, 본문 그리기 `markdown.ts`(HTML 안 만듦), 그래프 `graph.ts`. ERP 기록 → 볼트 'ERP 기록' 폴더 .md(`export.ts`, 금액 없음), 대시보드 할 일 → 'ERP 기록/할 일/<날짜>.md'(`todo-notes.ts`, 할 일 Server Action 끝에 `scheduleTodoExport()`). 서버 작업은 `service.ts`. 읽기는 `drive.readonly`, 쓰기는 ERP가 만든 폴더만(`drive.file`) |
+| `brain` | `/brain`·`/brain/note/[id]`·`/brain/graph` (메뉴 '세컨드브레인') | 옵시디언 볼트(구글 드라이브 폴더) 보기. '동기화'로 .md 를 `brain_notes`에 사본 저장(`sync.ts`의 `planSync`), PARA·[[링크]]·태그 `vault.ts`, 본문 그리기 `markdown.ts`(HTML 안 만듦), 그래프 `graph.ts`. ERP 기록 → 볼트 'ERP 기록' 폴더 .md(`export.ts`, 금액 없음), 대시보드 할 일 → 'ERP 기록/할 일/<날짜>.md'(`todo-notes.ts`, 할 일 Server Action 끝에 `scheduleTodoExport()`). 빠른 메모 → 볼트 Inbox .md(`memo.ts`, `service.ts`의 `saveMemo`, 못 쓰는 볼트면 'ERP 기록/메모'). 서버 작업은 `service.ts`. 읽기는 `drive.readonly`, 쓰기는 ERP가 만든 폴더만(`drive.file`) |
 | `todos` | 대시보드 위젯 | 할 일 (`title`, `due_date`, `note`) |
 | `content` | `/content` | X·노션 콘텐츠 자동화 (크론 `content`) |
 | `share` | `/share-settings` | 가족 공유 링크·iCal 내보내기(금액 없음, `get_shared_schedule`) |

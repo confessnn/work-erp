@@ -11,7 +11,8 @@ import { createFolder, createTextFile, downloadText, folderAlive, FOLDER_MIME, g
 import { planExport, type ExportPlan } from "./export";
 import { MAX_NOTE_CHARS, planSync, syncSummary } from "./sync";
 import { planTodoNotes, TODO_FOLDER, type TodoRow } from "./todo-notes";
-import { EXPORT_FOLDER, parseNote } from "./vault";
+import { memoNote } from "./memo";
+import { EXPORT_FOLDER, PARA_FOLDERS, parseNote, sectionOf } from "./vault";
 
 /** 세컨드브레인 서버 작업 (동기화·내보내기). Server Action 과 다른 기능의 after() 에서 같이 쓴다 */
 export type BrainCtx = Awaited<ReturnType<typeof brainContext>>;
@@ -174,6 +175,48 @@ async function uploadPlans(
       .upsert(changed.map((r) => noteRow(userId, r.up.id, `${prefix}${r.fileName}`, r.plan.content, r.up.modifiedTime)), { onConflict: "user_id,drive_file_id" });
   }
   return { created, updated };
+}
+
+/** 메모를 넣을 수 없는 볼트(사용자가 만든 폴더)일 때 쓰는 폴더 (ERP 기록 폴더 안) */
+export const MEMO_FALLBACK_FOLDER = "메모";
+
+/**
+ * 빠른 메모: 볼트의 Inbox 폴더('0 Inbox', 'Inbox' 등)에 .md 로 저장하고 ERP 사본도 바로 만든다 → 노트 ID.
+ * Inbox 가 없으면 '0 Inbox'를 만들고, ERP가 쓸 수 없는 폴더면 'ERP 기록/메모'에 넣는다.
+ */
+export async function saveMemo(ctx: BrainCtx, text: string, title?: string): Promise<{ id: string; path: string }> {
+  const { supabase, userId, token, settings } = ctx;
+  const memo = memoNote(text, new Date(), title);
+  if (!memo) throw new Error("메모를 적어 주세요.");
+  const vaultId = settings!.vault_folder_id;
+  const writable = (e: unknown) => !(e instanceof GoogleApiError && (e.status === 403 || e.status === 404));
+
+  let up: { id: string; modifiedTime: string } | null = null;
+  let path = "";
+  const children = await listChildren(token, vaultId);
+  const inbox = children.find((c) => c.mimeType === FOLDER_MIME && sectionOf(`${c.name}/x.md`) === "inbox");
+  try {
+    const folder = inbox ?? { ...(await createFolder(token, PARA_FOLDERS[0], vaultId)), name: PARA_FOLDERS[0] };
+    up = await createTextFile(token, folder.id, memo.fileName, memo.content);
+    path = `${folder.name}/${memo.fileName}`;
+  } catch (e) {
+    if (writable(e)) throw e;
+  }
+  if (!up) {
+    const exp = await ensureExportFolder(ctx);
+    const sub = await ensureSubfolder(token, exp.folderId, MEMO_FALLBACK_FOLDER);
+    up = await createTextFile(token, sub.id, memo.fileName, memo.content);
+    if (exp.vaultPath === null) return { id: "", path: "" }; // 볼트 밖: 폴더를 옮기면 동기화로 들어온다
+    path = [exp.vaultPath, MEMO_FALLBACK_FOLDER, memo.fileName].filter(Boolean).join("/");
+  }
+
+  const { data, error } = await supabase
+    .from("brain_notes")
+    .upsert(noteRow(userId, up.id, path, memo.content, up.modifiedTime), { onConflict: "user_id,drive_file_id" })
+    .select("id")
+    .single();
+  if (error) throw new Error(`메모는 드라이브에 저장했지만 ERP에 보이게 하지 못했어요. '동기화'를 눌러 주세요. (${error.message})`);
+  return { id: data.id as string, path };
 }
 
 /** 일정 기록 → 'ERP 기록/<일 이름>.md' */
