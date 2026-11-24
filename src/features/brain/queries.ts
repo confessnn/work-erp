@@ -2,6 +2,10 @@ import "server-only";
 import { DRIVE_READ_SCOPE, DRIVE_SCOPE, hasScope } from "@/features/google-calendar/google-api";
 import { requireUser } from "@/lib/supabase/server";
 import type { BrainNote, BrainNoteMeta, BrainSettings, BrainStatus } from "./types";
+import { sectionOf } from "./vault";
+
+/** 구역은 경로로 다시 가린다 (구역 규칙이 바뀌어도 다시 동기화할 필요 없게) */
+const withSection = <T extends { path: string; section: string }>(n: T): T => ({ ...n, section: sectionOf(n.path) });
 
 const META = "id, drive_file_id, path, title, section, links, tags, modified_at";
 /** 개인 볼트로는 넉넉한 수. 넘으면 오래 안 고친 노트부터 빠진다 */
@@ -24,14 +28,14 @@ export async function listNoteMeta(): Promise<BrainNoteMeta[]> {
   const { supabase } = await requireUser();
   const { data, error } = await supabase.from("brain_notes").select(META).order("modified_at", { ascending: false }).limit(LIMIT);
   if (error) throw new Error(error.message);
-  return (data ?? []) as BrainNoteMeta[];
+  return ((data ?? []) as BrainNoteMeta[]).map(withSection);
 }
 
 export async function getNote(id: string): Promise<BrainNote | null> {
   const { supabase } = await requireUser();
   const { data, error } = await supabase.from("brain_notes").select(`${META}, content`).eq("id", id).maybeSingle();
   if (error) throw new Error(error.message);
-  return (data as BrainNote | null) ?? null;
+  return data ? withSection(data as BrainNote) : null;
 }
 
 /** 제목·경로·본문에서 찾기 */
@@ -47,7 +51,7 @@ export async function searchNotes(q: string): Promise<BrainNote[]> {
     .order("modified_at", { ascending: false })
     .limit(50);
   if (error) throw new Error(error.message);
-  return (data ?? []) as BrainNote[];
+  return ((data ?? []) as BrainNote[]).map(withSection);
 }
 
 /** 태그가 붙은 노트 */
@@ -55,5 +59,5 @@ export async function notesWithTag(tag: string): Promise<BrainNoteMeta[]> {
   const { supabase } = await requireUser();
   const { data, error } = await supabase.from("brain_notes").select(META).contains("tags", [tag]).order("modified_at", { ascending: false }).limit(200);
   if (error) throw new Error(error.message);
-  return (data ?? []) as BrainNoteMeta[];
+  return ((data ?? []) as BrainNoteMeta[]).map(withSection);
 }

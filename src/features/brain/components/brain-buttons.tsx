@@ -91,7 +91,7 @@ export function UnlinkVaultButton() {
         onClick={() => {
           if (confirm("볼트 연결을 끊을까요? ERP에 받아 둔 노트 사본만 지우고, 드라이브의 노트는 그대로 둬요.")) run(unlinkVaultAction);
         }}
-        className="btn-ghost text-sm text-danger"
+        className="btn-ghost whitespace-nowrap text-sm text-danger"
       >
         {pending ? "끊는 중…" : "볼트 연결 끊기"}
       </button>

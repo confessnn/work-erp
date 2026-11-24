@@ -1,6 +1,6 @@
 // 옵시디언 볼트 노트 읽기: PARA 구분, [[링크]]·태그 뽑기, 링크 대상 찾기 (순수 함수)
 
-export const SECTIONS = ["inbox", "projects", "areas", "resources", "archives", "other"] as const;
+export const SECTIONS = ["inbox", "projects", "areas", "resources", "archives", "erp", "other"] as const;
 export type Section = (typeof SECTIONS)[number];
 
 export const SECTION_LABEL: Record<Section, string> = {
@@ -9,6 +9,7 @@ export const SECTION_LABEL: Record<Section, string> = {
   areas: "Areas · 영역",
   resources: "Resources · 자료",
   archives: "Archives · 보관",
+  erp: "ERP 기록 · 일정 기록·할 일",
   other: "기타",
 };
 
@@ -24,6 +25,7 @@ const SECTION_WORDS: [Section, RegExp][] = [
   ["areas", /^(areas?|영역)/],
   ["resources", /^(resources?|자료|리소스)/],
   ["archives", /^(archives?|보관|아카이브)/],
+  ["erp", /^erp\s*기록/],
 ];
 
 /** 볼트 안 경로('1 Projects/원가/착수.md') → PARA 구분. 맨 위에 바로 있는 노트는 기타 */
