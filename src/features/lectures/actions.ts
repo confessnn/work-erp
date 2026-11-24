@@ -44,6 +44,7 @@ function toRow(fd: FormData) {
 
   const isPaid = fd.get("is_paid") === "on";
   const paidAmount = num(fd, "paid_amount");
+  if (isPaid && paidAmount !== null && paidAmount < 0) return { error: "실수령액은 0 이상이어야 합니다." } as const;
 
   return {
     row: {
@@ -141,35 +142,39 @@ export async function updateLecture(id: string, _prev: FormState, fd: FormData):
 
 export async function deleteLecture(id: string) {
   const { supabase } = await requireUser();
-  await supabase.from("lectures").delete().eq("id", id);
+  const { error } = await supabase.from("lectures").delete().eq("id", id);
+  if (error) throw new Error(`삭제하지 못했어요: ${error.message}`);
   schedulePush(supabase);
   refresh();
   redirect("/lectures");
 }
 
-/** 목록에서 수령 체크 / 해제. 수령 시 실수령액은 예상 수령액, 수령일은 오늘로 기록. */
-export async function setPaid(id: string, paid: boolean) {
+/** 목록에서 수령 체크 / 해제. 수령 시 실수령액은 예상 수령액, 수령일은 오늘로 기록. 실패하면 이유를 돌려준다 */
+export async function setPaid(id: string, paid: boolean): Promise<{ error?: string }> {
   const { supabase } = await requireUser();
+  let error;
   if (paid) {
     const { data } = await supabase.from("lectures").select("expected_net, gross_amount").eq("id", id).single();
     // 받을 강의료를 입력하지 않은 일정은 수령 처리하지 않는다
-    if (!data || !(Number(data.gross_amount) > 0)) return;
-    await supabase
+    if (!data || !(Number(data.gross_amount) > 0)) return { error: "강의료를 먼저 입력해 주세요." };
+    ({ error } = await supabase
       .from("lectures")
       .update({
         is_paid: true,
         paid_date: todayInSeoul(),
-        paid_amount: data?.expected_net ?? null,
+        paid_amount: data.expected_net ?? null,
       })
-      .eq("id", id);
+      .eq("id", id));
   } else {
-    await supabase
+    ({ error } = await supabase
       .from("lectures")
       .update({ is_paid: false, paid_date: null, paid_amount: null })
-      .eq("id", id);
+      .eq("id", id));
   }
+  if (error) return { error: `저장하지 못했어요: ${error.message}` };
   schedulePush(supabase);
   refresh();
+  return {};
 }
 
 /** 달력에서 고른 일정들을 한 번에 수령 처리. 이미 수령한 일정은 건드리지 않는다. */
@@ -221,16 +226,25 @@ export async function moveLectureToFamily(id: string, person: string): Promise<{
   const { count } = await supabase.from("document_submissions").select("id", { count: "exact", head: true }).eq("lecture_id", id);
   if (count) return { error: "서류를 제출한 기록이 있는 강의는 옮길 수 없어요." };
 
-  const { error } = await supabase.from("family_events").insert({
-    person,
-    title: l.title,
-    event_date: l.lecture_date,
-    start_time: l.start_time,
-    end_time: l.start_time ? l.end_time : null,
-    memo: l.memo,
-  });
+  const { data: moved, error } = await supabase
+    .from("family_events")
+    .insert({
+      person,
+      title: l.title,
+      event_date: l.lecture_date,
+      start_time: l.start_time,
+      end_time: l.start_time ? l.end_time : null,
+      memo: l.memo,
+    })
+    .select("id")
+    .single();
   if (error) return { error: `옮기지 못했어요: ${error.message}` };
-  await supabase.from("lectures").delete().eq("id", id);
+  const { error: delError } = await supabase.from("lectures").delete().eq("id", id);
+  if (delError) {
+    // 강의를 못 지웠으면 방금 만든 가족 일정을 되돌린다 (같은 일정이 두 군데 남지 않게)
+    await supabase.from("family_events").delete().eq("id", moved.id);
+    return { error: `옮기지 못했어요: ${delError.message}` };
+  }
   schedulePush(supabase);
   refresh();
   const [y, m] = String(l.lecture_date).split("-");

@@ -8,7 +8,8 @@
  * 세액은 원단위 절사(10원 미만 버림).
  * apply_tax_exemption 이 true 이면:
  * - 기타소득: 기타소득금액 5만 원 이하(지급액 12.5만 원 이하)면 과세최저한으로 0원
- * - 공통: 소득세가 1,000원 미만이면 소액부징수로 0원
+ * - 기타소득: 소득세가 1,000원 미만이면 소액부징수로 0원
+ *   (사업소득은 제외: 2024.7.1 지급분부터 계속·반복 인적용역 사업소득은 소액부징수를 하지 않는다, 소득세법 제86조)
  *
  * 모든 금액은 원 단위 정수.
  */
@@ -48,7 +49,7 @@ export function calculateWithholding(
     }
   }
 
-  if (applyExemption && incomeTax < 1_000) {
+  if (applyExemption && incomeType === "other" && incomeTax < 1_000) {
     incomeTax = 0;
   }
 

@@ -25,10 +25,13 @@ function nextDay(d: string) {
   return new Date(Date.UTC(y, m - 1, day + 1)).toISOString().slice(0, 10);
 }
 
-function plusHour(t: string) {
+/** 시작 + 1시간. 자정을 넘으면 다음 날로 (23:30 시작 → 다음 날 00:30) */
+function plusHour(date: string, t: string) {
   const [h, m] = t.split(":").map(Number);
-  const total = Math.min(h * 60 + m + 60, 23 * 60 + 59);
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  const total = h * 60 + m + 60;
+  const day = total >= 24 * 60 ? nextDay(date) : date;
+  const mins = total % (24 * 60);
+  return `${day}T${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}:00`;
 }
 
 const hhmmss = (t: string) => (t.length === 5 ? `${t}:00` : t.slice(0, 8));
@@ -37,8 +40,8 @@ const hhmmss = (t: string) => (t.length === 5 ? `${t}:00` : t.slice(0, 8));
 export function lectureTimes(l: Pick<Lecture, "lecture_date" | "start_time" | "end_time">): Pick<GoogleEvent, "start" | "end"> {
   if (!l.start_time) return { start: { date: l.lecture_date }, end: { date: nextDay(l.lecture_date) } };
   const s = hhmmss(l.start_time);
-  const e = l.end_time && l.end_time > l.start_time ? hhmmss(l.end_time) : `${plusHour(l.start_time)}:00`;
-  return { start: { dateTime: `${l.lecture_date}T${s}`, timeZone: TZ }, end: { dateTime: `${l.lecture_date}T${e}`, timeZone: TZ } };
+  const e = l.end_time && l.end_time > l.start_time ? `${l.lecture_date}T${hhmmss(l.end_time)}` : plusHour(l.lecture_date, l.start_time);
+  return { start: { dateTime: `${l.lecture_date}T${s}`, timeZone: TZ }, end: { dateTime: e, timeZone: TZ } };
 }
 
 /**
