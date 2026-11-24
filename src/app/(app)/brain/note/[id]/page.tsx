@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { MemoTools } from "@/features/brain/components/memo-tools";
 import { NoteBody } from "@/features/brain/components/note-body";
+import { isErpMemo, memoBody } from "@/features/brain/memo";
 import { brainStatus, getNote, listNoteMeta } from "@/features/brain/queries";
 import { backlinksOf, linkResolver, noteFolder, obsidianUrl, SECTION_LABEL, splitFrontmatter } from "@/features/brain/vault";
 
@@ -67,9 +69,15 @@ export default async function BrainNotePage({ params }: PageProps<"/brain/note/[
         </dl>
       )}
 
-      <article className="card">
-        <NoteBody body={body} resolve={resolve} />
-      </article>
+      {isErpMemo(note.content) ? (
+        <MemoTools key={note.modified_at} noteId={note.id} body={memoBody(note.content)}>
+          <NoteBody body={body} resolve={resolve} />
+        </MemoTools>
+      ) : (
+        <article className="card">
+          <NoteBody body={body} resolve={resolve} />
+        </article>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2">
         <section className="card space-y-2">

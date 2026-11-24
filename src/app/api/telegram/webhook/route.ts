@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { telegramMemoText } from "@/features/brain/memo";
+import { saveTelegramMemo } from "@/features/brain/telegram-memo";
 import { answerCallback, editMessageText, escapeTg, sendMessage } from "@/features/telegram/api";
 import { overlapLabel, type Overlap } from "@/features/family/overlap";
 import {
@@ -89,6 +91,14 @@ export async function POST(request: Request) {
       return Response.json({ ok: true });
     }
 
+    // '메모 …'로 시작하면 일정이 아니라 세컨드브레인 메모로 저장한다 (AI를 부르지 않는다)
+    const memoText = telegramMemoText(text);
+    if (memoText) {
+      const reply = await saveTelegramMemo(db, hook, memoText);
+      await sendMessage(token, chatId, reply.html, reply.buttons);
+      return Response.json({ ok: true });
+    }
+
     const today = todayInSeoul();
     // 어제~두 달 뒤 일정을 AI에게 보여 주고, 그중 하나에 붙이는 메모면 새 일정 대신 메모로 붙인다
     const { data: up } = await db.rpc("tg_upcoming", { p_hook: hook, p_from: addDays(today, -1), p_to: addDays(today, 60) });
@@ -104,7 +114,11 @@ export async function POST(request: Request) {
     }
     const parsed = toQuickEvent(raw, today);
     if (!parsed.ok) {
-      await sendMessage(token, chatId, `🤔 ${escapeTg(parsed.reason)} 일정은 이렇게 보내 주세요.\n예) 내일 3시 치과\n\n(/help 로 사용법 보기)`);
+      await sendMessage(
+        token,
+        chatId,
+        `🤔 ${escapeTg(parsed.reason)} 일정은 이렇게 보내 주세요.\n예) 내일 3시 치과\n\n메모로 남기려면 앞에 '메모'를 붙여 주세요.\n예) 메모 강의 자료에 사례 추가\n\n(/help 로 사용법 보기)`,
+      );
       return Response.json({ ok: true });
     }
     const e = parsed.event;

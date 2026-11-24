@@ -6,7 +6,7 @@ import { driveContext } from "@/features/google-drive/context";
 import { brainContext } from "./context";
 import { createFolder, createTextFile, FOLDER_MIME, getItem } from "./drive";
 import { MEMO_MAX } from "./memo";
-import { ensureExportFolder, exportRecords, exportTodos, saveMemo, syncVault } from "./service";
+import { deleteMemoNote, editMemoNote, ensureExportFolder, exportRecords, exportTodos, saveMemo, syncVault } from "./service";
 import { EXPORT_FOLDER, PARA_FOLDERS, parseFolderId } from "./vault";
 
 type Result = { ok: true; message: string } | { ok: false; message: string };
@@ -156,5 +156,34 @@ export async function saveMemoAction(
       : { ok: true, message: "드라이브 work-erp/ERP 기록/메모 폴더에 저장했어요. ERP 기록 폴더를 볼트 안으로 옮기면 여기서도 보여요.", noteId: null };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "메모를 저장하지 못했어요." };
+  }
+}
+
+const NOTE_ID = /^[0-9a-f-]{36}$/i;
+
+/** 메모 고치기 (ERP에서 만든 메모만) */
+export async function updateMemoAction(noteId: string, body: string): Promise<Result> {
+  try {
+    if (!NOTE_ID.test(noteId)) return { ok: false, message: "메모를 찾지 못했어요." };
+    if (body.length > MEMO_MAX) return { ok: false, message: `메모는 ${MEMO_MAX.toLocaleString("ko-KR")}자까지 적을 수 있어요.` };
+    const ctx = await brainContext();
+    await editMemoNote(ctx, noteId, body);
+    revalidatePath("/brain", "layout");
+    return { ok: true, message: "고쳤어요." };
+  } catch (e) {
+    return fail(e, "고치지 못했어요.");
+  }
+}
+
+/** 메모 지우기: 드라이브 휴지통으로 (ERP에서 만든 메모만) */
+export async function deleteMemoAction(noteId: string): Promise<Result> {
+  try {
+    if (!NOTE_ID.test(noteId)) return { ok: false, message: "메모를 찾지 못했어요." };
+    const ctx = await brainContext();
+    await deleteMemoNote(ctx, noteId);
+    revalidatePath("/brain", "layout");
+    return { ok: true, message: "지웠어요. 드라이브 휴지통에서 30일 안에 되살릴 수 있어요." };
+  } catch (e) {
+    return fail(e, "지우지 못했어요.");
   }
 }

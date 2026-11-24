@@ -144,3 +144,17 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
   );
   return out;
 }
+
+/** 휴지통으로 (드라이브에서 30일 안에 되살릴 수 있다). 이미 없으면 그냥 넘어간다 */
+export async function trashFile(token: string, id: string): Promise<void> {
+  try {
+    await call(token, `${API}/files/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trashed: true }),
+    });
+  } catch (e) {
+    if (e instanceof GoogleApiError && e.status === 404) return;
+    throw e;
+  }
+}
