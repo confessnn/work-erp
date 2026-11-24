@@ -1,6 +1,7 @@
 import { calculateWithholding, grossFrom, hoursBetween, type IncomeType } from "@/features/lectures/tax";
 import { feeFields, feeFrom } from "@/features/lectures/fee-memory";
 import { occurrenceKey, parseIcsDetailed, type CalendarEvent } from "./ics";
+import { safeFetch, SafeFetchError, type SafeResponse } from "@/lib/safe-fetch";
 
 /** 캘린더별 불러오기 설정 (calendar_sources 의 자동 불러오기 컬럼) */
 export type ImportSettings = {
@@ -45,22 +46,29 @@ export function matchesKeyword(e: CalendarEvent, keyword: string | null): boolea
   return words.some((w) => hay.includes(w.toLowerCase()));
 }
 
-/** ICS 주소에서 받아오기. 실패하면 사용자에게 보여줄 한국어 메시지를 던진다. */
+/**
+ * ICS 주소에서 받아오기. 실패하면 사용자에게 보여줄 한국어 메시지를 던진다.
+ * 사용자가 적은 주소를 서버(매일 크론 포함)가 읽으므로 내부망 주소·http 로 넘겨주기는 막는다 (lib/safe-fetch).
+ */
 export async function downloadIcs(url: string): Promise<string> {
-  let res: Response;
+  let res: SafeResponse;
   try {
-    res = await fetch(url, {
-      signal: AbortSignal.timeout(15_000),
+    res = await safeFetch(url, {
+      protocols: ["https:"],
+      maxBytes: 10_000_000,
+      tooLarge: "error",
+      maxRedirects: 5,
+      timeoutMs: 15_000,
       headers: { accept: "text/calendar, */*" },
-      cache: "no-store",
     });
-  } catch {
+  } catch (e) {
+    const reason = e instanceof SafeFetchError ? e.reason : "network";
+    if (reason === "too_large") throw new Error("캘린더 파일이 너무 큽니다.");
+    if (reason === "blocked" || reason === "protocol") throw new Error("읽을 수 없는 캘린더 주소입니다. 구글 캘린더의 https 주소를 넣어 주세요.");
     throw new Error("캘린더 주소에 연결하지 못했습니다. 주소를 확인하세요.");
   }
-  if (!res.ok) throw new Error(`캘린더를 받아오지 못했습니다 (HTTP ${res.status}). 주소를 확인하세요.`);
-  const text = await res.text();
-  if (text.length > 10_000_000) throw new Error("캘린더 파일이 너무 큽니다.");
-  return text;
+  if (res.status < 200 || res.status >= 300) throw new Error(`캘린더를 받아오지 못했습니다 (HTTP ${res.status}). 주소를 확인하세요.`);
+  return new TextDecoder("utf-8").decode(res.body);
 }
 
 export function addDays(d: string, n: number) {

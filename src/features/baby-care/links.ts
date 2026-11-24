@@ -27,23 +27,8 @@ export function normalizeUrl(raw: string): string | null {
   }
 }
 
-/** 서버가 읽으면 안 되는 주소 (내 컴퓨터·내부망·클라우드 메타데이터 등) */
-export function isPrivateAddress(ip: string): boolean {
-  const v4 = ip.startsWith("::ffff:") ? ip.slice(7) : ip;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(v4)) {
-    const [a, b] = v4.split(".").map(Number);
-    return (
-      a === 0 || a === 10 || a === 127 || a >= 224 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 198 && (b === 18 || b === 19))
-    );
-  }
-  const x = ip.toLowerCase();
-  return x === "::" || x === "::1" || x.startsWith("fc") || x.startsWith("fd") || x.startsWith("fe8") || x.startsWith("fe9") || x.startsWith("fea") || x.startsWith("feb");
-}
+/** 서버가 읽으면 안 되는 주소 판별은 lib/net-guard 한 곳에서 (iCal 가져오기와 같이 씀) */
+export { isPrivateAddress } from "@/lib/net-guard";
 
 const decodeEntities = (s: string) =>
   s
