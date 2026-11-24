@@ -33,6 +33,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 1. DB가 필요하면 `supabase/migrations/<YYYYMMDDHHMMSS>_<이름>.sql` 추가. 새 테이블은 반드시
    `user_id uuid not null default auth.uid() references auth.users on delete cascade` + RLS 4개 정책
    (`lectures` 마이그레이션을 복사해서 시작). 기존 마이그레이션 파일은 절대 수정하지 않는다.
+   앞 14자리 번호는 다른 파일과 겹치면 안 된다 (`src/lib/migrations.test.ts`가 검사).
 2. `src/features/<기능>/` 폴더에 types → queries → actions → components 순으로 작성.
 3. 계산 로직은 순수 함수로 분리하고 `*.test.ts` 작성.
 4. 페이지는 `src/app/(app)/<경로>/page.tsx`, 메뉴는 `src/components/nav-items.ts`의 `NAV`에 한 줄 추가 (사용자가 설정 화면에서 순서·숨김을 바꾼다. 새 메뉴는 맨 뒤에 붙는다).
