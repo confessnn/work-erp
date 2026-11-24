@@ -11,6 +11,7 @@ const COLOR: Record<Section, string> = {
   areas: "fill-mint",
   resources: "fill-sky",
   archives: "fill-muted",
+  erp: "fill-ochre",
   other: "fill-lilac",
 };
 

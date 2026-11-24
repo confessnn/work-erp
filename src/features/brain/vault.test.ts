@@ -20,7 +20,9 @@ describe("sectionOf", () => {
     expect(sectionOf("Resources/세법.md")).toBe("resources");
     expect(sectionOf("4 Archives/2025/끝.md")).toBe("archives");
     expect(sectionOf("0 Inbox/메모.md")).toBe("inbox");
-    expect(sectionOf("ERP 기록/재경관리사.md")).toBe("other");
+    expect(sectionOf("ERP 기록/재경관리사.md")).toBe("erp");
+    expect(sectionOf("ERP 기록/할 일/2026-11-24.md")).toBe("erp");
+    expect(sectionOf("메모/a.md")).toBe("other");
     expect(sectionOf("맨위노트.md")).toBe("other");
   });
 });
