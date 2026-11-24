@@ -3,7 +3,9 @@ import Link from "next/link";
 import { BrainSyncButtons, UnlinkVaultButton, VaultSetup } from "@/features/brain/components/brain-buttons";
 import { brainStatus, listNoteMeta, notesWithTag, searchNotes } from "@/features/brain/queries";
 import type { BrainNoteMeta } from "@/features/brain/types";
+import { TODO_FOLDER } from "@/features/brain/todo-notes";
 import { EXPORT_FOLDER, noteFolder, SECTION_LABEL, SECTIONS, snippet } from "@/features/brain/vault";
+import { todayInSeoul } from "@/lib/format";
 
 export const metadata: Metadata = { title: "세컨드브레인 · work-erp" };
 // 동기화·내보내기(Server Action)가 노트를 많이 받을 수 있어 넉넉히
@@ -55,6 +57,8 @@ export default async function BrainPage({ searchParams }: PageProps<"/brain">) {
   const bySection = new Map(SECTIONS.map((s) => [s, all.filter((n) => n.section === s)]));
   const tagCounts = new Map<string, number>();
   for (const n of all) for (const t of n.tags) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+  const today = todayInSeoul();
+  const todayTodos = all.find((n) => n.title === today && n.path.split("/").slice(-2, -1)[0] === TODO_FOLDER);
   const topTags = [...tagCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 24);
 
   return (
@@ -76,9 +80,14 @@ export default async function BrainPage({ searchParams }: PageProps<"/brain">) {
           볼트 <b>{settings.vault_name}</b> · 노트 {all.length}개
           {settings.last_synced_at && <span className="text-muted"> · {when(settings.last_synced_at)} 동기화 ({settings.last_sync_result})</span>}
         </p>
+        {todayTodos && (
+          <Link href={`/brain/note/${todayTodos.id}`} className="chip text-sm">
+            오늘 할 일 노트
+          </Link>
+        )}
         <BrainSyncButtons />
         <p className="text-xs text-muted">
-          옵시디언에서 고친 노트는 &apos;동기화&apos;를 누르면 들어와요. &apos;ERP 기록 내보내기&apos;는 일정 기록을 같은 일끼리 묶어 볼트의 &apos;{EXPORT_FOLDER}&apos; 폴더에 노트로 넣어요 (금액은 넣지 않아요).
+          옵시디언에서 고친 노트는 &apos;동기화&apos;를 누르면 들어와요. &apos;ERP 기록·할 일 내보내기&apos;는 일정 기록(같은 일끼리)과 대시보드 할 일(날짜별 체크리스트)을 볼트의 &apos;{EXPORT_FOLDER}&apos; 폴더에 노트로 넣어요 (금액은 넣지 않아요). 할 일은 추가·체크·미루기·메모를 할 때마다 자동으로도 반영돼요.
         </p>
       </section>
 

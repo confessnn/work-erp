@@ -62,7 +62,7 @@ export function VaultSetup() {
   );
 }
 
-/** 볼트가 있을 때: 동기화 · ERP 기록 내보내기 */
+/** 볼트가 있을 때: 동기화 · ERP 기록·할 일 내보내기 */
 export function BrainSyncButtons() {
   const { msg, pending, run } = useAction();
   return (
@@ -72,7 +72,7 @@ export function BrainSyncButtons() {
           {pending ? "처리하는 중…" : "동기화"}
         </button>
         <button type="button" disabled={pending} onClick={() => run(exportRecordsAction)} className="btn-line text-sm">
-          ERP 기록 내보내기
+          ERP 기록·할 일 내보내기
         </button>
       </div>
       <Message msg={msg} />

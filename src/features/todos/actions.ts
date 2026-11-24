@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { scheduleTodoExport } from "@/features/brain/service";
 import { schedulePush } from "@/features/google-calendar/push";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
@@ -20,6 +21,7 @@ export async function addTodo(raw: string, day?: string): Promise<Result> {
     .select(TODO_COLUMNS)
     .single();
   if (error) return { ok: false, message: `저장하지 못했어요: ${error.message}` };
+  scheduleTodoExport(); // 세컨드브레인 볼트의 할 일 노트도 고친다 (응답 뒤에)
   revalidatePath("/");
   return { ok: true, todo: data as Todo };
 }
@@ -28,6 +30,7 @@ export async function setTodoDone(id: string, done: boolean): Promise<Result> {
   const { supabase } = await requireUser();
   const { error } = await supabase.from("todos").update({ done_at: done ? new Date().toISOString() : null }).eq("id", id);
   if (error) return { ok: false, message: error.message };
+  scheduleTodoExport(); // 세컨드브레인 볼트의 할 일 노트도 고친다 (응답 뒤에)
   revalidatePath("/");
   return { ok: true };
 }
@@ -38,6 +41,7 @@ export async function postponeTodo(id: string, from?: string): Promise<Result> {
   const base = from && DAY.test(from) && from > todayInSeoul() ? from : todayInSeoul();
   const { error } = await supabase.from("todos").update({ due_date: addDays(base, 1), done_at: null }).eq("id", id);
   if (error) return { ok: false, message: error.message };
+  scheduleTodoExport(); // 세컨드브레인 볼트의 할 일 노트도 고친다 (응답 뒤에)
   revalidatePath("/");
   return { ok: true };
 }
@@ -51,6 +55,7 @@ export async function deleteTodo(id: string): Promise<Result> {
   ]);
   const error = hidden.error ?? removed.error;
   if (error) return { ok: false, message: error.message };
+  scheduleTodoExport(); // 세컨드브레인 볼트의 할 일 노트도 고친다 (응답 뒤에)
   revalidatePath("/");
   return { ok: true };
 }
@@ -83,6 +88,7 @@ export async function saveTodoNote(id: string, raw: string): Promise<Result> {
   const { supabase } = await requireUser();
   const { error } = await supabase.from("todos").update({ note: cleanNote(raw) }).eq("id", id);
   if (error) return { ok: false, message: `저장하지 못했어요: ${error.message}` };
+  scheduleTodoExport(); // 세컨드브레인 볼트의 할 일 노트도 고친다 (응답 뒤에)
   revalidatePath("/");
   return { ok: true };
 }
