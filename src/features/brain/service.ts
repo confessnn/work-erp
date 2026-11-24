@@ -122,17 +122,14 @@ async function ensureSubfolder(token: string, parent: string, name: string): Pro
  * 이미 올린 노트는 이름을 바꾸지 않는다 (옵시디언 링크가 깨지지 않게).
  * vaultPath 가 있으면 ERP 사본(brain_notes)도 바로 고친다 (동기화를 기다리지 않게).
  */
-async function uploadPlans(
-  ctx: BrainCtx,
+export async function uploadPlans(
+  store: ExportStore,
   plans: ExportPlan[],
   folder: { id: string; children?: { id: string; name: string }[]; vaultPath: string | null },
 ): Promise<{ created: number; updated: number }> {
-  const { supabase, userId, token } = ctx;
-  const { data: done } = await supabase.from("brain_exports").select("series_key, drive_file_id, file_name, content_digest").in(
-    "series_key",
-    plans.map((p) => p.key),
-  );
-  const prev = new Map((done ?? []).map((d) => [d.series_key as string, d]));
+  const { userId, token } = store;
+  const done = await store.loadExports(plans.map((p) => p.key));
+  const prev = new Map(done.map((d) => [d.series_key, d]));
   const byName = new Map((folder.children ?? []).map((c) => [c.name, c.id]));
   let created = 0;
   let updated = 0;
@@ -162,19 +159,46 @@ async function uploadPlans(
   const changed = results.filter((r): r is NonNullable<typeof r> => r !== null);
   if (!changed.length) return { created, updated };
 
-  const now = new Date().toISOString();
-  const { error } = await supabase.from("brain_exports").upsert(
-    changed.map((r) => ({ user_id: userId, series_key: r.plan.key, drive_file_id: r.up.id, file_name: r.fileName, content_digest: r.plan.digest, exported_at: now })),
-    { onConflict: "user_id,series_key" },
+  const prefix = folder.vaultPath ? `${folder.vaultPath}/` : "";
+  await store.save(
+    changed.map((r) => ({ series_key: r.plan.key, drive_file_id: r.up.id, file_name: r.fileName, content_digest: r.plan.digest })),
+    folder.vaultPath === null ? [] : changed.map((r) => noteRow(userId, r.up.id, `${prefix}${r.fileName}`, r.plan.content, r.up.modifiedTime)),
   );
-  if (error) throw new Error(`내보낸 노트를 저장하지 못했어요: ${error.message}`);
-  if (folder.vaultPath !== null) {
-    const prefix = folder.vaultPath ? `${folder.vaultPath}/` : "";
-    await supabase
-      .from("brain_notes")
-      .upsert(changed.map((r) => noteRow(userId, r.up.id, `${prefix}${r.fileName}`, r.plan.content, r.up.modifiedTime)), { onConflict: "user_id,drive_file_id" });
-  }
   return { created, updated };
+}
+
+export type ExportedRow = { series_key: string; drive_file_id: string; file_name: string; content_digest: string };
+export type NoteRow = ReturnType<typeof noteRow>;
+
+/** 내보내기 기록을 읽고 쓰는 곳: 화면(로그인 세션)과 크론(CRON_SECRET 함수)이 다르다 */
+export type ExportStore = {
+  userId: string;
+  token: string;
+  loadExports(keys: string[]): Promise<ExportedRow[]>;
+  save(exports: ExportedRow[], notes: NoteRow[]): Promise<void>;
+};
+
+/** 로그인 세션(RLS)으로 읽고 쓰는 store */
+export function sessionStore(ctx: BrainCtx): ExportStore {
+  const { supabase, userId, token } = ctx;
+  return {
+    userId,
+    token,
+    async loadExports(keys) {
+      const { data } = await supabase.from("brain_exports").select("series_key, drive_file_id, file_name, content_digest").in("series_key", keys);
+      return (data ?? []) as ExportedRow[];
+    },
+    async save(exports, notes) {
+      if (exports.length) {
+        const now = new Date().toISOString();
+        const { error } = await supabase
+          .from("brain_exports")
+          .upsert(exports.map((e) => ({ ...e, user_id: userId, exported_at: now })), { onConflict: "user_id,series_key" });
+        if (error) throw new Error(`내보낸 노트를 저장하지 못했어요: ${error.message}`);
+      }
+      if (notes.length) await supabase.from("brain_notes").upsert(notes, { onConflict: "user_id,drive_file_id" });
+    },
+  };
 }
 
 /** 메모를 넣을 수 없는 볼트(사용자가 만든 폴더)일 때 쓰는 폴더 (ERP 기록 폴더 안) */
@@ -274,7 +298,7 @@ async function memoRow(ctx: BrainCtx, noteId: string) {
 /** 일정 기록 → 'ERP 기록/<일 이름>.md' */
 export async function exportRecords(ctx: BrainCtx, folder: { folderId: string; vaultPath: string | null }) {
   const series = groupSeries(await listRecordEntries(ctx.supabase));
-  return uploadPlans(ctx, planExport(series), { id: folder.folderId, vaultPath: folder.vaultPath });
+  return uploadPlans(sessionStore(ctx), planExport(series), { id: folder.folderId, vaultPath: folder.vaultPath });
 }
 
 /** 대시보드 할 일 → 'ERP 기록/할 일/<날짜>.md' (내가 적은 할 일만, 지운 것 제외) */
@@ -293,8 +317,14 @@ export async function exportTodos(ctx: BrainCtx, folder: { folderId: string; vau
   if (error) throw new Error(error.message);
   const plans = planTodoNotes((todos ?? []) as TodoRow[], (exported ?? []).map((e) => e.series_key as string), todayInSeoul());
   if (!plans.length) return { created: 0, updated: 0 };
-  const sub = await ensureSubfolder(ctx.token, folder.folderId, TODO_FOLDER);
-  return uploadPlans(ctx, plans, { id: sub.id, children: sub.children, vaultPath: folder.vaultPath === null ? null : `${folder.vaultPath}/${TODO_FOLDER}`.replace(/^\//, "") });
+  return uploadTodoPlans(sessionStore(ctx), plans, folder);
+}
+
+/** 할 일 노트들을 'ERP 기록/할 일' 폴더에 올린다 */
+export async function uploadTodoPlans(store: ExportStore, plans: ExportPlan[], folder: { folderId: string; vaultPath: string | null }) {
+  if (!plans.length) return { created: 0, updated: 0 };
+  const sub = await ensureSubfolder(store.token, folder.folderId, TODO_FOLDER);
+  return uploadPlans(store, plans, { id: sub.id, children: sub.children, vaultPath: folder.vaultPath === null ? null : `${folder.vaultPath}/${TODO_FOLDER}`.replace(/^\//, "") });
 }
 
 /**

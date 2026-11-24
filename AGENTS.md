@@ -64,7 +64,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `documents` · `google-drive` | `/documents` | 서류함·강의별 제출 서류(드라이브). 큰 파일은 브라우저→드라이브 직접(`drive-browser.ts`) |
 | `bid-inbox` · `bid-viewer` | `/bids*`, `/join/bids/[token]` | 나라장터·국방전자조달 등 공고 수신(`fetch-all.ts`), 판정, 입찰가 계산기, 아침 메일(`morning.ts`), 동생용 열람 |
 | `records` | `/records*` | 수업 기록·관계도 그래프 |
-| `brain` | `/brain`·`/brain/note/[id]`·`/brain/graph` (메뉴 '세컨드브레인') | 옵시디언 볼트(구글 드라이브 폴더) 보기. '동기화'로 .md 를 `brain_notes`에 사본 저장(`sync.ts`의 `planSync`), PARA·[[링크]]·태그 `vault.ts`, 본문 그리기 `markdown.ts`(HTML 안 만듦), 그래프 `graph.ts`. ERP 기록 → 볼트 'ERP 기록' 폴더 .md(`export.ts`, 금액 없음), 대시보드 할 일 → 'ERP 기록/할 일/<날짜>.md'(`todo-notes.ts`, 할 일 Server Action 끝에 `scheduleTodoExport()`). 빠른 메모 → 볼트 Inbox .md(`memo.ts`, `service.ts`의 `saveMemo`, 못 쓰는 볼트면 'ERP 기록/메모'). ERP가 만든 메모(`isErpMemo`)만 고치기·지우기(휴지통). 텔레그램 '메모 …' → `telegram-memo.ts`(DB 함수 `tg_brain_target`·`tg_save_brain_note`). 서버 작업은 `service.ts`. 읽기는 `drive.readonly`, 쓰기는 ERP가 만든 폴더만(`drive.file`) |
+| `brain` | `/brain`·`/brain/note/[id]`·`/brain/graph` (메뉴 '세컨드브레인') | 옵시디언 볼트(구글 드라이브 폴더) 보기. '동기화'로 .md 를 `brain_notes`에 사본 저장(`sync.ts`의 `planSync`), PARA·[[링크]]·태그 `vault.ts`, 본문 그리기 `markdown.ts`(HTML 안 만듦), 그래프 `graph.ts`. ERP 기록 → 볼트 'ERP 기록' 폴더 .md(`export.ts`, 금액 없음), 대시보드 할 일 → 'ERP 기록/할 일/<날짜>.md'(`todo-notes.ts`, 할 일 Server Action 끝에 `scheduleTodoExport()`). 빠른 메모 → 볼트 Inbox .md(`memo.ts`, `service.ts`의 `saveMemo`, 못 쓰는 볼트면 'ERP 기록/메모'). ERP가 만든 메모(`isErpMemo`)만 고치기·지우기(휴지통). 텔레그램 '메모 …' → `telegram-memo.ts`(DB 함수 `tg_brain_target`·`tg_save_brain_note`). 매일 한국 05:00 크론 `brain-export`가 기록·할 일을 자동 내보내기(`cron-export.ts`, DB 함수 `cron_brain_*`). 서버 작업은 `service.ts`. 읽기는 `drive.readonly`, 쓰기는 ERP가 만든 폴더만(`drive.file`) |
 | `todos` | 대시보드 위젯 | 할 일 (`title`, `due_date`, `note`) |
 | `content` | `/content` | X·노션 콘텐츠 자동화 (크론 `content`) |
 | `share` | `/share-settings` | 가족 공유 링크·iCal 내보내기(금액 없음, `get_shared_schedule`) |
@@ -73,7 +73,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `backup` | `/settings` 백업 · 크론 `backup` | 기록을 JSON 하나로 모아 대표 드라이브 `work-erp/백업/<YYYY-MM>/`에 주차별로 쌓음(지우지 않음, 이름·주차 규칙 `backup.ts`). 담을 표·뺄 칸(토큰·`ics_url`·`thumb`·`share_url`)은 DB `private.backup_dump` 한 곳. 새 표를 만들면 거기에 추가. 결과는 `backup_status`, 실패·8일 밀림은 아침 7시 브리핑(`bid-digest`) 맨 위에 경고(`backupProblem`) |
 | `plan-usage` | (숨김) | 플랜 사용량 위젯. 사용자가 나중에 다시 켜기로 해서 일부러 남겨 둠 — 지우지 않는다 |
 
-- 크론(Vercel, UTC): `calendar-sync`·`bid-sync` 21:00, `bid-digest`·`api-credits` 22:00, `content` 23:30, `backup` 일요일 18:00(한국 월요일 03:00). 5분 간격 알림만 Supabase pg_cron.
+- 크론(Vercel, UTC): `calendar-sync`·`bid-sync` 21:00, `bid-digest`·`api-credits` 22:00, `content` 23:30, `brain-export` 20:00(한국 05:00), `backup` 일요일 18:00(한국 월요일 03:00). 5분 간격 알림만 Supabase pg_cron.
 - 가족 데이터는 `my_family()`(가족을 만든 사람 uid) 기준 RLS. 대표 계정 비밀값이 필요한 서버 작업은 `CRON_SECRET`으로 잠근 DB 함수(`cron_*`, `family_owner_drive`)를 쓴다.
 
 ## 토큰을 아끼는 작업 방법

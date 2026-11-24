@@ -92,7 +92,7 @@ export default async function BrainPage({ searchParams }: PageProps<"/brain">) {
         )}
         <BrainSyncButtons />
         <p className="text-xs text-muted">
-          옵시디언에서 고친 노트는 &apos;동기화&apos;를 누르면 들어와요. &apos;ERP 기록·할 일 내보내기&apos;는 일정 기록(같은 일끼리)과 대시보드 할 일(날짜별 체크리스트)을 볼트의 &apos;{EXPORT_FOLDER}&apos; 폴더에 노트로 넣어요 (금액은 넣지 않아요). 할 일은 추가·체크·미루기·메모를 할 때마다 자동으로도 반영돼요.
+          옵시디언에서 고친 노트는 &apos;동기화&apos;를 누르면 들어와요. &apos;ERP 기록·할 일 내보내기&apos;는 일정 기록(같은 일끼리)과 대시보드 할 일(날짜별 체크리스트)을 볼트의 &apos;{EXPORT_FOLDER}&apos; 폴더에 노트로 넣어요 (금액은 넣지 않아요). 매일 새벽 5시에 자동으로도 내보내고, 할 일은 추가·체크·미루기·메모를 할 때마다 바로 반영돼요.
         </p>
       </section>
 
