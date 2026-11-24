@@ -57,8 +57,14 @@ async function folderFor(ctx: Ctx, key: string, parent: string, known: Map<strin
 
 async function dateFolders(ctx: Ctx, dates: string[]) {
   const root = await babyRoot(ctx);
-  const { data } = await ctx.supabase.from("baby_folders").select("key, folder_id");
-  const known = new Map((data ?? []).map((r) => [r.key as string, r.folder_id as string]));
+  // 이번에 쓸 날짜·달 폴더 기록만 읽는다 (전체를 읽으면 1000개 넘을 때 잘려서 같은 폴더를 또 만든다)
+  const keys = [...new Set(dates.flatMap((d) => [d, monthKey(d)]))];
+  const known = new Map<string, string>();
+  for (let i = 0; i < keys.length; i += 200) {
+    const { data, error } = await ctx.supabase.from("baby_folders").select("key, folder_id").in("key", keys.slice(i, i + 200));
+    if (error) throw new Error(`날짜 폴더 기록을 읽지 못했습니다: ${error.message}`);
+    for (const r of data ?? []) known.set(r.key as string, r.folder_id as string);
+  }
   const out: Record<string, string> = {};
   for (const date of [...new Set(dates)].sort()) {
     const month = await folderFor(ctx, monthKey(date), root, known);
@@ -78,10 +84,14 @@ export async function prepareBabyUpload(input: { dates: string[]; sha1s: string[
     const ctx = await babyDriveContext();
     await dateFolders(ctx, dates);
     const sha1s = input.sha1s.filter((s) => /^[0-9a-f]{40}$/.test(s)).slice(0, 1000);
-    const { data } = sha1s.length
-      ? await ctx.supabase.from("baby_photos").select("sha1").in("sha1", sha1s)
-      : { data: [] as { sha1: string }[] };
-    return { ok: true, existing: (data ?? []).map((r) => r.sha1) };
+    // 주소가 너무 길어지지 않게 100개씩 나눠 묻는다. 못 읽으면 중복을 다 올리게 되므로 멈춘다
+    const existing: string[] = [];
+    for (let i = 0; i < sha1s.length; i += 100) {
+      const { data, error } = await ctx.supabase.from("baby_photos").select("sha1").in("sha1", sha1s.slice(i, i + 100));
+      if (error) return { ok: false, error: `이미 올린 사진을 확인하지 못했습니다: ${error.message}` };
+      existing.push(...(data ?? []).map((r) => r.sha1 as string));
+    }
+    return { ok: true, existing };
   } catch (e) {
     return failResult(e);
   }
@@ -205,7 +215,8 @@ export async function changePhotoDate(id: string, newDate: string): Promise<Resu
       { method: "PATCH", headers: { authorization: `Bearer ${ctx.token}`, "content-type": "application/json" }, body: "{}" },
     );
     if (!res.ok) throw new GoogleApiError(res.status, "드라이브에서 사진을 옮기지 못했습니다.");
-    await ctx.supabase.from("baby_photos").update({ taken_date: newDate, date_source: "manual" }).eq("id", id);
+    const { error } = await ctx.supabase.from("baby_photos").update({ taken_date: newDate, date_source: "manual" }).eq("id", id);
+    if (error) return { ok: false, error: `드라이브에서는 옮겼지만 ERP에 날짜를 저장하지 못했습니다: ${error.message}` };
     revalidatePath("/baby");
     return { ok: true };
   } catch (e) {
@@ -225,7 +236,8 @@ export async function deleteBabyPhoto(id: string): Promise<Result> {
       });
       if (f && (await inBabyFolder(ctx, f.parents))) await trashFile(ctx.token, f.id);
     }
-    await ctx.supabase.from("baby_photos").delete().eq("id", id);
+    const { error } = await ctx.supabase.from("baby_photos").delete().eq("id", id);
+    if (error) return { ok: false, error: `목록에서 지우지 못했습니다: ${error.message}` };
     revalidatePath("/baby");
     return { ok: true };
   } catch (e) {
