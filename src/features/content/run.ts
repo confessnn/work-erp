@@ -43,6 +43,7 @@ export async function runContent(c: Ctx): Promise<RunResult> {
         const got = await fetchNewPosts(job.x_token, xUserId, s.handle, s.since_id, perSourceMax(!s.since_id, remaining));
         remaining -= got.reads;
         r.fetched += got.reads;
+        if (got.capped) r.problems.push(`@${s.handle}: 새 글이 많아 최근 ${got.reads}개만 받았어요 (그보다 앞선 글은 건너뜀).`);
         r.added += await rpc<number>(c, "content_save_fetch", {
           p_source: s.id, p_x_user_id: xUserId, p_since_id: got.newestId, p_reads: got.reads, p_posts: got.posts, p_error: null,
         });
@@ -87,17 +88,21 @@ export async function runContent(c: Ctx): Promise<RunResult> {
         await rpc(c, "content_mark_synced", { p_rows: null, p_notion_db: dbId });
       }
       const synced: { id: string; page: string }[] = [];
-      for (const row of rows) {
-        if (Date.now() > c.deadline - 20_000) break;
-        synced.push({ id: row.id, page: await addInsight(job.notion_token, dbId!, row) });
-        if (synced.length % 10 === 0) {
-          await rpc(c, "content_mark_synced", { p_rows: synced.splice(0), p_notion_db: null });
-          r.synced += 10;
+      // 노션에 넣은 것은 중간에 실패해도 꼭 표시한다 (안 하면 다음번에 같은 글이 또 들어간다)
+      const flush = async () => {
+        if (!synced.length) return;
+        const batch = synced.splice(0);
+        await rpc(c, "content_mark_synced", { p_rows: batch, p_notion_db: null });
+        r.synced += batch.length;
+      };
+      try {
+        for (const row of rows) {
+          if (Date.now() > c.deadline - 20_000) break;
+          synced.push({ id: row.id, page: await addInsight(job.notion_token, dbId!, row) });
+          if (synced.length >= 10) await flush();
         }
-      }
-      if (synced.length) {
-        r.synced += synced.length;
-        await rpc(c, "content_mark_synced", { p_rows: synced, p_notion_db: null });
+      } finally {
+        await flush();
       }
       r.top = [...rows].sort((a, b) => (b.idea_score ?? 0) - (a.idea_score ?? 0) || b.likes - a.likes).slice(0, 3);
     } catch (e) {

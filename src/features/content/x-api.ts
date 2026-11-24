@@ -78,15 +78,17 @@ export function toPost(t: ApiTweet, handle: string): XPost {
  * 돌려주는 reads 는 요금이 붙는 글 수(받은 글 수)다.
  */
 export async function fetchNewPosts(token: string, userId: string, handle: string, sinceId: string | null, max: number) {
+  const limit = Math.min(100, Math.max(5, Math.floor(max)));
   const params: Record<string, string> = {
-    max_results: String(Math.min(100, Math.max(5, Math.floor(max)))),
+    max_results: String(limit),
     exclude: "retweets,replies",
     "tweet.fields": "created_at,public_metrics,lang,note_tweet",
   };
   if (sinceId) params.since_id = sinceId;
   const r = await get<{ data?: ApiTweet[]; meta?: { newest_id?: string; result_count?: number } }>(token, `/users/${userId}/tweets`, params);
   const posts = (r.data ?? []).map((t) => toPost(t, handle));
-  return { posts, newestId: r.meta?.newest_id ?? null, reads: posts.length };
+  // 지난번 이후 새 글이 상한만큼 꽉 찼으면 그보다 오래된 새 글은 받지 못했을 수 있다 (since_id 가 그 뒤로 넘어간다)
+  return { posts, newestId: r.meta?.newest_id ?? null, reads: posts.length, capped: !!sinceId && (r.data?.length ?? 0) >= limit };
 }
 
 /** 입력한 아이디 정리: '@abc', 'https://x.com/abc' → 'abc' */
