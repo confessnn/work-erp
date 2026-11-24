@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { uploadToDrive } from "@/features/documents/drive-browser";
-import { prepareBabyUpload, refreshBabyPage, registerBabyPhoto } from "../actions";
+import { uploadToSession } from "@/features/documents/drive-browser";
+import { prepareBabyUpload, refreshBabyPage, registerBabyPhoto, startBabyUpload } from "../actions";
 import { ageLabel, pickTakenAt, seoulDate } from "../age";
 import { isVideo, mp4CreationTime } from "../video";
 
@@ -173,7 +173,9 @@ export function PhotoUploader({ birthDate }: { birthDate: string | null }) {
             const mime =
               it.file.type ||
               (/\.(heic|heif)$/i.test(it.file.name) ? "image/heic" : /\.mov$/i.test(it.file.name) ? "video/quicktime" : it.video ? "video/mp4" : "application/octet-stream");
-            const id = await uploadToDrive(prep.token, prep.folders[it.date], it.file, it.file.name, mime);
+            const session = await startBabyUpload({ date: it.date, name: it.file.name, mimeType: mime, size: it.file.size });
+            if (!session.ok) throw new Error(session.error);
+            const id = await uploadToSession(session.uploadUrl, it.file, session.mimeType);
             const r = await registerBabyPhoto({
               driveFileId: id,
               sha1: it.sha1,

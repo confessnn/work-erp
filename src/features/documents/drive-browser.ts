@@ -41,6 +41,17 @@ export async function uploadToDrive(
   return json.id;
 }
 
+/**
+ * 서버가 열어 준 재개 가능 업로드 주소로 파일 내용만 보낸다 (토큰 없이, 그 파일 하나만 올릴 수 있음).
+ * 아기 사진처럼 가족 구성원도 올리는 곳에서 쓴다. 반환: 드라이브 파일 ID
+ */
+export async function uploadToSession(uploadUrl: string, file: Blob, mimeType: string): Promise<string> {
+  const put = await fetch(uploadUrl, { method: "PUT", headers: { "content-type": mimeType }, body: file });
+  if (!put.ok) throw await driveError(put);
+  const json = (await put.json()) as { id: string };
+  return json.id;
+}
+
 export async function downloadFromDrive(token: string, fileId: string): Promise<Uint8Array> {
   const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
     headers: { authorization: `Bearer ${token}` },
