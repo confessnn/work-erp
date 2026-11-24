@@ -5,7 +5,8 @@ import { GoogleApiError } from "@/features/google-calendar/google-api";
 import { driveContext } from "@/features/google-drive/context";
 import { brainContext } from "./context";
 import { createFolder, createTextFile, FOLDER_MIME, getItem } from "./drive";
-import { ensureExportFolder, exportRecords, exportTodos, syncVault } from "./service";
+import { MEMO_MAX } from "./memo";
+import { ensureExportFolder, exportRecords, exportTodos, saveMemo, syncVault } from "./service";
 import { EXPORT_FOLDER, PARA_FOLDERS, parseFolderId } from "./vault";
 
 type Result = { ok: true; message: string } | { ok: false; message: string };
@@ -135,5 +136,25 @@ export async function exportRecordsAction(): Promise<Result> {
     return { ok: true, message: `${part("기록 노트", records)} · ${part("할 일 노트", todos)}.${where}` };
   } catch (e) {
     return fail(e, "내보내지 못했어요.");
+  }
+}
+
+/** '빠른 메모': 볼트 Inbox 에 노트로 저장 → 새 노트 ID (볼트 밖에 저장했으면 null) */
+export async function saveMemoAction(
+  text: string,
+  title?: string,
+): Promise<{ ok: true; message: string; noteId: string | null } | { ok: false; message: string }> {
+  try {
+    if (!text.trim()) return { ok: false, message: "메모를 적어 주세요." };
+    if (text.length > MEMO_MAX) return { ok: false, message: `메모는 ${MEMO_MAX.toLocaleString("ko-KR")}자까지 적을 수 있어요.` };
+    const ctx = await brainContext();
+    if (!ctx.settings) return { ok: false, message: "연결된 볼트가 없어요." };
+    const r = await saveMemo(ctx, text, title);
+    revalidatePath("/brain", "layout");
+    return r.id
+      ? { ok: true, message: `'${r.path}'에 저장했어요.`, noteId: r.id }
+      : { ok: true, message: "드라이브 work-erp/ERP 기록/메모 폴더에 저장했어요. ERP 기록 폴더를 볼트 안으로 옮기면 여기서도 보여요.", noteId: null };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "메모를 저장하지 못했어요." };
   }
 }

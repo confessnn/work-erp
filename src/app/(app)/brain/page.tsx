@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BrainSyncButtons, UnlinkVaultButton, VaultSetup } from "@/features/brain/components/brain-buttons";
+import { QuickMemo } from "@/features/brain/components/quick-memo";
 import { brainStatus, listNoteMeta, notesWithTag, searchNotes } from "@/features/brain/queries";
 import type { BrainNoteMeta } from "@/features/brain/types";
 import { TODO_FOLDER } from "@/features/brain/todo-notes";
@@ -74,6 +75,8 @@ export default async function BrainPage({ searchParams }: PageProps<"/brain">) {
           </Link>
         </div>
       </div>
+
+      <QuickMemo />
 
       <section className="card space-y-3">
         <p className="text-sm">
