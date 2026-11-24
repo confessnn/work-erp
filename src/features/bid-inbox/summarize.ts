@@ -1,3 +1,4 @@
+import "server-only";
 import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { fetchNoticeFiles, pickDocs } from "./attachments";

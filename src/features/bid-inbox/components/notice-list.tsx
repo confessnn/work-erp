@@ -78,7 +78,7 @@ export function NoticeList({ notices, viewer = false }: { notices: BidNotice[]; 
           </div>
 
           <div className="font-medium">
-            {n.detail_url ? (
+            {n.detail_url && /^https?:\/\//i.test(n.detail_url) ? (
               <a href={n.detail_url} target="_blank" rel="noreferrer" className="hover:underline">
                 {n.title}
               </a>

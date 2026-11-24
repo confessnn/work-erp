@@ -1,3 +1,4 @@
+import "server-only";
 import { kstToIso, toApiDate, FETCH_WINDOW_DAYS } from "./g2b-api";
 import { costRegionOk, isCostNotice, judgeCost, judgeHanil, HANIL_MAX_PRICE } from "./judge";
 import type { BidVerdict } from "./types";

@@ -1,3 +1,4 @@
+import "server-only";
 // 텔레그램으로 일정 넣기: "내일 3시 치과" 같은 글을 날짜·시간·제목으로 바꾼다.
 import Anthropic from "@anthropic-ai/sdk";
 import { escapeTg, type InlineButton } from "./api";

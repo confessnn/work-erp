@@ -1,11 +1,10 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/features/family/form";
 
-export type AuthState = { error?: string; message?: string };
+export type AuthState = { error?: string };
 
 export async function signIn(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
@@ -21,24 +20,6 @@ export async function signIn(_prev: AuthState, formData: FormData): Promise<Auth
     };
   }
   redirect(safeNext(formData.get("next")) ?? "/");
-}
-
-export async function signUp(_prev: AuthState, formData: FormData): Promise<AuthState> {
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-  if (password.length < 8) return { error: "비밀번호는 8자 이상으로 해주세요." };
-
-  const h = await headers();
-  const origin = h.get("origin") ?? `https://${h.get("host")}`;
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { emailRedirectTo: `${origin}/auth/confirm` },
-  });
-  if (error) return { error: `가입 실패: ${error.message}` };
-  if (data.session) redirect("/");
-  return { message: "확인 메일을 보냈습니다. 메일의 링크를 누른 뒤 로그인하세요." };
 }
 
 export async function signOut() {

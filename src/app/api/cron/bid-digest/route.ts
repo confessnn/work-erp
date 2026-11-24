@@ -4,6 +4,7 @@ import { buildMorning, buildMorningTelegram, MORNING_BUTTONS, nextDay, type Agen
 import { sendChunks } from "@/features/telegram/api";
 import { todayInSeoul } from "@/lib/format";
 import { summarizeNotice } from "@/features/bid-inbox/summarize";
+import { isCronRequest } from "@/lib/cron-auth";
 
 export const maxDuration = 300;
 
@@ -108,7 +109,7 @@ async function mailDigest(db: SupabaseClient, secret: string, user: string, summ
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || !isCronRequest(request)) {
     return new Response("Unauthorized", { status: 401 });
   }
 
