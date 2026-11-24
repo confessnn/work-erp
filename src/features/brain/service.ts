@@ -7,9 +7,9 @@ import { groupSeries } from "@/features/records/series";
 import { todayInSeoul } from "@/lib/format";
 import { requireUser } from "@/lib/supabase/server";
 import { brainContext } from "./context";
-import { createFolder, createTextFile, downloadText, folderAlive, FOLDER_MIME, getItem, listChildren, listVaultNotes, mapLimit, trashFile, updateTextFile } from "./drive";
+import { createFolder, createTextFile, downloadText, folderAlive, FOLDER_MIME, getItem, listChildren, listVaultNotes, liveFile, mapLimit, trashFile, updateTextFile, type Uploaded } from "./drive";
 import { planExport, type ExportPlan } from "./export";
-import { MAX_NOTE_CHARS, planSync, syncSummary } from "./sync";
+import { MAX_NOTE_CHARS, planSync, readAllPages, splitDuplicates, syncSummary } from "./sync";
 import { planTodoNotes, TODO_FOLDER, type TodoRow } from "./todo-notes";
 import { editMemo, isErpMemo, memoNote } from "./memo";
 import { EXPORT_FOLDER, PARA_FOLDERS, parseNote, sectionOf } from "./vault";
@@ -21,9 +21,11 @@ export type BrainCtx = Awaited<ReturnType<typeof brainContext>>;
 export async function syncVault(ctx: BrainCtx, vaultId: string): Promise<string> {
   const { supabase, userId, token } = ctx;
   const remote = await listVaultNotes(token, vaultId);
-  const { data: local, error } = await supabase.from("brain_notes").select("drive_file_id, path, modified_at").limit(10000);
-  if (error) throw new Error(error.message);
-  const plan = planSync(remote, local ?? []);
+  // 노트가 1000개를 넘어도 모두 읽는다 (Supabase API 는 한 번에 1000줄까지만 준다)
+  const local = await readAllPages<{ drive_file_id: string; path: string; modified_at: string }>((from, to) =>
+    supabase.from("brain_notes").select("drive_file_id, path, modified_at").order("drive_file_id").range(from, to),
+  );
+  const plan = planSync(remote, local);
 
   const rows = await mapLimit(plan.download, 6, async (r) =>
     noteRow(userId, r.id, r.path, (await downloadText(token, r.id)).slice(0, MAX_NOTE_CHARS), r.modifiedTime),
@@ -35,10 +37,12 @@ export async function syncVault(ctx: BrainCtx, vaultId: string): Promise<string>
   // 내용은 같고 이름·폴더만 바뀐 노트
   await mapLimit(plan.moved, 6, async (r) => {
     const p = parseNote(r.path, "");
-    await supabase.from("brain_notes").update({ path: r.path, title: p.title, section: p.section }).eq("drive_file_id", r.id);
+    const { error: e } = await supabase.from("brain_notes").update({ path: r.path, title: p.title, section: p.section }).eq("drive_file_id", r.id);
+    if (e) throw new Error(`옮긴 노트를 고치지 못했어요: ${e.message}`);
   });
   for (let i = 0; i < plan.remove.length; i += 200) {
-    await supabase.from("brain_notes").delete().in("drive_file_id", plan.remove.slice(i, i + 200));
+    const { error: e } = await supabase.from("brain_notes").delete().in("drive_file_id", plan.remove.slice(i, i + 200));
+    if (e) throw new Error(`지운 노트를 정리하지 못했어요: ${e.message}`);
   }
 
   const summary = syncSummary({ total: remote.length, downloaded: rows.length, removed: plan.remove.length, remaining: plan.remaining });
@@ -140,18 +144,19 @@ export async function uploadPlans(
     const fileName = (old?.file_name as string | undefined) ?? p.fileName;
     // 기록이 없어도 같은 이름 파일이 이미 있으면 (동시에 두 번 눌렀을 때 등) 그 파일을 덮어쓴다
     let fileId = (old?.drive_file_id as string | undefined) ?? byName.get(fileName);
-    let up;
+    let up: Uploaded | undefined;
     if (fileId) {
       try {
         up = await updateTextFile(token, fileId, fileName, p.content);
-        updated++;
+        if (up.trashed) up = undefined; // 휴지통에 있는 파일 (중복 정리로 버린 것 등) → 새로 만든다
+        else updated++;
       } catch (e) {
         if (!(e instanceof GoogleApiError && (e.status === 404 || e.status === 403))) throw e;
         fileId = undefined; // 드라이브에서 지웠으면 새로 만든다
       }
     }
     if (!up) {
-      up = await createTextFile(token, folder.id, fileName, p.content);
+      up = await keepOneCopy(token, folder.id, fileName, p.content, await createTextFile(token, folder.id, fileName, p.content));
       created++;
     }
     return { plan: p, fileName, up };
@@ -165,6 +170,31 @@ export async function uploadPlans(
     folder.vaultPath === null ? [] : changed.map((r) => noteRow(userId, r.up.id, `${prefix}${r.fileName}`, r.plan.content, r.up.modifiedTime)),
   );
   return { created, updated };
+}
+
+/**
+ * 새로 만든 직후, 같은 이름 파일이 또 생겼는지 본다 (내보내기가 동시에 두 번 돌면 둘 다 만든다).
+ * 여러 개면 ID 가 가장 작은 하나만 남기고 나머지는 휴지통으로 → 남긴 파일에 내용을 쓴다.
+ * 두 쪽 모두 같은 파일을 고르므로, 늦게 확인한 쪽이 정리한다. 버린 파일을 기록한 쪽은 다음 내보내기 때 trashed 를 보고 바로잡는다.
+ */
+async function keepOneCopy(token: string, folderId: string, fileName: string, content: string, mine: Uploaded): Promise<Uploaded> {
+  const same = (await listChildren(token, folderId)).filter((i) => i.name === fileName && i.mimeType !== FOLDER_MIME);
+  if (!same.some((i) => i.id === mine.id)) same.push({ id: mine.id, name: fileName, mimeType: "text/markdown", modifiedTime: mine.modifiedTime });
+  const { keep, extra } = splitDuplicates(same);
+  if (!keep || !extra.length) return mine;
+  let result = mine;
+  if (keep.id !== mine.id) {
+    try {
+      result = await updateTextFile(token, keep.id, fileName, content);
+    } catch (e) {
+      // 남길 파일을 ERP가 고칠 수 없음 (사용자가 만든 같은 이름 파일) → 내 파일을 그대로 쓰고 아무것도 버리지 않는다
+      if (e instanceof GoogleApiError && (e.status === 403 || e.status === 404)) return mine;
+      throw e;
+    }
+  }
+  // 사용자가 만든 파일은 drive.file 권한으로 버릴 수 없어서 실패해도 그대로 둔다
+  for (const x of extra) await trashFile(token, x.id).catch(() => {});
+  return result;
 }
 
 export type ExportedRow = { series_key: string; drive_file_id: string; file_name: string; content_digest: string };
@@ -258,21 +288,30 @@ export async function savedExportFolder(token: string, vaultId: string, exportFo
   return { folderId: exportFolderId, vaultPath: await pathInVault(token, exportFolderId, vaultId) };
 }
 
+const NOT_ERP_FILE = "ERP가 만든 파일이 아니라서 여기서 고치거나 지울 수 없어요. 옵시디언에서 고쳐 주세요.";
+const cannotWrite = (e: unknown) => e instanceof GoogleApiError && (e.status === 403 || e.status === 404);
+
 /** 메모 고치기: 드라이브 파일 내용을 바꾸고 ERP 사본도 고친다. ERP가 만든 메모만 */
 export async function editMemoNote(ctx: BrainCtx, noteId: string, body: string): Promise<void> {
   const { supabase, userId, token } = ctx;
   const note = await memoRow(ctx, noteId);
   const content = editMemo(note.content, body, new Date());
   if (!content) throw new Error("내용을 적어 주세요. 메모를 없애려면 '지우기'를 눌러 주세요.");
+  // 마지막 동기화 뒤에 옵시디언에서 고쳤으면 덮어쓰지 않는다 (ERP 사본은 옛 내용이라 고친 내용이 사라진다)
+  const live = await liveFile(token, note.drive_file_id);
+  if (!live) {
+    await supabase.from("brain_notes").delete().eq("id", noteId);
+    throw new Error("드라이브에서 이미 지워진 메모예요. 목록에서 뺐어요.");
+  }
+  if (live.modifiedTime && new Date(live.modifiedTime).getTime() > new Date(note.modified_at).getTime()) {
+    throw new Error("드라이브(옵시디언)에서 더 최근에 고친 메모예요. '동기화'를 누른 뒤 다시 고쳐 주세요.");
+  }
   const fileName = note.path.split("/").pop()!;
   let up;
   try {
     up = await updateTextFile(token, note.drive_file_id, fileName, content);
   } catch (e) {
-    if (e instanceof GoogleApiError && e.status === 404) {
-      await supabase.from("brain_notes").delete().eq("id", noteId);
-      throw new Error("드라이브에서 이미 지워진 메모예요. 목록에서 뺐어요.");
-    }
+    if (cannotWrite(e)) throw new Error(NOT_ERP_FILE);
     throw e;
   }
   const { error } = await supabase.from("brain_notes").update(noteRow(userId, note.drive_file_id, note.path, content, up.modifiedTime)).eq("id", noteId);
@@ -282,17 +321,25 @@ export async function editMemoNote(ctx: BrainCtx, noteId: string, body: string):
 /** 메모 지우기: 드라이브 휴지통으로 옮기고(30일 안에 되살릴 수 있음) ERP 사본을 지운다. ERP가 만든 메모만 */
 export async function deleteMemoNote(ctx: BrainCtx, noteId: string): Promise<void> {
   const note = await memoRow(ctx, noteId);
-  await trashFile(ctx.token, note.drive_file_id);
+  if (await liveFile(ctx.token, note.drive_file_id)) {
+    try {
+      await trashFile(ctx.token, note.drive_file_id);
+    } catch (e) {
+      // 읽을 수는 있는데 휴지통으로 못 옮김 = ERP가 만든 파일이 아님 (drive.file 권한)
+      if (cannotWrite(e)) throw new Error(NOT_ERP_FILE);
+      throw e;
+    }
+  }
   const { error } = await ctx.supabase.from("brain_notes").delete().eq("id", noteId);
   if (error) throw new Error(error.message);
 }
 
 async function memoRow(ctx: BrainCtx, noteId: string) {
-  const { data, error } = await ctx.supabase.from("brain_notes").select("drive_file_id, path, content").eq("id", noteId).maybeSingle();
+  const { data, error } = await ctx.supabase.from("brain_notes").select("drive_file_id, path, content, modified_at").eq("id", noteId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) throw new Error("메모를 찾지 못했어요.");
   if (!isErpMemo(data.content as string)) throw new Error("ERP에서 만든 메모만 여기서 고치거나 지울 수 있어요.");
-  return data as { drive_file_id: string; path: string; content: string };
+  return data as { drive_file_id: string; path: string; content: string; modified_at: string };
 }
 
 /** 일정 기록 → 'ERP 기록/<일 이름>.md' */
@@ -304,18 +351,25 @@ export async function exportRecords(ctx: BrainCtx, folder: { folderId: string; v
 /** 대시보드 할 일 → 'ERP 기록/할 일/<날짜>.md' (내가 적은 할 일만, 지운 것 제외) */
 export async function exportTodos(ctx: BrainCtx, folder: { folderId: string; vaultPath: string | null }) {
   const { supabase, userId } = ctx;
-  const [{ data: todos, error }, { data: exported }] = await Promise.all([
-    supabase
-      .from("todos")
-      .select("id, title, due_date, done_at, created_at, note")
-      .eq("user_id", userId)
-      .is("dismissed_at", null)
-      .order("due_date", { ascending: false })
-      .limit(3000),
-    supabase.from("brain_exports").select("series_key").like("series_key", "todo:%"),
+  // 1000줄이 넘어도 모두 읽는다 (Supabase API 는 한 번에 1000줄까지만 준다)
+  const [todos, exported] = await Promise.all([
+    readAllPages<TodoRow>(
+      (from, to) =>
+        supabase
+          .from("todos")
+          .select("id, title, due_date, done_at, created_at, note")
+          .eq("user_id", userId)
+          .is("dismissed_at", null)
+          .order("due_date", { ascending: false })
+          .order("id")
+          .range(from, to),
+      3000,
+    ),
+    readAllPages<{ series_key: string }>((from, to) =>
+      supabase.from("brain_exports").select("series_key").like("series_key", "todo:%").order("series_key").range(from, to),
+    ),
   ]);
-  if (error) throw new Error(error.message);
-  const plans = planTodoNotes((todos ?? []) as TodoRow[], (exported ?? []).map((e) => e.series_key as string), todayInSeoul());
+  const plans = planTodoNotes(todos, exported.map((e) => e.series_key), todayInSeoul());
   if (!plans.length) return { created: 0, updated: 0 };
   return uploadTodoPlans(sessionStore(ctx), plans, folder);
 }
