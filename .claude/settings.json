@@ -9,7 +9,8 @@
       "mcp__github__pull_request_read",
       "mcp__Vercel__list_deployments",
       "mcp__Vercel__get_runtime_logs",
-      "mcp__Supabase__query_logs"
+      "mcp__Supabase__query_logs",
+      "Bash(npx eslint *)"
     ]
   }
 }
