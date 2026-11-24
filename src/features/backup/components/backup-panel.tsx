@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { backupNow } from "../actions";
 import type { RecentBackups } from "../queries";
+import { weekLabelOf } from "../backup";
 
 const when = (iso: string) =>
   new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
@@ -62,7 +63,10 @@ export function BackupPanel({ recent }: { recent: RecentBackups }) {
         <ul className="divide-y divide-line text-sm">
           {recent.files.map((f) => (
             <li key={f.id} className="flex items-center justify-between gap-2 py-2">
-              <span>{when(f.createdTime)}</span>
+              <span>
+                {when(f.createdTime)}
+                {weekLabelOf(f.name) && <span className="ml-2 text-muted">{weekLabelOf(f.name)}</span>}
+              </span>
               <span className="flex items-center gap-3 text-muted">
                 {kb(f.size)}
                 {f.webViewLink && (

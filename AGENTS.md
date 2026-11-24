@@ -69,7 +69,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `share` | `/share-settings` | 가족 공유 링크·iCal 내보내기(금액 없음, `get_shared_schedule`) |
 | `api-credits` | 대시보드 카드 | Claude·OpenAI API 잔액 추정 |
 | `settings` | `/settings` (상단 ⚙) | 설정(관리자): 상단 메뉴 순서·숨김 `user_settings.nav_prefs`, 적용 `components/nav-items.ts`의 `applyNavPrefs` |
-| `backup` | `/settings` 백업 · 크론 `backup` | 기록을 JSON 하나로 모아 대표 드라이브 `work-erp/백업`에 저장(최근 26개 유지, `backup.ts`). 담을 표·뺄 칸(토큰·`ics_url`·`thumb`·`share_url`)은 DB `private.backup_dump` 한 곳. 새 표를 만들면 거기에 추가 |
+| `backup` | `/settings` 백업 · 크론 `backup` | 기록을 JSON 하나로 모아 대표 드라이브 `work-erp/백업/<YYYY-MM>/`에 주차별로 쌓음(지우지 않음, 이름·주차 규칙 `backup.ts`). 담을 표·뺄 칸(토큰·`ics_url`·`thumb`·`share_url`)은 DB `private.backup_dump` 한 곳. 새 표를 만들면 거기에 추가 |
 | `plan-usage` | (숨김) | 플랜 사용량 위젯. 사용자가 나중에 다시 켜기로 해서 일부러 남겨 둠 — 지우지 않는다 |
 
 - 크론(Vercel, UTC): `calendar-sync`·`bid-sync` 21:00, `bid-digest`·`api-credits` 22:00, `content` 23:30, `backup` 일요일 18:00(한국 월요일 03:00). 5분 간격 알림만 Supabase pg_cron.

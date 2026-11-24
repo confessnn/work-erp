@@ -11,7 +11,7 @@ type Job = { user_id: string; refresh_token_enc: string; scopes: string | null; 
 
 /**
  * 매주 Vercel Cron 이 호출 (vercel.json, 한국 시간 월요일 새벽 3시). Authorization: Bearer $CRON_SECRET 필수.
- * 대표 계정의 기록을 JSON 하나로 모아 그 사람 구글 드라이브 work-erp/백업 에 저장하고, 오래된 백업은 정리한다.
+ * 대표 계정의 기록을 JSON 하나로 모아 그 사람 구글 드라이브 work-erp/백업/<YYYY-MM> 에 주차별로 쌓는다 (지우지 않음).
  * DB 읽기는 비밀값으로 잠긴 함수(cron_backup_*)로만 한다. service_role 키를 쓰지 않는다.
  */
 export async function GET(request: Request) {
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   const { data: jobs, error } = await db.rpc("cron_backup_jobs", { p_secret: secret });
   if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
 
-  const results: { ok: boolean; file?: string; summary?: string; pruned?: number; error?: string }[] = [];
+  const results: { ok: boolean; file?: string; summary?: string; error?: string }[] = [];
   for (const job of (jobs ?? []) as Job[]) {
     try {
       if (!hasScope(job.scopes, DRIVE_SCOPE)) throw new Error("드라이브 권한이 없습니다.");
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       const { data: dump, error: e } = await db.rpc("cron_backup_dump", { p_secret: secret, p_user: job.user_id });
       if (e) throw new Error(e.message);
       const r = await saveBackup(token, job.drive_docs_folder_id, dump);
-      results.push({ ok: true, file: r.name, summary: backupSummary(r.counts), pruned: r.pruned });
+      results.push({ ok: true, file: `${r.folder}/${r.name}`, summary: backupSummary(r.counts) });
     } catch (e) {
       results.push({ ok: false, error: e instanceof Error ? e.message : "알 수 없는 오류" });
     }
