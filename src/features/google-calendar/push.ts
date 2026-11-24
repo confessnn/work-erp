@@ -2,6 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Lecture } from "@/features/lectures/types";
+import { readAllPages } from "@/lib/read-all";
 import { decryptSecret } from "./crypto";
 import { googleEventIdFor, googleTargetFromUid, importedEventPatch, instanceIdFor, lectureToGoogleEvent, seoulDateOf } from "./event";
 import {
@@ -10,6 +11,7 @@ import {
   calendarExists,
   hasScope,
   createErpCalendar,
+  deleteCalendar,
   deleteEvent,
   getEvent,
   GoogleApiError,
@@ -18,6 +20,8 @@ import {
   patchEvent,
   upsertEvent,
 } from "./google-api";
+
+const EXPIRED = "구글 연결이 만료됐습니다. '연동' 화면에서 다시 연결해주세요.";
 
 export type PushResult = { created: number; updated: number; deleted: number; error?: string };
 
@@ -49,28 +53,48 @@ export async function pushToGoogle(supabase: SupabaseClient, opts: { force?: boo
   try {
     // 예전에 캘린더 권한 없이 연결했다면 건너뜀 (scopes 기록 전 연결은 캘린더 권한이 있었음)
     if (conn.scopes && !hasScope(conn.scopes, CALENDAR_SCOPE)) return null;
-    const { token } = await accessToken(decryptSecret(conn.refresh_token_enc));
+    let token: string;
+    try {
+      ({ token } = await accessToken(decryptSecret(conn.refresh_token_enc)));
+    } catch (e) {
+      // 토큰 요청이 거절됨(400 invalid_grant·401) = 사용자가 권한을 끊었거나 오래 안 써서 만료
+      if (e instanceof GoogleApiError && (e.status === 400 || e.status === 401)) throw new Error(EXPIRED);
+      throw e;
+    }
 
     // 전용 캘린더 확인 (없거나 사용자가 구글에서 지웠으면 새로 만들고 전부 다시 올림)
     let calendarId: string | null = conn.calendar_id;
     let recreate = false;
     if (!calendarId || !(await calendarExists(token, calendarId))) {
-      calendarId = await createErpCalendar(token);
+      const old = calendarId;
+      const fresh = await createErpCalendar(token);
       recreate = true;
-      await supabase.from("google_connections").update({ calendar_id: calendarId }).eq("user_id", conn.user_id);
-      await supabase.from("google_pending_deletes").delete().eq("user_id", conn.user_id);
-      await supabase.from("google_import_deletes").delete().eq("user_id", conn.user_id);
-      await supabase
-        .from("lectures")
-        .update({ google_event_id: null, google_synced_at: null })
-        .not("google_event_id", "is", null);
+      // 반영이 동시에 두 번 돌면(빠르게 두 번 누름) 둘 다 새 캘린더를 만든다 → 먼저 저장한 쪽 것만 쓰고 내 것은 지운다
+      const claim = supabase.from("google_connections").update({ calendar_id: fresh }).eq("user_id", conn.user_id);
+      const { data: won, error: claimError } = await (old ? claim.eq("calendar_id", old) : claim.is("calendar_id", null)).select("user_id");
+      if (claimError) throw new Error(claimError.message);
+      if (!won?.length) {
+        await deleteCalendar(token, fresh).catch(() => {});
+        const { data: now } = await supabase.from("google_connections").select("calendar_id").eq("user_id", conn.user_id).maybeSingle();
+        if (!now?.calendar_id) throw new Error("ERP 캘린더를 정하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+        calendarId = now.calendar_id as string;
+      } else {
+        calendarId = fresh;
+        await supabase.from("google_pending_deletes").delete().eq("user_id", conn.user_id);
+        await supabase.from("google_import_deletes").delete().eq("user_id", conn.user_id);
+        await supabase
+          .from("lectures")
+          .update({ google_event_id: null, google_synced_at: null })
+          .not("google_event_id", "is", null);
+      }
     }
+    const calId = calendarId as string;
 
     // 1) ERP에서 지운 강의 → 구글에서 삭제
     if (!recreate) {
       const { data: dels } = await supabase.from("google_pending_deletes").select("google_event_id");
       for (const d of dels ?? []) {
-        await deleteEvent(token, calendarId, d.google_event_id);
+        await deleteEvent(token, calId, d.google_event_id);
         await supabase.from("google_pending_deletes").delete().eq("google_event_id", d.google_event_id);
         result.deleted++;
       }
@@ -80,7 +104,7 @@ export async function pushToGoogle(supabase: SupabaseClient, opts: { force?: boo
     if (!recreate) {
       const { data: dels } = await supabase.from("google_import_deletes").select("external_uid");
       for (const d of dels ?? []) {
-        if (await deleteImportedEvent(token, calendarId, d.external_uid)) result.deleted++;
+        if (await deleteImportedEvent(token, calId, d.external_uid)) result.deleted++;
         await supabase.from("google_import_deletes").delete().eq("external_uid", d.external_uid);
       }
     }
@@ -94,28 +118,36 @@ export async function pushToGoogle(supabase: SupabaseClient, opts: { force?: boo
         .not("external_uid", "is", null);
       type Dirty = Pick<Lecture, "id" | "title" | "organization" | "lecture_date" | "start_time" | "end_time"> & { external_uid: string };
       for (const l of (dirty ?? []) as Dirty[]) {
-        const id = await findImportedEventId(token, calendarId, l.external_uid);
-        if (id && (await patchEvent(token, calendarId, id, importedEventPatch(l)))) result.updated++;
+        const id = await findImportedEventId(token, calId, l.external_uid);
+        if (id && (await patchEvent(token, calId, id, importedEventPatch(l)))) result.updated++;
         // 구글에서 못 찾은 일정(다른 캘린더·이미 지워짐)은 더 시도하지 않는다
         await supabase.from("lectures").update({ google_import_dirty: false }).eq("id", l.id);
       }
     }
 
-    // 2) 생성/수정 대상
-    const { data: rows } = await supabase
-      .from("lectures")
-      .select("*")
-      .is("external_uid", null)
-      .order("lecture_date");
-    const lectures = (rows ?? []) as (Lecture & { google_event_id: string | null; google_synced_at: string | null })[];
+    // 2) 생성/수정 대상 (1000개가 넘어도 모두 읽는다 — Supabase API 는 한 번에 1000줄까지만 준다)
+    const lectures = await readAllPages<Lecture & { google_event_id: string | null; google_synced_at: string | null }>((from, to) =>
+      supabase.from("lectures").select("*").is("external_uid", null).order("lecture_date").order("id").range(from, to),
+    );
 
+    const skipped: string[] = [];
     for (const l of lectures) {
       const changed = !l.google_synced_at || new Date(l.updated_at) > new Date(l.google_synced_at);
       if (l.google_event_id && !changed && !opts.force) continue;
 
       const ev = lectureToGoogleEvent(l, conn.show_amounts);
       const eventId = googleEventIdFor(l.id);
-      const r = await upsertEvent(token, calendarId, eventId, ev);
+      let r;
+      try {
+        r = await upsertEvent(token, calId, eventId, ev);
+      } catch (e) {
+        // 이 일정만 구글이 받지 않음(입력값 문제) → 건너뛰고 나머지는 계속 올린다
+        if (e instanceof GoogleApiError && e.status === 400) {
+          skipped.push(`${l.lecture_date} ${l.title}: ${e.message}`);
+          continue;
+        }
+        throw e;
+      }
       if (r === "created") result.created++;
       else result.updated++;
       await supabase
@@ -123,13 +155,9 @@ export async function pushToGoogle(supabase: SupabaseClient, opts: { force?: boo
         .update({ google_event_id: eventId, google_synced_at: new Date().toISOString() })
         .eq("id", l.id);
     }
+    if (skipped.length) result.error = `구글이 받지 않은 일정 ${skipped.length}건 — ${skipped.slice(0, 3).join(" / ")}`;
   } catch (e) {
-    result.error =
-      e instanceof GoogleApiError && (e.status === 400 || e.status === 401)
-        ? "구글 연결이 만료됐습니다. '연동' 화면에서 다시 연결해주세요."
-        : e instanceof Error
-          ? e.message
-          : "알 수 없는 오류";
+    result.error = e instanceof GoogleApiError && e.status === 401 ? EXPIRED : e instanceof Error ? e.message : "알 수 없는 오류";
   }
 
   await save();

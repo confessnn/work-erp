@@ -21,7 +21,12 @@ export function PaidToggle({ id, paid, hasFee = true }: { id: string; paid: bool
     <button
       type="button"
       disabled={pending}
-      onClick={() => start(() => setPaid(id, !paid))}
+      onClick={() =>
+        start(async () => {
+          const r = await setPaid(id, !paid);
+          if (r.error) alert(r.error);
+        })
+      }
       className={`badge ${paid ? "badge-paid" : "badge-unpaid"} ${pending ? "opacity-50" : ""}`}
       title={paid ? "누르면 미수령으로 되돌립니다" : "누르면 수령 처리합니다"}
     >

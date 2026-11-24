@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { decryptSecret, encryptSecret } from "./crypto";
-import { googleEventIdFor, googleTargetFromUid, importedEventPatch, instanceIdFor, lectureToGoogleEvent, seoulDateOf } from "./event";
+import { googleEventIdFor, googleTargetFromUid, importedEventPatch, instanceIdFor, lectureTimes, lectureToGoogleEvent, seoulDateOf } from "./event";
 
 describe("encryptSecret / decryptSecret", () => {
   const k = randomBytes(32).toString("base64");
@@ -128,6 +128,26 @@ describe("importedEventPatch", () => {
       summary: "순천향대ai",
       start: { date: "2026-12-21" },
       end: { date: "2026-12-22" },
+    });
+  });
+});
+
+describe("lectureTimes 늦은 밤 시작", () => {
+  it("끝 시간이 없고 23:30 시작이면 다음 날 00:30에 끝난다 (빈 시간이 되지 않게)", () => {
+    expect(lectureTimes({ lecture_date: "2026-12-31", start_time: "23:30", end_time: null }).end).toEqual({
+      dateTime: "2027-01-01T00:30:00",
+      timeZone: "Asia/Seoul",
+    });
+    expect(lectureTimes({ lecture_date: "2026-11-24", start_time: "23:59:00", end_time: null }).end).toEqual({
+      dateTime: "2026-11-25T00:59:00",
+      timeZone: "Asia/Seoul",
+    });
+  });
+
+  it("보통은 같은 날 1시간 뒤", () => {
+    expect(lectureTimes({ lecture_date: "2026-11-24", start_time: "14:00", end_time: null }).end).toEqual({
+      dateTime: "2026-11-24T15:00:00",
+      timeZone: "Asia/Seoul",
     });
   });
 });

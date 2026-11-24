@@ -37,8 +37,8 @@ describe("calculateWithholding", () => {
     expect(calculateWithholding(125_000, "other", false).totalTax).toBe(11_000);
   });
 
-  it("사업소득 소액부징수: 소득세 1,000원 미만이면 0원", () => {
-    expect(calculateWithholding(30_000, "business").totalTax).toBe(0); // 소득세 900
+  it("사업소득은 소액부징수를 하지 않는다 (2024.7.1 지급분부터, 계속·반복 인적용역)", () => {
+    expect(calculateWithholding(30_000, "business").totalTax).toBe(990); // 소득세 900 + 지방세 90
     expect(calculateWithholding(30_000, "business", false).totalTax).toBe(990);
     expect(calculateWithholding(40_000, "business").totalTax).toBe(1_320);
   });

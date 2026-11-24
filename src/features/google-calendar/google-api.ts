@@ -121,6 +121,11 @@ export async function createErpCalendar(token: string): Promise<string> {
   return cal.id;
 }
 
+/** 캘린더 지우기 (동시에 만든 남는 ERP 캘린더 정리용) */
+export async function deleteCalendar(token: string, calendarId: string) {
+  await call(token, "DELETE", `/calendars/${encodeURIComponent(calendarId)}`);
+}
+
 /** 캘린더가 아직 있는지 (사용자가 구글에서 지웠을 수 있음) */
 export async function calendarExists(token: string, calendarId: string) {
   try {

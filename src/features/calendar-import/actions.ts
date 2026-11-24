@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { todayInSeoul } from "@/lib/format";
+import { readAllPages } from "@/lib/read-all";
 import { rememberedFees, withRememberedFee, type FeeRecord } from "@/features/lectures/fee-memory";
 import type { IncomeType } from "@/features/lectures/tax";
 import { normalizeIcsUrl, type CalendarEvent } from "./ics";
@@ -69,7 +70,12 @@ export async function syncNow(id: string): Promise<SourceState> {
   const { data: s } = await supabase.from("calendar_sources").select("*").eq("id", id).single();
   if (!s) return { error: "캘린더를 찾지 못했습니다." };
 
-  const { known, existing } = await loadDedupeContext(supabase);
+  let known, existing;
+  try {
+    ({ known, existing } = await loadDedupeContext(supabase));
+  } catch (e) {
+    return { error: `ERP 일정을 읽지 못했습니다: ${e instanceof Error ? e.message : "알 수 없는 오류"}` };
+  }
 
   let rows, links, updates, events;
   try {
@@ -112,19 +118,34 @@ type Db = Awaited<ReturnType<typeof requireUser>>["supabase"];
 
 /** 같은 제목의 새 일정에 넣을 강의료. 조회가 실패하면 불러오기가 멈추지 않도록 빈 값으로 둔다 */
 async function loadRememberedFees(supabase: Db) {
-  const { data, error } = await supabase
-    .from("lectures")
-    .select("title, lecture_date, hours, hourly_rate, gross_amount, income_type, apply_tax_exemption")
-    .or("hourly_rate.gt.0,gross_amount.gt.0");
-  if (error) console.error("강의료 조회 실패", error.message);
-  return rememberedFees((data ?? []) as FeeRecord[]);
+  try {
+    const data = await readAllPages<FeeRecord>((from, to) =>
+      supabase
+        .from("lectures")
+        .select("title, lecture_date, hours, hourly_rate, gross_amount, income_type, apply_tax_exemption")
+        .or("hourly_rate.gt.0,gross_amount.gt.0")
+        .order("id")
+        .range(from, to),
+    );
+    return rememberedFees(data);
+  } catch (e) {
+    console.error("강의료 조회 실패", e instanceof Error ? e.message : e);
+    return rememberedFees([]);
+  }
+}
+
+/** 이미 불러온 구글 일정 ID 전부 (1000개가 넘어도 모두 — Supabase API 는 한 번에 1000줄까지만 준다) */
+function importedUids(supabase: Db) {
+  return readAllPages<{ external_uid: string }>((from, to) =>
+    supabase.from("lectures").select("external_uid").not("external_uid", "is", null).order("external_uid").range(from, to),
+  );
 }
 
 /** 중복 판단에 필요한 것: 이미 불러온/삭제한 구글 일정 ID, 최근 1개월 이후 ERP 일정 */
 async function loadDedupeContext(supabase: Db) {
-  const [{ data: l }, { data: k }, { data: ex }] = await Promise.all([
-    supabase.from("lectures").select("external_uid").not("external_uid", "is", null),
-    supabase.from("import_skips").select("external_uid"),
+  const [l, k, { data: ex, error }] = await Promise.all([
+    importedUids(supabase),
+    readAllPages<{ external_uid: string }>((from, to) => supabase.from("import_skips").select("external_uid").order("external_uid").range(from, to)),
     supabase
       .from("lectures")
       .select(
@@ -132,8 +153,9 @@ async function loadDedupeContext(supabase: Db) {
       )
       .gte("lecture_date", addDays(todayInSeoul(), -31)),
   ]);
+  if (error) throw new Error(error.message);
   return {
-    known: new Set([...(l ?? []), ...(k ?? [])].map((r) => r.external_uid as string)),
+    known: new Set([...l, ...k].map((r) => r.external_uid)),
     existing: (ex ?? []) as ExistingLecture[],
   };
 }
@@ -217,8 +239,7 @@ export async function importEvents(fd: FormData) {
 
   // 직접 고른 것이므로 '삭제했던 일정'은 다시 허용, 이미 있는 일정·같은 시각의 ERP 일정은 중복 방지
   const { existing } = await loadDedupeContext(supabase);
-  const { data: imported } = await supabase.from("lectures").select("external_uid").not("external_uid", "is", null);
-  const known = new Set((imported ?? []).map((r) => r.external_uid as string));
+  const known = new Set((await importedUids(supabase)).map((r) => r.external_uid));
   const plan = planImport(
     events.map((e) => ({ ...e, title: String(e.title) })),
     null,

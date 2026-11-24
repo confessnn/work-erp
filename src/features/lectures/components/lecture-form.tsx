@@ -155,7 +155,7 @@ export function LectureForm({ action, lecture, organizations, defaultDate, submi
               onChange={(e) => setExemption(e.target.checked)}
               className="mt-1"
             />
-            소액 면제 적용 (기타소득 12.5만 원 이하 과세최저한 · 소득세 1,000원 미만 소액부징수)
+            소액 면제 적용 (기타소득: 12.5만 원 이하 과세최저한 · 소득세 1,000원 미만 소액부징수)
           </label>
         </fieldset>
 
