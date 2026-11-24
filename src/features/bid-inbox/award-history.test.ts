@@ -78,6 +78,11 @@ describe("isCostWork", () => {
     expect(isCostWork("2026년 한국생산기술연구원 원가계산용역 단가계약")).toBe(true);
     expect(isCostWork("제13차 2027년도 송도 조성원가 재산정 용역")).toBe(true);
     expect(isCostWork("온라인도매시장 바우처 지원사업 원가정산용역")).toBe(true);
+    // 띄어 쓴 공고명도 잡는다
+    expect(isCostWork("상수도 요금 원가 산정 용역")).toBe(true);
+    expect(isCostWork("하수도 사용료 원가 분석")).toBe(true);
+    expect(isCostWork("공사 원가 검증 용역")).toBe(true);
+    expect(isCostWork("적정 원가 산정")).toBe(true);
     expect(isCostWork("2026년 양주나리농원 가을개장 관리운영 용역")).toBe(false);
     expect(isCostWork("보호대상아동 원가정 복귀 지원체계 구축 연구")).toBe(false);
     expect(isCostWork("수자원 가용성 통합평가 체계구축")).toBe(false);

@@ -75,7 +75,7 @@ export function toAward(item: ApiItem): Award | null {
 
 /** 실제 원가 용역인가. '원가' 글자만 들어간 공고(예: 양주나리농원 가을개장, 원가정 복귀)는 뺀다 */
 export const isCostWork = (title: string) =>
-  /원가s*(계산|조사|산정|재산정|분석|검증|정산|산출|용역|심사)|(조성|사후|공사|제조|용역|요금|적정)s*원가/.test(title);
+  /원가\s*(계산|조사|산정|재산정|분석|검증|정산|산출|용역|심사)|(조성|사후|공사|제조|용역|요금|적정)\s*원가/.test(title);
 
 /** 한국 날짜 "YYYYMMDD" */
 const kstDay = (d: Date) => d.toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" }).replaceAll("-", "");
