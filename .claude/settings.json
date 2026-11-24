@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(npx vitest run *)",
+      "Bash(npm test)",
+      "Bash(npm run lint)",
+      "mcp__github__pull_request_read",
+      "mcp__Vercel__list_deployments",
+      "mcp__Vercel__get_runtime_logs",
+      "mcp__Supabase__query_logs"
+    ]
+  }
+}
