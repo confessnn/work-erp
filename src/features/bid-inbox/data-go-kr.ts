@@ -1,3 +1,4 @@
+import "server-only";
 import { parseXml, type Item } from "./d2b-api";
 
 /**

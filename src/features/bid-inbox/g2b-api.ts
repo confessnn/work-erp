@@ -1,3 +1,4 @@
+import "server-only";
 import type { CategoryDef } from "./categories";
 import type { BidMatch, BidNoticeInput } from "./types";
 

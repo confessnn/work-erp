@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { contentTelegram } from "@/features/content/telegram";
 import { resultText, runContent } from "@/features/content/run";
 import { sendMessage } from "@/features/telegram/api";
+import { isCronRequest } from "@/lib/cron-auth";
 
 export const maxDuration = 300;
 
@@ -12,7 +13,7 @@ export const maxDuration = 300;
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || !isCronRequest(request)) {
     return new Response("Unauthorized", { status: 401 });
   }
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {

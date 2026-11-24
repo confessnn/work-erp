@@ -1,3 +1,4 @@
+import "server-only";
 // 콘텐츠 창고의 AI: 모은 글 정리(분야·요약·번역·아이디어 점수)와 콘텐츠 초안 쓰기
 import Anthropic from "@anthropic-ai/sdk";
 import { DRAFT_FORMATS, type DraftFormat } from "./formats";

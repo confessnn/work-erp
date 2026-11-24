@@ -1,3 +1,4 @@
+import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { graphInput, parseRelations, RELATION_KINDS, type Relation } from "./graph";
 import type { Series } from "./series";

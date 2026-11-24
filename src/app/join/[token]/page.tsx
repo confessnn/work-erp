@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
 };
 
-/** 가족 초대 링크 (로그인 없이 열림). 로그인하면 바로 참여, 아니면 가입·로그인 후 참여. */
+/** 가족 초대 링크 (로그인 없이 열림). 로그인하면 바로 참여 (계정은 대표가 만들어 줌). */
 export default async function JoinPage({ params }: PageProps<"/join/[token]">) {
   const { token } = await params;
   const supabase = await createClient();
@@ -42,7 +42,7 @@ export default async function JoinPage({ params }: PageProps<"/join/[token]">) {
         ) : (
           <>
             <p className="text-sm">
-              먼저 <b>본인 이메일</b>로 로그인하거나 가입해 주세요. 가입했다면 확인 메일의 링크를 누른 뒤, 이 초대 링크를 다시 열어 주세요.
+              먼저 <b>본인 계정</b>으로 로그인해 주세요. 계정이 없으면 초대한 사람에게 만들어 달라고 한 뒤, 이 초대 링크를 다시 열어 주세요.
             </p>
             <LoginForm next={`/join/${token}`} />
           </>

@@ -10,6 +10,7 @@ import type { CalendarEvent } from "@/features/calendar-import/ics";
 import { rememberedFees, withRememberedFee, type FeeRecord } from "@/features/lectures/fee-memory";
 import { todayInSeoul } from "@/lib/format";
 import { importFamilySources } from "@/features/family/auto-import";
+import { isCronRequest } from "@/lib/cron-auth";
 
 export const maxDuration = 60;
 
@@ -21,7 +22,7 @@ type Job = ImportSettings & { source_id: string; user_id: string; ics_url: strin
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || !isCronRequest(request)) {
     return new Response("Unauthorized", { status: 401 });
   }
 

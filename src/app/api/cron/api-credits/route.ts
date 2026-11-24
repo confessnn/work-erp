@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { fetchDailyUsage } from "@/features/api-credits/fetch-usage";
 import { PROVIDERS } from "@/features/api-credits/types";
+import { isCronRequest } from "@/lib/cron-auth";
 
 export const maxDuration = 60;
 
@@ -10,7 +11,7 @@ export const maxDuration = 60;
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  if (!secret || !isCronRequest(request)) {
     return new Response("Unauthorized", { status: 401 });
   }
 

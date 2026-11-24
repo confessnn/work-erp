@@ -1,18 +1,17 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { signIn, signUp, type AuthState } from "./actions";
+import { useActionState } from "react";
+import { signIn, type AuthState } from "./actions";
 
-/** next: 로그인 후 돌아갈 주소 (가족 초대 화면에서만 씀) */
+/**
+ * 로그인만 한다. 새 가입은 Supabase 설정에서 막아 두었고, 계정은 대표가 Supabase 대시보드에서 만들어 준다.
+ * next: 로그인 후 돌아갈 주소 (초대 화면에서만 씀)
+ */
 export function LoginForm({ next }: { next?: string } = {}) {
-  const [mode, setMode] = useState<"in" | "up">("in");
-  const [inState, inAction, inPending] = useActionState<AuthState, FormData>(signIn, {});
-  const [upState, upAction, upPending] = useActionState<AuthState, FormData>(signUp, {});
-  const state = mode === "in" ? inState : upState;
-  const pending = mode === "in" ? inPending : upPending;
+  const [state, action, pending] = useActionState<AuthState, FormData>(signIn, {});
 
   return (
-    <form action={mode === "in" ? inAction : upAction} className="card space-y-4">
+    <form action={action} className="card space-y-4">
       {next && <input type="hidden" name="next" value={next} />}
       <label className="field">
         <span>이메일</span>
@@ -20,29 +19,15 @@ export function LoginForm({ next }: { next?: string } = {}) {
       </label>
       <label className="field">
         <span>비밀번호</span>
-        <input
-          name="password"
-          type="password"
-          required
-          minLength={mode === "up" ? 8 : undefined}
-          autoComplete={mode === "in" ? "current-password" : "new-password"}
-          className="input"
-        />
+        <input name="password" type="password" required autoComplete="current-password" className="input" />
       </label>
 
       {state.error && <p className="text-sm text-danger">{state.error}</p>}
-      {state.message && <p className="text-sm text-success">{state.message}</p>}
 
       <button type="submit" disabled={pending} className="btn-primary w-full">
-        {pending ? "처리 중…" : mode === "in" ? "로그인" : "가입하기"}
+        {pending ? "처리 중…" : "로그인"}
       </button>
-      <button
-        type="button"
-        onClick={() => setMode(mode === "in" ? "up" : "in")}
-        className="w-full text-sm text-muted underline"
-      >
-        {mode === "in" ? "처음이신가요? 가입하기" : "이미 계정이 있어요. 로그인"}
-      </button>
+      <p className="text-center text-sm text-muted">계정이 없으면 ERP 관리자에게 만들어 달라고 해 주세요.</p>
     </form>
   );
 }
