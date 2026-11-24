@@ -72,3 +72,42 @@ export function backupSummary(counts: Record<string, number>): string {
     .map(([k, label]) => `${label} ${counts[k]}`)
     .join(" · ");
 }
+
+/** 아침 브리핑에서 읽는 백업 상태 (DB cron_backup_status) */
+export type BackupStatus = {
+  applicable: boolean;
+  last_ok_at: string | null;
+  last_error: string | null;
+  last_error_at: string | null;
+};
+
+/** 마지막 성공이 이보다 오래되면 '자동 백업이 안 돌았다'고 본다 (매주 1번이므로 하루 여유) */
+export const STALE_BACKUP_DAYS = 8;
+const DAY = 86_400_000;
+const HOW_TO_FIX = "ERP 설정 > 백업에서 '지금 백업하기'를 눌러 주세요.";
+
+/** 한국 시간 "11월 30일 03:00" */
+function kstLabel(ms: number) {
+  const t = kst(new Date(ms));
+  return `${Number(t.slice(5, 7))}월 ${Number(t.slice(8, 10))}일 ${t.slice(11, 16)}`;
+}
+
+/**
+ * 아침 브리핑 맨 위에 붙일 백업 경고. 문제가 없으면 null.
+ * - 가장 최근 시도가 실패 → 실패 시각·이유 (성공할 때까지 매일 알림)
+ * - 한 번도 성공한 적 없음 → 첫 백업 안내
+ * - 마지막 성공이 8일 넘게 지남 → 자동 백업이 안 돌았을 수 있음
+ */
+export function backupProblem(s: BackupStatus | null, now: Date): string | null {
+  if (!s?.applicable) return null;
+  const ok = s.last_ok_at ? Date.parse(s.last_ok_at) : 0;
+  const err = s.last_error_at ? Date.parse(s.last_error_at) : 0;
+  if (err > ok) {
+    const why = (s.last_error ?? "알 수 없는 오류").slice(0, 200).replace(/[.\s]+$/, "");
+    return `백업 실패 (${kstLabel(err)}): ${why}. ${HOW_TO_FIX}`;
+  }
+  if (!ok) return `아직 백업이 한 번도 없습니다. ${HOW_TO_FIX}`;
+  const days = Math.floor((now.getTime() - ok) / DAY);
+  if (days >= STALE_BACKUP_DAYS) return `마지막 백업이 ${days}일 전(${kstLabel(ok)})입니다. 자동 백업이 돌지 않았을 수 있어요. ${HOW_TO_FIX}`;
+  return null;
+}
