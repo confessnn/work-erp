@@ -32,6 +32,7 @@ export function BackupPanel({ recent }: { recent: RecentBackups }) {
 
   return (
     <div className="space-y-3">
+      {recent.ok && recent.warning && <p className="text-sm text-danger">⚠️ {recent.warning}</p>}
       {!recent.ok ? (
         <p className="text-sm text-danger">{recent.error}</p>
       ) : latest ? (
