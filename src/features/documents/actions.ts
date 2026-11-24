@@ -38,7 +38,8 @@ export async function getDriveSession(): Promise<
 export async function saveDisplayName(fd: FormData) {
   const { supabase, userId } = await requireUser();
   const name = String(fd.get("display_name") ?? "").trim().slice(0, 30);
-  await supabase.from("user_settings").upsert({ user_id: userId, display_name: name, updated_at: new Date().toISOString() });
+  const { error } = await supabase.from("user_settings").upsert({ user_id: userId, display_name: name, updated_at: new Date().toISOString() });
+  if (error) throw new Error(`이름을 저장하지 못했어요: ${error.message}`);
   revalidatePath("/documents");
 }
 
@@ -80,20 +81,22 @@ export async function registerDocument(input: {
 
 export async function setArchived(id: string, archived: boolean) {
   const { supabase } = await requireUser();
-  await supabase.from("documents").update({ archived }).eq("id", id);
+  const { error } = await supabase.from("documents").update({ archived }).eq("id", id);
+  if (error) throw new Error(`저장하지 못했어요: ${error.message}`);
   revalidatePath("/documents");
 }
 
 export async function updateDocumentInfo(id: string, fd: FormData) {
   const { supabase } = await requireUser();
   const issued = String(fd.get("issued_on") ?? "");
-  await supabase
+  const { error } = await supabase
     .from("documents")
     .update({
       title: String(fd.get("title") ?? "").trim().slice(0, 50) || null,
       issued_on: /^\d{4}-\d{2}-\d{2}$/.test(issued) ? issued : null,
     })
     .eq("id", id);
+  if (error) throw new Error(`저장하지 못했어요: ${error.message}`);
   revalidatePath("/documents");
 }
 
@@ -103,7 +106,8 @@ export async function deleteDocument(id: string): Promise<Result> {
     const { supabase, token } = await driveContext();
     const { data: d } = await supabase.from("documents").select("drive_file_id").eq("id", id).single();
     if (d) await trashFile(token, d.drive_file_id);
-    await supabase.from("documents").delete().eq("id", id);
+    const { error } = await supabase.from("documents").delete().eq("id", id);
+    if (error) return { ok: false, error: `목록에서 지우지 못했습니다: ${error.message}` };
     revalidatePath("/documents");
     return { ok: true };
   } catch (e) {

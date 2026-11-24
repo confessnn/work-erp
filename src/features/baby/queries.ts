@@ -1,5 +1,6 @@
 import "server-only";
 import { requireUser } from "@/lib/supabase/server";
+import { readAllPages } from "@/lib/read-all";
 
 export type BabyInfo = { name: string | null; birthDate: string | null; sex: "male" | "female" | null; gestWeeks: number | null; gestDays: number | null };
 
@@ -33,9 +34,12 @@ export type BabyPhoto = {
 /** 월별 사진 수 (최근 달부터) */
 export async function listPhotoMonths(): Promise<{ month: string; count: number }[]> {
   const { supabase } = await requireUser();
-  const { data } = await supabase.from("baby_photos").select("taken_date").order("taken_date", { ascending: false });
+  // 1000장이 넘어도 모두 센다 (Supabase API 는 한 번에 1000줄까지만 준다)
+  const data = await readAllPages<{ taken_date: string }>((from, to) =>
+    supabase.from("baby_photos").select("taken_date").order("taken_date", { ascending: false }).order("id").range(from, to),
+  );
   const counts = new Map<string, number>();
-  for (const r of data ?? []) {
+  for (const r of data) {
     const m = (r.taken_date as string).slice(0, 7);
     counts.set(m, (counts.get(m) ?? 0) + 1);
   }
@@ -48,12 +52,16 @@ export async function listPhotosInMonth(month: string): Promise<BabyPhoto[]> {
   const { supabase } = await requireUser();
   const [y, m] = month.split("-").map(Number);
   const next = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
-  const { data } = await supabase
-    .from("baby_photos")
-    .select("id, drive_file_id, file_name, mime_type, taken_at, taken_date, date_source, thumb")
-    .gte("taken_date", `${month}-01`)
-    .lt("taken_date", next)
-    .order("taken_date", { ascending: true })
-    .order("taken_at", { ascending: true, nullsFirst: true });
-  return (data ?? []) as BabyPhoto[];
+  // 한 달에 1000장이 넘어도 모두 (Supabase API 는 한 번에 1000줄까지만 준다)
+  return readAllPages<BabyPhoto>((from, to) =>
+    supabase
+      .from("baby_photos")
+      .select("id, drive_file_id, file_name, mime_type, taken_at, taken_date, date_source, thumb")
+      .gte("taken_date", `${month}-01`)
+      .lt("taken_date", next)
+      .order("taken_date", { ascending: true })
+      .order("taken_at", { ascending: true, nullsFirst: true })
+      .order("id")
+      .range(from, to),
+  );
 }
