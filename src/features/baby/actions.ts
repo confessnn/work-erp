@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { requireUser } from "@/lib/supabase/server";
 import { createFolder, folderUsable, getFile, trashFile } from "@/features/documents/drive";
 import { failResult } from "@/features/google-drive/context";
 import { babyDriveContext, type BabyDriveContext } from "./drive";
 import { GoogleApiError } from "@/features/google-calendar/google-api";
 import { monthKey } from "./age";
+import { allowedMediaType, uploadMediaType } from "./media";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 const isDate = (d: unknown): d is string => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
@@ -48,7 +50,7 @@ async function folderFor(ctx: Ctx, key: string, parent: string, known: Map<strin
   const cached = known.get(key);
   if (cached && (await folderUsable(ctx.token, cached))) return cached;
   const id = (await createFolder(ctx.token, key, parent)).id;
-  await ctx.supabase.from("baby_folders").upsert({ user_id: ctx.ownerId, key, folder_id: id });
+  await ctx.setFolder(key, id);
   known.set(key, id);
   return id;
 }
@@ -66,25 +68,73 @@ async function dateFolders(ctx: Ctx, dates: string[]) {
 }
 
 /**
- * 업로드 준비: 브라우저용 드라이브 토큰(1시간, 앱이 만든 파일만) + 날짜별 폴더 ID.
- * 이미 올린 사진(sha1)은 알려줘서 건너뛰게 한다.
+ * 업로드 준비: 날짜별 드라이브 폴더를 만들어 두고, 이미 올린 사진(sha1)은 알려줘서 건너뛰게 한다.
+ * 드라이브 토큰은 브라우저에 주지 않는다 (그 토큰이면 서류함 등 ERP가 만든 모든 파일을 다룰 수 있음).
  */
-export async function prepareBabyUpload(input: { dates: string[]; sha1s: string[] }): Promise<
-  Result<{ token: string; folders: Record<string, string>; existing: string[] }>
-> {
+export async function prepareBabyUpload(input: { dates: string[]; sha1s: string[] }): Promise<Result<{ existing: string[] }>> {
   try {
     const dates = input.dates.filter(isDate).slice(0, 400);
     if (!dates.length) return { ok: false, error: "사진 날짜를 확인하지 못했습니다." };
     const ctx = await babyDriveContext();
-    const folders = await dateFolders(ctx, dates);
+    await dateFolders(ctx, dates);
     const sha1s = input.sha1s.filter((s) => /^[0-9a-f]{40}$/.test(s)).slice(0, 1000);
     const { data } = sha1s.length
       ? await ctx.supabase.from("baby_photos").select("sha1").in("sha1", sha1s)
       : { data: [] as { sha1: string }[] };
-    return { ok: true, token: ctx.token, folders, existing: (data ?? []).map((r) => r.sha1) };
+    return { ok: true, existing: (data ?? []).map((r) => r.sha1) };
   } catch (e) {
     return failResult(e);
   }
+}
+
+const MAX_UPLOAD = 5 * 1024 ** 3; // 5GB
+
+/**
+ * 파일 하나 올리기 시작: 서버가 드라이브에 '재개 가능 업로드'를 열고, 그 파일 하나만 올릴 수 있는 주소를 돌려준다.
+ * 브라우저는 이 주소로 파일 내용만 보낸다 (큰 동영상도 서버를 거치지 않음). 파일 종류는 사진·동영상만.
+ */
+export async function startBabyUpload(input: { date: string; name: string; mimeType: string; size: number }): Promise<
+  Result<{ uploadUrl: string; mimeType: string }>
+> {
+  try {
+    if (!isDate(input.date)) return { ok: false, error: "사진 날짜가 올바르지 않습니다." };
+    const name = String(input.name ?? "").replace(/[\u0000-\u001f]/g, "").slice(0, 200) || "photo";
+    const mimeType = uploadMediaType(input.mimeType, name);
+    if (!mimeType) return { ok: false, error: "사진·동영상 파일만 올릴 수 있습니다." };
+    if (!Number.isSafeInteger(input.size) || input.size <= 0 || input.size > MAX_UPLOAD) {
+      return { ok: false, error: "파일 크기가 올바르지 않습니다." };
+    }
+    const ctx = await babyDriveContext();
+    const { data: folder } = await ctx.supabase.from("baby_folders").select("folder_id").eq("key", input.date).maybeSingle();
+    if (!folder) return { ok: false, error: "날짜 폴더가 없습니다. 다시 시도해 주세요." };
+
+    // 브라우저가 이 주소로 직접 보내려면 업로드를 열 때 브라우저 주소(Origin)를 알려 줘야 한다 (CORS)
+    const origin = (await headers()).get("origin");
+    const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${ctx.token}`,
+        "content-type": "application/json; charset=UTF-8",
+        "x-upload-content-type": mimeType,
+        "x-upload-content-length": String(input.size),
+        ...(origin && /^https?:\/\/[^/]+$/.test(origin) ? { origin } : {}),
+      },
+      body: JSON.stringify({ name, parents: [folder.folder_id], mimeType }),
+    });
+    if (!res.ok) throw new GoogleApiError(res.status, "드라이브 업로드를 시작하지 못했습니다.");
+    const uploadUrl = res.headers.get("location");
+    if (!uploadUrl?.startsWith("https://www.googleapis.com/")) throw new Error("드라이브 업로드 주소를 받지 못했습니다.");
+    return { ok: true, uploadUrl, mimeType };
+  } catch (e) {
+    return failResult(e);
+  }
+}
+
+/** 드라이브 파일이 아기 사진 날짜 폴더 안에 있는지 (다른 드라이브 파일을 옮기거나 지우지 않도록) */
+async function inBabyFolder(ctx: Ctx, parents: string[] | undefined) {
+  if (!parents?.length) return false;
+  const { data } = await ctx.supabase.from("baby_folders").select("folder_id").in("folder_id", parents);
+  return (data ?? []).length > 0;
 }
 
 /** 브라우저가 날짜 폴더에 올린 사진을 등록 (서버가 드라이브에서 폴더 위치를 직접 확인) */
@@ -100,26 +150,27 @@ export async function registerBabyPhoto(input: {
 }): Promise<Result> {
   try {
     if (!isDate(input.takenDate) || !/^[0-9a-f]{40}$/.test(input.sha1)) return { ok: false, error: "사진 정보가 올바르지 않습니다." };
-    const { supabase } = await requireUser();
-    const { data: folder } = await supabase.from("baby_folders").select("folder_id").eq("key", input.takenDate).maybeSingle();
     const ctx = await babyDriveContext();
+    const { data: folder } = await ctx.supabase.from("baby_folders").select("folder_id").eq("key", input.takenDate).maybeSingle();
     const f = await getFile(ctx.token, input.driveFileId);
     if (!folder || !f.parents?.includes(folder.folder_id)) return { ok: false, error: "날짜 폴더에 올라간 사진이 아닙니다." };
+    const mime = allowedMediaType(f.mimeType);
+    if (!mime) return { ok: false, error: "사진·동영상 파일만 등록할 수 있습니다." };
 
     const thumb = input.thumb?.startsWith("data:image/jpeg;base64,") && input.thumb.length < 120_000 ? input.thumb : null;
-    const { error } = await supabase.from("baby_photos").insert({
-      user_id: ctx.ownerId,
+    const num = (n: number | null) => (Number.isSafeInteger(n) && (n as number) > 0 && (n as number) < 100_000 ? n : null);
+    const { error } = await ctx.addPhoto({
       drive_file_id: f.id,
       file_name: f.name,
-      mime_type: f.mimeType,
+      mime_type: mime,
       size_bytes: f.size ? Number(f.size) : null,
       sha1: input.sha1,
       taken_at: input.takenAt,
       taken_date: input.takenDate,
       date_source: ["exif", "file", "manual"].includes(input.dateSource) ? input.dateSource : "file",
       thumb,
-      width: input.width,
-      height: input.height,
+      width: num(input.width),
+      height: num(input.height),
     });
     if (error) {
       // 같은 사진이 동시에 올라간 경우: 방금 올린 드라이브 파일은 치운다
@@ -146,8 +197,9 @@ export async function changePhotoDate(id: string, newDate: string): Promise<Resu
     const ctx = await babyDriveContext();
     const { data: p } = await ctx.supabase.from("baby_photos").select("drive_file_id, taken_date").eq("id", id).single();
     if (!p) return { ok: false, error: "사진을 찾지 못했습니다." };
-    const folders = await dateFolders(ctx, [newDate]);
     const f = await getFile(ctx.token, p.drive_file_id);
+    if (!(await inBabyFolder(ctx, f.parents))) return { ok: false, error: "아기 사진 폴더에 있는 파일이 아닙니다." };
+    const folders = await dateFolders(ctx, [newDate]);
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(p.drive_file_id)}?addParents=${folders[newDate]}&removeParents=${(f.parents ?? []).join(",")}&fields=id`,
       { method: "PATCH", headers: { authorization: `Bearer ${ctx.token}`, "content-type": "application/json" }, body: "{}" },
@@ -166,7 +218,13 @@ export async function deleteBabyPhoto(id: string): Promise<Result> {
   try {
     const ctx = await babyDriveContext();
     const { data: p } = await ctx.supabase.from("baby_photos").select("drive_file_id").eq("id", id).single();
-    if (p) await trashFile(ctx.token, p.drive_file_id);
+    if (p) {
+      const f = await getFile(ctx.token, p.drive_file_id).catch((e) => {
+        if (e instanceof GoogleApiError && e.status === 404) return null; // 드라이브에서 이미 지워짐
+        throw e;
+      });
+      if (f && (await inBabyFolder(ctx, f.parents))) await trashFile(ctx.token, f.id);
+    }
     await ctx.supabase.from("baby_photos").delete().eq("id", id);
     revalidatePath("/baby");
     return { ok: true };

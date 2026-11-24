@@ -5,6 +5,45 @@ import { accessToken, DRIVE_SCOPE, hasScope } from "@/features/google-calendar/g
 import { driveContext } from "@/features/google-drive/context";
 import { getFamilyRole } from "@/features/family/queries";
 
+type Db = Awaited<ReturnType<typeof requireUser>>["supabase"];
+
+export type BabyPhotoRow = {
+  drive_file_id: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number | null;
+  sha1: string;
+  taken_at: string | null;
+  taken_date: string;
+  date_source: "exif" | "file" | "manual";
+  thumb: string | null;
+  width: number | null;
+  height: number | null;
+};
+
+/**
+ * 드라이브 파일 ID·폴더 ID 는 서버만 쓴다 (브라우저가 공개 키로 직접 쓰면 다른 드라이브 파일을 가리킬 수 있음).
+ * 서버 비밀값으로 잠근 DB 함수를 부르고, 사진·폴더는 늘 가족을 만든 사람 것으로 저장된다.
+ */
+function serverWrites(supabase: Db, secret: string) {
+  return {
+    async addPhoto(row: BabyPhotoRow) {
+      const p = Object.fromEntries(Object.entries(row).map(([k, v]) => [`p_${k}`, v]));
+      return supabase.rpc("baby_photo_add", { p_secret: secret, ...p });
+    },
+    async setFolder(key: string, folderId: string) {
+      const { error } = await supabase.rpc("baby_folder_set", { p_secret: secret, p_key: key, p_folder_id: folderId });
+      if (error) throw new Error(`날짜 폴더를 기록하지 못했습니다: ${error.message}`);
+    },
+  };
+}
+
+function serverSecret() {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) throw new Error("서버 설정(CRON_SECRET)이 없어 사진을 올릴 수 없습니다.");
+  return secret;
+}
+
 /**
  * 아기 사진용 드라이브. 사진은 늘 가족을 만든 사람(사장님)의 드라이브·기록에 저장한다.
  * - 만든 사람: 평소 드라이브 연결 그대로
@@ -15,6 +54,7 @@ export async function babyDriveContext() {
   if (role.role === "owner") {
     const c = await driveContext();
     return {
+      ...serverWrites(c.supabase, serverSecret()),
       supabase: c.supabase,
       ownerId: c.userId,
       isOwner: true,
@@ -30,8 +70,7 @@ export async function babyDriveContext() {
   }
 
   const { supabase } = await requireUser();
-  const secret = process.env.CRON_SECRET;
-  if (!secret) throw new Error("서버 설정(CRON_SECRET)이 없어 사진을 올릴 수 없습니다.");
+  const secret = serverSecret();
   const { data, error } = await supabase.rpc("family_owner_drive", { p_secret: secret });
   if (error) throw new Error(error.message);
   const conn = (data ?? [])[0] as
@@ -42,6 +81,7 @@ export async function babyDriveContext() {
   }
   const { token } = await accessToken(decryptSecret(conn.refresh_token_enc), [DRIVE_SCOPE]);
   return {
+    ...serverWrites(supabase, secret),
     supabase,
     ownerId: conn.owner_id,
     isOwner: false,
