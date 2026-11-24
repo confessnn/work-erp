@@ -7,11 +7,11 @@ import { groupSeries } from "@/features/records/series";
 import { todayInSeoul } from "@/lib/format";
 import { requireUser } from "@/lib/supabase/server";
 import { brainContext } from "./context";
-import { createFolder, createTextFile, downloadText, folderAlive, FOLDER_MIME, getItem, listChildren, listVaultNotes, mapLimit, updateTextFile } from "./drive";
+import { createFolder, createTextFile, downloadText, folderAlive, FOLDER_MIME, getItem, listChildren, listVaultNotes, mapLimit, trashFile, updateTextFile } from "./drive";
 import { planExport, type ExportPlan } from "./export";
 import { MAX_NOTE_CHARS, planSync, syncSummary } from "./sync";
 import { planTodoNotes, TODO_FOLDER, type TodoRow } from "./todo-notes";
-import { memoNote } from "./memo";
+import { editMemo, isErpMemo, memoNote } from "./memo";
 import { EXPORT_FOLDER, PARA_FOLDERS, parseNote, sectionOf } from "./vault";
 
 /** 세컨드브레인 서버 작업 (동기화·내보내기). Server Action 과 다른 기능의 after() 에서 같이 쓴다 */
@@ -46,7 +46,7 @@ export async function syncVault(ctx: BrainCtx, vaultId: string): Promise<string>
   return summary;
 }
 
-function noteRow(userId: string, fileId: string, path: string, content: string, modifiedTime: string) {
+export function noteRow(userId: string, fileId: string, path: string, content: string, modifiedTime: string) {
   const p = parseNote(path, content);
   return {
     user_id: userId,
@@ -188,35 +188,87 @@ export async function saveMemo(ctx: BrainCtx, text: string, title?: string): Pro
   const { supabase, userId, token, settings } = ctx;
   const memo = memoNote(text, new Date(), title);
   if (!memo) throw new Error("메모를 적어 주세요.");
-  const vaultId = settings!.vault_folder_id;
-  const writable = (e: unknown) => !(e instanceof GoogleApiError && (e.status === 403 || e.status === 404));
+  const r = await writeMemoFile(token, settings!.vault_folder_id, memo, () => ensureExportFolder(ctx));
+  if (!r.path) return { id: "", path: "" }; // 볼트 밖: 폴더를 옮기면 동기화로 들어온다
 
-  let up: { id: string; modifiedTime: string } | null = null;
-  let path = "";
+  const { data, error } = await supabase
+    .from("brain_notes")
+    .upsert(noteRow(userId, r.up.id, r.path, memo.content, r.up.modifiedTime), { onConflict: "user_id,drive_file_id" })
+    .select("id")
+    .single();
+  if (error) throw new Error(`메모는 드라이브에 저장했지만 ERP에 보이게 하지 못했어요. '동기화'를 눌러 주세요. (${error.message})`);
+  return { id: data.id as string, path: r.path };
+}
+
+/**
+ * 메모 파일 올리기 (로그인 세션이 없는 텔레그램 웹훅도 쓴다).
+ * Inbox → (없으면) '0 Inbox' 만들기 → (ERP가 못 쓰는 볼트면) fallback 폴더 안 '메모'.
+ * path: 볼트 안 경로, 볼트 밖에 저장했으면 null
+ */
+export async function writeMemoFile(
+  token: string,
+  vaultId: string,
+  memo: { fileName: string; content: string },
+  fallback: () => Promise<{ folderId: string; vaultPath: string | null } | null>,
+): Promise<{ up: { id: string; modifiedTime: string }; path: string | null }> {
+  const cannotWrite = (e: unknown) => e instanceof GoogleApiError && (e.status === 403 || e.status === 404);
   const children = await listChildren(token, vaultId);
   const inbox = children.find((c) => c.mimeType === FOLDER_MIME && sectionOf(`${c.name}/x.md`) === "inbox");
   try {
     const folder = inbox ?? { ...(await createFolder(token, PARA_FOLDERS[0], vaultId)), name: PARA_FOLDERS[0] };
-    up = await createTextFile(token, folder.id, memo.fileName, memo.content);
-    path = `${folder.name}/${memo.fileName}`;
+    const up = await createTextFile(token, folder.id, memo.fileName, memo.content);
+    return { up, path: `${folder.name}/${memo.fileName}` };
   } catch (e) {
-    if (writable(e)) throw e;
+    if (!cannotWrite(e)) throw e;
   }
-  if (!up) {
-    const exp = await ensureExportFolder(ctx);
-    const sub = await ensureSubfolder(token, exp.folderId, MEMO_FALLBACK_FOLDER);
-    up = await createTextFile(token, sub.id, memo.fileName, memo.content);
-    if (exp.vaultPath === null) return { id: "", path: "" }; // 볼트 밖: 폴더를 옮기면 동기화로 들어온다
-    path = [exp.vaultPath, MEMO_FALLBACK_FOLDER, memo.fileName].filter(Boolean).join("/");
-  }
+  const exp = await fallback();
+  if (!exp) throw new Error("볼트에 메모를 넣을 수 없어요. ERP 세컨드브레인 화면에서 메모를 한 번 저장해 주세요.");
+  const sub = await ensureSubfolder(token, exp.folderId, MEMO_FALLBACK_FOLDER);
+  const up = await createTextFile(token, sub.id, memo.fileName, memo.content);
+  return { up, path: exp.vaultPath === null ? null : [exp.vaultPath, MEMO_FALLBACK_FOLDER, memo.fileName].filter(Boolean).join("/") };
+}
 
-  const { data, error } = await supabase
-    .from("brain_notes")
-    .upsert(noteRow(userId, up.id, path, memo.content, up.modifiedTime), { onConflict: "user_id,drive_file_id" })
-    .select("id")
-    .single();
-  if (error) throw new Error(`메모는 드라이브에 저장했지만 ERP에 보이게 하지 못했어요. '동기화'를 눌러 주세요. (${error.message})`);
-  return { id: data.id as string, path };
+/** 텔레그램용 대체 폴더: 저장해 둔 'ERP 기록' 폴더가 살아 있으면 (새로 만들지는 않는다) */
+export async function savedExportFolder(token: string, vaultId: string, exportFolderId: string | null) {
+  if (!exportFolderId || !(await folderAlive(token, exportFolderId))) return null;
+  return { folderId: exportFolderId, vaultPath: await pathInVault(token, exportFolderId, vaultId) };
+}
+
+/** 메모 고치기: 드라이브 파일 내용을 바꾸고 ERP 사본도 고친다. ERP가 만든 메모만 */
+export async function editMemoNote(ctx: BrainCtx, noteId: string, body: string): Promise<void> {
+  const { supabase, userId, token } = ctx;
+  const note = await memoRow(ctx, noteId);
+  const content = editMemo(note.content, body, new Date());
+  if (!content) throw new Error("내용을 적어 주세요. 메모를 없애려면 '지우기'를 눌러 주세요.");
+  const fileName = note.path.split("/").pop()!;
+  let up;
+  try {
+    up = await updateTextFile(token, note.drive_file_id, fileName, content);
+  } catch (e) {
+    if (e instanceof GoogleApiError && e.status === 404) {
+      await supabase.from("brain_notes").delete().eq("id", noteId);
+      throw new Error("드라이브에서 이미 지워진 메모예요. 목록에서 뺐어요.");
+    }
+    throw e;
+  }
+  const { error } = await supabase.from("brain_notes").update(noteRow(userId, note.drive_file_id, note.path, content, up.modifiedTime)).eq("id", noteId);
+  if (error) throw new Error(error.message);
+}
+
+/** 메모 지우기: 드라이브 휴지통으로 옮기고(30일 안에 되살릴 수 있음) ERP 사본을 지운다. ERP가 만든 메모만 */
+export async function deleteMemoNote(ctx: BrainCtx, noteId: string): Promise<void> {
+  const note = await memoRow(ctx, noteId);
+  await trashFile(ctx.token, note.drive_file_id);
+  const { error } = await ctx.supabase.from("brain_notes").delete().eq("id", noteId);
+  if (error) throw new Error(error.message);
+}
+
+async function memoRow(ctx: BrainCtx, noteId: string) {
+  const { data, error } = await ctx.supabase.from("brain_notes").select("drive_file_id, path, content").eq("id", noteId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("메모를 찾지 못했어요.");
+  if (!isErpMemo(data.content as string)) throw new Error("ERP에서 만든 메모만 여기서 고치거나 지울 수 있어요.");
+  return data as { drive_file_id: string; path: string; content: string };
 }
 
 /** 일정 기록 → 'ERP 기록/<일 이름>.md' */
