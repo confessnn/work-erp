@@ -8,7 +8,9 @@ import type { GoogleEvent, GoogleStart } from "./event";
 export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
 /** 드라이브: 이 앱이 만든(올린) 파일만 접근 */
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
-export const GOOGLE_SCOPES = ["openid", "email", CALENDAR_SCOPE, DRIVE_SCOPE];
+/** 드라이브 읽기 전용: 세컨드브레인(옵시디언 볼트)처럼 ERP가 만들지 않은 노트를 읽을 때만 쓴다 */
+export const DRIVE_READ_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+export const GOOGLE_SCOPES = ["openid", "email", CALENDAR_SCOPE, DRIVE_SCOPE, DRIVE_READ_SCOPE];
 export const ERP_CALENDAR_NAME = "강의 일정(ERP)";
 
 const API = "https://www.googleapis.com/calendar/v3";
