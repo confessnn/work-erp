@@ -5,6 +5,7 @@ import { sendChunks } from "@/features/telegram/api";
 import { todayInSeoul } from "@/lib/format";
 import { summarizeNotice } from "@/features/bid-inbox/summarize";
 import { isCronRequest } from "@/lib/cron-auth";
+import { backupProblem, type BackupStatus } from "@/features/backup/backup";
 
 export const maxDuration = 300;
 
@@ -52,12 +53,12 @@ async function sendTelegram(db: SupabaseClient, secret: string, user: string, ch
 }
 
 /**
- * 아침 '오늘 할 일': 오늘·내일 일정과 아직 알리지 않은 공고, 수신 문제를 매일 보낸다.
+ * 아침 '오늘 할 일': 오늘·내일 일정과 아직 알리지 않은 공고, 수신·백업 문제를 매일 보낸다.
  * 텔레그램이 연결돼 있으면 텔레그램으로, 연결이 없거나 실패하면 메일로 보낸다.
  */
 async function mailDigest(db: SupabaseClient, secret: string, user: string, summaryProblem: string | null) {
   const today = todayInSeoul();
-  const [notices, status, agenda, todoRows, sharedRows, babyRows] = await Promise.all([
+  const [notices, status, agenda, todoRows, sharedRows, babyRows, backup] = await Promise.all([
     db.rpc("cron_digest_notices", { p_secret: secret, p_user: user }),
     db.rpc("cron_bid_status", { p_secret: secret, p_user: user }),
     db.rpc("cron_morning_agenda", { p_secret: secret, p_user: user, p_from: today, p_to: nextDay(today) }),
@@ -66,6 +67,8 @@ async function mailDigest(db: SupabaseClient, secret: string, user: string, summ
     db.rpc("cron_morning_shared_todos", { p_secret: secret, p_user: user, p_day: today }),
     // 아기 할 일 (부부 공용)
     db.rpc("cron_morning_baby_todos", { p_secret: secret, p_user: user, p_day: today }),
+    // 새벽 백업이 실패했거나 오래 밀렸으면 맨 위에 알린다
+    db.rpc("cron_backup_status", { p_secret: secret, p_user: user }),
   ]);
   if (notices.error) throw new Error(notices.error.message);
   if (status.error) throw new Error(status.error.message);
@@ -78,6 +81,7 @@ async function mailDigest(db: SupabaseClient, secret: string, user: string, summ
     // 일정을 못 읽어도 공고 메일은 보낸다
     agenda.error ? `일정을 읽지 못했습니다: ${agenda.error.message}` : null,
     todoRows.error ? `할 일을 읽지 못했습니다: ${todoRows.error.message}` : null,
+    backup.error ? `백업 상태를 읽지 못했습니다: ${backup.error.message}` : backupProblem(((backup.data ?? []) as BackupStatus[])[0] ?? null, new Date()),
   ].flatMap((p) => (p ? [p] : []));
   const items = (agenda.data ?? []) as AgendaItem[];
   // 공유받은 할 일은 못 읽어도 아침 알림은 보낸다
