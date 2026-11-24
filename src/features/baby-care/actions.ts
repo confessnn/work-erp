@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
-import { fromLocalInput, KINDS, POO_COLORS, TIMED_KINDS, type CareKind } from "./care";
+import { fromLocalInput, KINDS, POO_COLORS, SUPPLEMENT_KINDS, SUPPLEMENTS, TIMED_KINDS, type CareKind } from "./care";
 
 type Result = { ok: true } | { ok: false; message: string };
 
@@ -16,6 +16,7 @@ export type CareInput = {
   side?: string | null;
   diaper?: string | null;
   poo_color?: string | null;
+  supplements?: string[] | null;
   label?: string | null;
   note?: string | null;
 };
@@ -53,6 +54,8 @@ function toRow(input: CareInput) {
       input.kind === "diaper" && ["poo", "both"].includes(String(input.diaper)) && POO_COLORS.some((c) => c.key === input.poo_color)
         ? input.poo_color
         : null,
+    // 철분제·유산균은 분유·유축수유에만
+    supplements: SUPPLEMENT_KINDS.includes(input.kind) ? SUPPLEMENTS.map((s) => s.key).filter((k) => input.supplements?.includes(k)) : [],
     label: ["medicine", "solid", "hospital", "other", "bath"].includes(input.kind) ? text(input.label, 100) : null,
     note: text(input.note, 1000),
   };
