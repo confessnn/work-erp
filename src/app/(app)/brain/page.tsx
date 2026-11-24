@@ -75,15 +75,17 @@ export default async function BrainPage({ searchParams }: PageProps<"/brain">) {
         </div>
       </div>
 
-      <section className="card space-y-2">
+      <section className="card space-y-3">
         <p className="text-sm">
           볼트 <b>{settings.vault_name}</b> · 노트 {all.length}개
           {settings.last_synced_at && <span className="text-muted"> · {when(settings.last_synced_at)} 동기화 ({settings.last_sync_result})</span>}
         </p>
         {todayTodos && (
-          <Link href={`/brain/note/${todayTodos.id}`} className="chip text-sm">
-            오늘 할 일 노트
-          </Link>
+          <div>
+            <Link href={`/brain/note/${todayTodos.id}`} className="chip inline-block text-sm">
+              오늘 할 일 노트 →
+            </Link>
+          </div>
         )}
         <BrainSyncButtons />
         <p className="text-xs text-muted">
