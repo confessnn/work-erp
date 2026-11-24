@@ -104,17 +104,18 @@ function multipart(meta: Record<string, unknown>, content: string) {
   return { body, headers: { "content-type": `multipart/related; boundary=${boundary}` } };
 }
 
-/** .md 파일 만들기 → 파일 ID */
-export async function createTextFile(token: string, parent: string, name: string, content: string): Promise<string> {
+export type Uploaded = { id: string; modifiedTime: string };
+
+/** .md 파일 만들기 */
+export function createTextFile(token: string, parent: string, name: string, content: string): Promise<Uploaded> {
   const m = multipart({ name, parents: [parent], mimeType: "text/markdown" }, content);
-  const r = await call<{ id: string }>(token, `${UPLOAD}/files?uploadType=multipart&fields=id`, { method: "POST", ...m });
-  return r.id;
+  return call<Uploaded>(token, `${UPLOAD}/files?uploadType=multipart&fields=id,modifiedTime`, { method: "POST", ...m });
 }
 
 /** .md 파일 내용(과 이름) 바꾸기 */
-export async function updateTextFile(token: string, id: string, name: string, content: string): Promise<void> {
+export function updateTextFile(token: string, id: string, name: string, content: string): Promise<Uploaded> {
   const m = multipart({ name }, content);
-  await call(token, `${UPLOAD}/files/${encodeURIComponent(id)}?uploadType=multipart&fields=id`, { method: "PATCH", ...m });
+  return call<Uploaded>(token, `${UPLOAD}/files/${encodeURIComponent(id)}?uploadType=multipart&fields=id,modifiedTime`, { method: "PATCH", ...m });
 }
 
 /** 폴더가 아직 쓸 수 있는지 (지웠거나 권한이 없으면 false) */
