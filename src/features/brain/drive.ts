@@ -72,9 +72,9 @@ export async function listVaultNotes(token: string, rootId: string): Promise<{ i
 }
 
 export function getItem(token: string, id: string) {
-  return call<{ id: string; name: string; mimeType: string; trashed?: boolean; parents?: string[] }>(
+  return call<{ id: string; name: string; mimeType: string; trashed?: boolean; parents?: string[]; modifiedTime?: string }>(
     token,
-    `${API}/files/${encodeURIComponent(id)}?fields=id,name,mimeType,trashed,parents`,
+    `${API}/files/${encodeURIComponent(id)}?fields=id,name,mimeType,trashed,parents,modifiedTime`,
   );
 }
 
@@ -104,7 +104,7 @@ function multipart(meta: Record<string, unknown>, content: string) {
   return { body, headers: { "content-type": `multipart/related; boundary=${boundary}` } };
 }
 
-export type Uploaded = { id: string; modifiedTime: string };
+export type Uploaded = { id: string; modifiedTime: string; trashed?: boolean };
 
 /** .md 파일 만들기 */
 export function createTextFile(token: string, parent: string, name: string, content: string): Promise<Uploaded> {
@@ -112,10 +112,10 @@ export function createTextFile(token: string, parent: string, name: string, cont
   return call<Uploaded>(token, `${UPLOAD}/files?uploadType=multipart&fields=id,modifiedTime`, { method: "POST", ...m });
 }
 
-/** .md 파일 내용(과 이름) 바꾸기 */
+/** .md 파일 내용(과 이름) 바꾸기. 휴지통에 있는 파일도 바뀌므로 trashed 를 같이 받는다 */
 export function updateTextFile(token: string, id: string, name: string, content: string): Promise<Uploaded> {
   const m = multipart({ name }, content);
-  return call<Uploaded>(token, `${UPLOAD}/files/${encodeURIComponent(id)}?uploadType=multipart&fields=id,modifiedTime`, { method: "PATCH", ...m });
+  return call<Uploaded>(token, `${UPLOAD}/files/${encodeURIComponent(id)}?uploadType=multipart&fields=id,modifiedTime,trashed`, { method: "PATCH", ...m });
 }
 
 /** 폴더가 아직 쓸 수 있는지 (지웠거나 권한이 없으면 false) */
@@ -146,15 +146,25 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) =>
 }
 
 /** 휴지통으로 (드라이브에서 30일 안에 되살릴 수 있다). 이미 없으면 그냥 넘어간다 */
+/**
+ * 휴지통으로 옮기기. 404 는 그대로 던진다: drive.file 권한에서는 ERP가 만들지 않은 파일도 404 라서
+ * '이미 없음'과 '고칠 권한 없음'을 부르는 쪽이 구분해야 한다.
+ */
 export async function trashFile(token: string, id: string): Promise<void> {
+  await call(token, `${API}/files/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ trashed: true }),
+  });
+}
+
+/** 파일이 드라이브에 살아 있으면 그 정보 (읽기 권한으로 본다). 지웠거나 휴지통이면 null */
+export async function liveFile(token: string, id: string) {
   try {
-    await call(token, `${API}/files/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ trashed: true }),
-    });
+    const f = await getItem(token, id);
+    return f.trashed ? null : f;
   } catch (e) {
-    if (e instanceof GoogleApiError && e.status === 404) return;
+    if (e instanceof GoogleApiError && e.status === 404) return null;
     throw e;
   }
 }
