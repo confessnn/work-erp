@@ -15,6 +15,7 @@ export const NAV: NavItem[] = [
   { href: "/tools", label: "수업도구" },
   { href: "/share-settings", label: "공유" },
   { href: "/integrations", label: "연동" },
+  { href: "/brain", label: "세컨드브레인" },
 ];
 
 /** 초대받은 가족 계정의 메뉴 */
