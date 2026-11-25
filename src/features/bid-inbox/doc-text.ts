@@ -1,6 +1,7 @@
 import { inflateRawSync } from "node:zlib";
 import CFB from "cfb";
 import { strFromU8, unzipSync } from "fflate";
+import { parse } from "kordoc";
 
 export type DocKind = "pdf" | "hwpx" | "hwp" | "unknown";
 
@@ -83,4 +84,24 @@ export function hwpText(bytes: Uint8Array): string {
     }
   }
   return paragraphs.join("\n");
+}
+
+/** 첨부 끝에 붙는 그림 자리표시. AI에게 보낼 필요가 없다 */
+const IMAGE_REF = /^!\[[^\]]*\]\([^)]*\)\s*$/gm;
+
+/**
+ * 한글 문서(HWP·HWPX) → 표가 살아 있는 Markdown (kordoc).
+ * kordoc이 실패하거나 빈 결과를 내면 글자만 뽑는 기존 방식으로 읽는다.
+ */
+export async function hwpMarkdown(bytes: Uint8Array, kind: "hwp" | "hwpx"): Promise<string> {
+  try {
+    const result = await parse(bytes.slice().buffer, { ocr: false });
+    if (result.success) {
+      const markdown = result.markdown.replace(IMAGE_REF, "").replace(/\n{3,}/g, "\n\n").trim();
+      if (markdown) return markdown;
+    }
+  } catch {
+    // 아래 기존 방식으로 읽는다
+  }
+  return kind === "hwpx" ? hwpxText(bytes) : hwpText(bytes);
 }

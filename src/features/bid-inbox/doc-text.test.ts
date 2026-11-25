@@ -2,7 +2,7 @@ import { deflateRawSync } from "node:zlib";
 import CFB from "cfb";
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { docKind, hwpText, hwpxText } from "./doc-text";
+import { docKind, hwpMarkdown, hwpText, hwpxText } from "./doc-text";
 
 /** HWP 레코드: 머리글(태그·크기) + 내용 */
 function record(tag: number, body: Buffer) {
@@ -57,5 +57,13 @@ describe("docKind", () => {
     expect(docKind(zipSync({ a: strToU8("b") }))).toBe("hwpx");
     expect(docKind(makeHwp([]))).toBe("hwp");
     expect(docKind(strToU8("<html>"))).toBe("unknown");
+  });
+});
+
+describe("hwpMarkdown", () => {
+  it("kordoc이 읽지 못하는 문서는 기존 방식으로 읽는다", async () => {
+    // 최소 구성 HWP(DocInfo 없음)는 kordoc이 거부하므로 글자만 뽑는 방식으로 넘어가야 한다
+    const hwp = makeHwp([Buffer.from("입찰 공고", "utf16le")]);
+    expect(await hwpMarkdown(hwp, "hwp")).toBe("입찰 공고");
   });
 });

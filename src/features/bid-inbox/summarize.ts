@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { fetchNoticeFiles, pickDocs } from "./attachments";
-import { docKind, hwpText, hwpxText } from "./doc-text";
+import { docKind, hwpMarkdown } from "./doc-text";
 import type { BidFile } from "./types";
 
 const MODEL = "claude-opus-5-5";
@@ -41,14 +41,14 @@ async function toContent(docs: BidFile[]) {
   const seen = new Set<string>();
   let pdfBytes = 0;
 
-  docs.forEach((doc, i) => {
+  for (const [i, doc] of docs.entries()) {
     const got = downloads[i];
     try {
       if (got.status === "rejected") throw got.reason;
       const bytes = got.value;
       // 같은 문서가 이름만 달리 두 번 올라오는 공고가 있다
       const hash = createHash("sha256").update(bytes).digest("hex");
-      if (seen.has(hash)) return;
+      if (seen.has(hash)) continue;
       seen.add(hash);
 
       const kind = docKind(bytes);
@@ -62,7 +62,7 @@ async function toContent(docs: BidFile[]) {
         });
       } else {
         if (kind === "unknown") throw new Error("지원하지 않는 형식");
-        const body = kind === "hwpx" ? hwpxText(bytes) : hwpText(bytes);
+        const body = await hwpMarkdown(bytes, kind);
         if (!body.trim()) throw new Error("본문을 읽을 수 없음 (배포용 문서일 수 있음)");
         content.push({ type: "text", text: `<document name="${doc.name}">\n${body}\n</document>` });
       }
@@ -70,7 +70,7 @@ async function toContent(docs: BidFile[]) {
     } catch (e) {
       unread.push(`${doc.name} (${e instanceof Error ? e.message : "오류"})`);
     }
-  });
+  }
   return { content, read, unread };
 }
 
