@@ -115,15 +115,27 @@ export default async function ShareSettingsPage() {
               <button type="submit" className="text-sm text-danger hover:underline">주소 삭제</button>
             </form>
           </div>
-          <CopyField label="위젯에 붙여넣을 주소" value={`${origin}/api/widget/${w.token}`} />
-          <details className="text-sm">
-            <summary className="cursor-pointer font-medium">홈 화면에 올리는 방법</summary>
-            <div className="mt-2 space-y-2 text-muted">
-              <p>① 휴대폰에서 <b>{origin}/downloads/work-erp-widget.apk</b> 를 열어 설치합니다 (출처를 모르는 앱 설치 허용이 한 번 필요합니다).</p>
-              <p>② 홈 화면을 길게 눌러 <b>위젯</b> → <b>ERP 달력</b> 을 홈 화면에 끌어다 놓습니다.</p>
-              <p>③ 위젯을 놓으면 주소를 묻습니다. 위 주소를 붙여넣고 저장하면 일정이 그려집니다.</p>
-            </div>
-          </details>
+          <ol className="space-y-3 text-sm">
+            <li>
+              <p className="font-medium">① 앱 설치</p>
+              <a href="/downloads/work-erp-widget.apk" download className="btn-primary mt-1.5">위젯 앱 내려받기</a>
+              <p className="mt-1.5 text-xs text-muted">
+                받은 파일을 열면 설치됩니다. 안드로이드가 &apos;출처를 알 수 없는 앱&apos; 설치를 한 번 물어보면 허용해 주세요. 아이폰에서는 쓸 수 없습니다.
+              </p>
+            </li>
+            <li>
+              <p className="font-medium">② 홈 화면에 위젯 올리기</p>
+              <p className="mt-1 text-xs text-muted">홈 화면 빈 곳을 길게 누르기 → <b>위젯</b> → <b>ERP 달력</b> → 홈 화면으로 끌어다 놓기.</p>
+            </li>
+            <li>
+              <p className="font-medium">③ 아래 주소를 복사해 위젯에 붙여넣기</p>
+              <p className="mt-1 text-xs text-muted">
+                위젯을 놓으면 주소를 묻는 화면이 뜹니다. <b>복사</b> 를 눌러 붙여넣으세요.
+                이 주소는 눌러서 여는 곳이 아니라 위젯이 읽어 가는 자료라, 브라우저로 열면 글자만 잔뜩 나옵니다.
+              </p>
+            </li>
+          </ol>
+          <CopyField label="위젯에 붙여넣을 주소 (눌러서 열지 말고 복사하세요)" value={`${origin}/api/widget/${w.token}`} />
         </section>
       ))}
 
