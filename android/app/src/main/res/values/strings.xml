@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ERP 달력</string>
+    <string name="widget_label">ERP 달력</string>
+    <string name="widget_description">강의·가족 일정을 홈 화면 달력으로 봅니다.</string>
+    <string name="config_title">위젯 주소 붙여넣기</string>
+    <string name="config_hint">https://…/api/widget/…</string>
+    <string name="config_help">ERP 웹의 공유 화면 → 안드로이드 홈 화면 위젯에서 주소를 복사해 붙여넣으세요.</string>
+    <string name="config_save">저장</string>
+    <string name="config_bad_url">주소가 올바르지 않습니다. /api/widget/ 로 끝나는 https 주소여야 합니다.</string>
+    <string name="prev_month">이전 달</string>
+    <string name="next_month">다음 달</string>
+    <string name="refresh">새로고침</string>
+</resources>

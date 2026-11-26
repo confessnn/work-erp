@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 일정 한 건 (제목만, 한 줄). 색은 강의/사람에 따라 코드에서 바꾼다 -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/chip_text"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="1dp"
+    android:paddingStart="3dp"
+    android:paddingEnd="3dp"
+    android:paddingTop="1dp"
+    android:paddingBottom="1dp"
+    android:maxLines="1"
+    android:ellipsize="end"
+    android:textSize="9sp"
+    android:textColor="@color/chip_fg"
+    android:background="@drawable/chip_lecture" />

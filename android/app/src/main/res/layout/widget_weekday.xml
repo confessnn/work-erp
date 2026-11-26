@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 요일 머리글 한 칸 (일~토) -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/weekday_text"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:gravity="center"
+    android:paddingBottom="3dp"
+    android:textSize="11sp"
+    android:textColor="@color/muted" />
