@@ -3,6 +3,7 @@
 // 그 범위에는 금액 칸이 아예 없다 (강의는 DB 함수 family_lecture_schedule가 제목·시간만 준다).
 // 색·사람 이름은 가족 달력과 같은 곳(features/family/types.ts)에서 가져온다.
 
+import { monthRange } from "@/features/family/form";
 import { LECTURE_CLS, personOf, type FamilyEvent, type FamilyLecture } from "@/features/family/types";
 
 /** 위젯 달력 한 칸에 들어가는 일정 한 건 */
@@ -62,6 +63,15 @@ export function groupByDate(items: WidgetItem[]): Map<string, WidgetItem[]> {
   return out;
 }
 
+/**
+ * 커버 화면 아래 '이달 남은 일정' 목록. 고른 날 뒤, 보고 있는 달 안의 일정만.
+ * (주간 띠 때문에 앞뒤 달 며칠도 같이 받아 오므로, 이 목록에서는 그달로 다시 좁힌다)
+ */
+export function restOfMonth(items: WidgetItem[], selected: string, year: number, month: number): WidgetItem[] {
+  const prefix = `${year}-${String(month).padStart(2, "0")}-`;
+  return items.filter((it) => it.date > selected && it.date.startsWith(prefix));
+}
+
 /** "2026-11-26" + 3 → "2026-11-29" (달·해를 넘어가도 맞게) */
 export function addDays(date: string, n: number): string {
   const [y, m, d] = date.split("-").map(Number);
@@ -73,6 +83,16 @@ export function weekOf(date: string): string[] {
   const [y, m, d] = date.split("-").map(Number);
   const wd = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   return Array.from({ length: 7 }, (_, i) => addDays(date, i - wd));
+}
+
+/**
+ * 위젯이 가져올 기간 [start, next). 그달에 겹치는 주를 통째로 (1일이 든 주의 일요일 ~ 말일이 든 주의 토요일).
+ * 커버 화면 주간 띠는 달을 걸치므로, 그달만 가져오면 월 경계 날짜에 일정 점이 찍히지 않는다.
+ */
+export function widgetRange(year: number, month: number): { start: string; next: string } {
+  const { start, next } = monthRange(year, month);
+  const week = weekOf(addDays(next, -1));
+  return { start: weekOf(start)[0], next: addDays(week[6], 1) };
 }
 
 /** 날짜의 연·월 */

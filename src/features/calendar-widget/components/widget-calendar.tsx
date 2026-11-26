@@ -6,7 +6,7 @@ import { useState } from "react";
 import { monthGrid } from "@/features/lectures/month-grid";
 import { dateLabel, timeLabel } from "@/lib/format";
 import { shortHoliday, type Holidays } from "@/lib/holiday-label";
-import { addDays, groupByDate, weekOf, yearMonthOf, type WidgetItem } from "../items";
+import { addDays, groupByDate, restOfMonth, weekOf, yearMonthOf, type WidgetItem } from "../items";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -65,7 +65,8 @@ export function WidgetCalendar({
   const monthHref = (p: { y: number; m: number }) => `/calendar/widget?y=${p.y}&m=${p.m}`;
   const dayItems = byDate.get(selected) ?? [];
   // 커버 화면은 길쭉해서 고른 날 아래가 남는다. 그 자리에 이달 남은 일정을 이어 보여 준다
-  const rest = items.filter((it) => it.date > selected);
+  // (주간 띠 때문에 앞뒤 달 며칠도 받아 오지만, 이 목록은 보고 있는 달만)
+  const rest = restOfMonth(items, selected, year, month);
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-bg pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)]">

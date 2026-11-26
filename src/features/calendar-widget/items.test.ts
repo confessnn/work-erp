@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FamilyEvent, FamilyLecture } from "@/features/family/types";
-import { addDays, groupByDate, selectedDate, weekOf, widgetItems, yearMonthOf } from "./items";
+import { addDays, groupByDate, restOfMonth, selectedDate, weekOf, widgetItems, widgetRange, yearMonthOf } from "./items";
 
 const lecture = (p: Partial<FamilyLecture>): FamilyLecture => ({
   id: "l1",
@@ -126,5 +126,47 @@ describe("selectedDate", () => {
 
   it("보고 있는 달에 오늘이 없으면 1일을 고른다", () => {
     expect(selectedDate(undefined, 2026, 12, "2026-11-26")).toBe("2026-12-01");
+  });
+});
+
+describe("widgetRange", () => {
+  it("그달에 겹치는 주를 통째로 준다 (월 경계 날짜도 일정 점이 찍히게)", () => {
+    // 2026-11-01 은 일요일, 말일 11-30(월)이 든 주는 12-05(토)까지
+    expect(widgetRange(2026, 11)).toEqual({ start: "2026-11-01", next: "2026-12-06" });
+  });
+
+  it("해를 걸쳐도 맞다", () => {
+    // 12-01(화)이 든 주는 11-29(일)부터, 말일 12-31(목)이 든 주는 2027-01-02(토)까지
+    expect(widgetRange(2026, 12)).toEqual({ start: "2026-11-29", next: "2027-01-03" });
+  });
+
+  it("준 기간은 주간 띠에 보이는 날짜를 모두 덮는다", () => {
+    const { start, next } = widgetRange(2026, 12);
+    for (const day of ["2026-12-01", "2026-12-31"]) {
+      for (const date of weekOf(day)) {
+        expect(date >= start && date < next).toBe(true);
+      }
+    }
+  });
+});
+
+describe("restOfMonth", () => {
+  const items = widgetItems(
+    [
+      event({ id: "e0", event_date: "2026-11-29" }),
+      event({ id: "e1", event_date: "2026-12-01" }),
+    ],
+    [
+      lecture({ id: "l1", lecture_date: "2026-12-10" }),
+      lecture({ id: "l2", lecture_date: "2026-12-20" }),
+    ],
+  );
+
+  it("고른 날 뒤의 일정만 준다", () => {
+    expect(restOfMonth(items, "2026-12-10", 2026, 12).map((i) => i.key)).toEqual(["lecture-l2"]);
+  });
+
+  it("앞뒤 달 일정은 빼고 보고 있는 달만 준다", () => {
+    expect(restOfMonth(items, "2026-11-01", 2026, 11).map((i) => i.key)).toEqual(["event-e0"]);
   });
 });
