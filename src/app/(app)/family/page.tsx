@@ -34,6 +34,7 @@ export default async function FamilyPage({ searchParams }: PageProps<"/family">)
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-title">가족 달력</h1>
         <div className="flex flex-wrap gap-2">
+          <Link href="/calendar/widget" prefetch={false} className="chip self-center">달력만 보기</Link>
           <Link href="/family/calendars" className="chip self-center">구글 캘린더 연결</Link>
           <Link href="/family/new" className="btn-primary">+ 일정 추가</Link>
         </div>

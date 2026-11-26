@@ -16,6 +16,13 @@ export function pickMonth(preset: Readonly<Record<string, readonly string[]>>, y
   return out;
 }
 
+/** 1년치 표에서 기간([start, next)) 것만 골라 이름을 합친다 */
+export function pickBetween(preset: Readonly<Record<string, readonly string[]>>, start: string, next: string): Holidays {
+  const out: Holidays = {};
+  for (const [date, names] of Object.entries(preset)) if (date >= start && date < next) out[date] = names.join("·");
+  return out;
+}
+
 /** 그달 공휴일. 자료가 없는 해(아직 발표 전)면 빈 목록 — 달력은 그대로 보여 준다 */
 export async function holidaysOfMonth(year: number, month: number): Promise<Holidays> {
   try {
@@ -23,4 +30,17 @@ export async function holidaysOfMonth(year: number, month: number): Promise<Holi
   } catch {
     return {};
   }
+}
+
+/** 기간([start, next)) 안의 공휴일. 해를 걸치는 기간이면 두 해 자료를 합친다 */
+export async function holidaysBetween(start: string, next: string): Promise<Holidays> {
+  const out: Holidays = {};
+  for (const y of new Set([start.slice(0, 4), next.slice(0, 4)])) {
+    try {
+      Object.assign(out, pickBetween(await getHolidayPreset(y), start, next));
+    } catch {
+      // 아직 자료가 없는 해는 건너뛴다 (달력은 그대로 보여 준다)
+    }
+  }
+  return out;
 }
