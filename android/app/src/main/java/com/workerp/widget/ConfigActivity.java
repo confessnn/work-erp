@@ -49,11 +49,16 @@ public class ConfigActivity extends Activity {
         store.setUrl(widgetId, url);
         store.setError(widgetId, null);
 
-        CalendarWidget.render(this, AppWidgetManager.getInstance(this), widgetId);
-        RefreshWorker.schedule(this);
-        RefreshWorker.runNow(this);
-
+        // 위젯 추가를 먼저 확정한다. 그림을 그리다 무슨 일이 나도
+        // '위젯을 추가할 수 없습니다' 로 끝나지 않게.
         setResult(RESULT_OK, new Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId));
+        try {
+            CalendarWidget.render(this, AppWidgetManager.getInstance(this), widgetId);
+            RefreshWorker.schedule(this);
+            RefreshWorker.runNow(this);
+        } catch (Exception e) {
+            store.setError(widgetId, "첫 그리기 실패");
+        }
         finish();
     }
 }

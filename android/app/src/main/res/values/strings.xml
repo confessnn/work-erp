@@ -11,4 +11,7 @@
     <string name="prev_month">이전 달</string>
     <string name="next_month">다음 달</string>
     <string name="refresh">새로고침</string>
+    <string name="main_intro">홈 화면에 다는 달력 위젯입니다. 이 화면은 상태를 보는 곳이고, 달력은 홈 화면 위젯에 그려집니다.</string>
+    <string name="main_refresh">지금 새로고침</string>
+    <string name="main_refreshing">일정을 받아오는 중…</string>
 </resources>
