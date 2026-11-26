@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { WidgetCalendar } from "@/features/calendar-widget/components/widget-calendar";
-import { widgetItems, selectedDate } from "@/features/calendar-widget/items";
-import { listFamilyMonth } from "@/features/family/queries";
+import { selectedDate, widgetItems, widgetRange } from "@/features/calendar-widget/items";
+import { listFamilyRange } from "@/features/family/queries";
 import { nowInSeoul, todayInSeoul } from "@/lib/format";
-import { holidaysOfMonth } from "@/lib/holidays";
+import { holidaysBetween } from "@/lib/holidays";
 
 export const metadata: Metadata = {
   title: "달력",
@@ -24,7 +24,8 @@ export const viewport: Viewport = {
  * 홈 화면에서 한 번 눌러 전체화면으로 여는 달력. 앱 상단 메뉴 없이 달력만 보여 준다.
  *
  * 보이는 범위는 '가족 달력'(초대받은 아내가 보는 화면)과 똑같이 features/family/queries.ts 의
- * listFamilyMonth 하나만 쓴다. 그래서 금액은 들어올 길이 없다:
+ * listFamilyRange 하나만 쓴다 (가족 달력의 listFamilyMonth 와 같은 경로, 기간만 다르다).
+ * 그래서 금액은 들어올 길이 없다:
  * - 강의: DB 함수 family_lecture_schedule 이 제목·기관·날짜·시간 열만 돌려준다 (금액·수령 열 없음)
  * - 가족 일정: family_events 를 RLS(family_id = my_family())가 가족 것만 보여 준다
  * 로그인하지 않으면 proxy.ts 가 /login 으로 보낸다 (이 경로는 공개 경로가 아니다).
@@ -39,9 +40,12 @@ export default async function CalendarWidgetPage({ searchParams }: PageProps<"/c
   const today = todayInSeoul();
   const selected = selectedDate(typeof sp.d === "string" ? sp.d : undefined, year, month, today);
 
+  // 커버 화면 주간 띠는 달을 걸치므로, 그달에 겹치는 주를 통째로 가져온다
+  // (그러지 않으면 월 경계 날짜에 일정 점·공휴일 색이 빠진다)
+  const range = widgetRange(year, month);
   const [{ events, lectures }, holidays] = await Promise.all([
-    listFamilyMonth(year, month),
-    holidaysOfMonth(year, month),
+    listFamilyRange(range.start, range.next),
+    holidaysBetween(range.start, range.next),
   ]);
 
   return (

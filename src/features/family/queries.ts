@@ -17,9 +17,14 @@ export const getFamilyRole = cache(async (): Promise<FamilyRole> => {
     : { role: "owner", userId };
 });
 
-export async function listFamilyMonth(year: number, month: number) {
+/**
+ * 기간([start, next)) 안의 가족 일정 + 가족에게 보이는 강의.
+ * 가족 달력 화면과 달력 위젯이 같이 쓰는 한 경로다. 보이는 사람 범위는 여기서 정하지 않는다 —
+ * family_events 는 RLS(family_id = my_family()), 강의는 DB 함수 family_lecture_schedule 이 정한다
+ * (그 함수는 금액·수령 열을 반환 타입에 두지 않는다).
+ */
+export async function listFamilyRange(start: string, next: string) {
   const { supabase } = await requireUser();
-  const { start, next } = monthRange(year, month);
   const [ev, lec] = await Promise.all([
     supabase
       .from("family_events")
@@ -33,6 +38,12 @@ export async function listFamilyMonth(year: number, month: number) {
   if (ev.error) throw new Error(ev.error.message);
   if (lec.error) throw new Error(lec.error.message);
   return { events: (ev.data ?? []) as FamilyEvent[], lectures: (lec.data ?? []) as FamilyLecture[] };
+}
+
+/** 한 달치 (가족 달력 화면) */
+export async function listFamilyMonth(year: number, month: number) {
+  const { start, next } = monthRange(year, month);
+  return listFamilyRange(start, next);
 }
 
 export async function getFamilyEvent(id: string): Promise<FamilyEvent | null> {
