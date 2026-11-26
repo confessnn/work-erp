@@ -58,6 +58,7 @@ export default async function LecturesPage({ searchParams }: PageProps<"/lecture
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="page-title">일정</h1>
         <div className="flex gap-2">
+          <Link href="/calendar/widget" prefetch={false} className="chip self-center">달력만 보기</Link>
           <Link href="/lectures/import" className="chip self-center">캘린더에서 불러오기</Link>
           <Link href="/family/calendars" className="chip self-center">구글 캘린더 연결</Link>
           <Link href="/share-settings#family" className="chip self-center">가족 초대</Link>

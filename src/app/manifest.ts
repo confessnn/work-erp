@@ -16,5 +16,10 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
+    // 앱 아이콘을 길게 눌러 바로 가는 길. 달력만 여는 아이콘을 따로 두려면
+    // /calendar/manifest.webmanifest 를 홈 화면에 추가한다 (id·scope 가 달라 다른 앱으로 잡힌다)
+    shortcuts: [
+      { name: "달력", short_name: "달력", url: "/calendar/widget", icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
+    ],
   };
 }
