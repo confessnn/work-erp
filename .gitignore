@@ -44,3 +44,9 @@ next-env.d.ts
 # 수업펜 빌드 산출물 (배포본은 public/downloads)
 tools/classpen/*.exe
 tools/classpen/*.ico
+
+# 안드로이드 위젯 빌드 산출물 (배포본은 public/downloads)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties

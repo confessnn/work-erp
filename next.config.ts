@@ -12,6 +12,11 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" }, // 외부 링크로 ERP 주소·토큰이 새지 않게
         ],
       },
+      {
+        // 홈 화면 위젯 앱(APK). 안드로이드가 '설치' 로 받도록 종류를 정확히 알려 준다
+        source: "/downloads/:file*.apk",
+        headers: [{ key: "Content-Type", value: "application/vnd.android.package-archive" }],
+      },
     ];
   },
   // kordoc(한글 문서 읽기)은 wasm 파일을 제 위치에서 읽으므로 번들하지 않는다.

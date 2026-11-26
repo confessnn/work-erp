@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ERP 웹과 같은 색 토큰 (src/app/globals.css) -->
+    <color name="surface">#FFFFFFFF</color>
+    <color name="fg">#FF16181D</color>
+    <color name="muted">#FF5D6066</color>
+    <color name="line">#FFE6E7EA</color>
+    <color name="accent">#FF102445</color>
+    <color name="sunday">#FFDC2626</color>
+    <color name="saturday">#FF2563EB</color>
+    <color name="today_bg">#FF16181D</color>
+    <color name="today_fg">#FFFFFFFF</color>
+
+    <!-- 일정 칩. 가족 일정 사람별 색은 ERP 웹과 같게 맞춘다 -->
+    <color name="chip_lecture">#FFDFF0E6</color>
+    <color name="chip_lecture_fg">#FF14532D</color>
+    <color name="chip_dad">#FFBCD8F4</color>
+    <color name="chip_mom">#FFF2BCD9</color>
+    <color name="chip_baby">#FFDCC9F2</color>
+    <color name="chip_all">#FFF0DFAE</color>
+    <color name="chip_fg">#FF16181D</color>
+</resources>

@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.workerp.widget'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.workerp.widget"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "0.1"
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    buildTypes {
+        debug {
+            // 폰에 그냥 두고 쓰는 앱이라 디버그 연결은 막는다.
+            // 서명은 디버그 키 그대로여서 다음 판을 덮어 설치할 수 있다 (지웠다 깔 필요 없음).
+            debuggable false
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.work:work-runtime:2.9.1'
+
+    // 날짜 계산·피드 해석은 안드로이드 없이 JVM 에서 검사한다 (./gradlew test)
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}

@@ -4,13 +4,21 @@ import { ViewerAdmin } from "@/features/bid-viewer/components/viewer-admin";
 import { listBidViewerAdmin } from "@/features/bid-viewer/queries";
 import { InviteForm, InviteList, MemberList } from "@/features/family/components/family-admin";
 import { getFamilyRole, listFamilyAdmin } from "@/features/family/queries";
+import { createWidgetToken, deleteWidgetToken } from "@/features/home-widget/actions";
+import { listWidgetTokens } from "@/features/home-widget/queries";
 import { createShareLink, deleteShareLink, setShowOrganization } from "@/features/share/actions";
 import { CopyField } from "@/features/share/components/copy-field";
 import { listShareLinks } from "@/features/share/queries";
 
 export default async function ShareSettingsPage() {
   if ((await getFamilyRole()).role !== "owner") redirect("/family");
-  const [links, h, family, bidViewers] = await Promise.all([listShareLinks(), headers(), listFamilyAdmin(), listBidViewerAdmin()]);
+  const [links, h, family, bidViewers, widgets] = await Promise.all([
+    listShareLinks(),
+    headers(),
+    listFamilyAdmin(),
+    listBidViewerAdmin(),
+    listWidgetTokens(),
+  ]);
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${host}`;
 
@@ -88,6 +96,42 @@ export default async function ShareSettingsPage() {
           </section>
         );
       })}
+
+      <h2 id="widget" className="section-title pt-2">안드로이드 홈 화면 위젯</h2>
+      <p className="text-sm text-muted">
+        휴대폰 홈 화면에 달력 위젯을 올려 두면 일정이 바로 보입니다. 위젯이 읽는 주소에는
+        <b> 날짜 · 시간 · 제목</b>과 가족 일정의 <b>사람</b>만 담깁니다. 강의료 · 세금 · 수령 여부 · 메모는 절대 담기지 않습니다.
+        주소는 비밀번호처럼 다루고, 지우면 바로 못 쓰게 됩니다.
+      </p>
+
+      {widgets.map((w) => (
+        <section key={w.id} className="card space-y-4">
+          <div className="flex items-center gap-3">
+            <h2 className="section-title">{w.label}</h2>
+            <span className="text-xs text-muted">
+              {w.last_used_at ? `마지막 사용 ${new Date(w.last_used_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}` : "아직 안 씀"}
+            </span>
+            <form action={deleteWidgetToken.bind(null, w.id)} className="ml-auto">
+              <button type="submit" className="text-sm text-danger hover:underline">주소 삭제</button>
+            </form>
+          </div>
+          <CopyField label="위젯에 붙여넣을 주소" value={`${origin}/api/widget/${w.token}`} />
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">홈 화면에 올리는 방법</summary>
+            <div className="mt-2 space-y-2 text-muted">
+              <p>① 휴대폰에서 <b>{origin}/downloads/work-erp-widget.apk</b> 를 열어 설치합니다 (출처를 모르는 앱 설치 허용이 한 번 필요합니다).</p>
+              <p>② 홈 화면을 길게 눌러 <b>위젯</b> → <b>ERP 달력</b> 을 홈 화면에 끌어다 놓습니다.</p>
+              <p>③ 위젯을 놓으면 주소를 묻습니다. 위 주소를 붙여넣고 저장하면 일정이 그려집니다.</p>
+            </div>
+          </details>
+        </section>
+      ))}
+
+      {widgets.length === 0 && (
+        <form action={createWidgetToken} className="card">
+          <button type="submit" className="btn-primary">위젯 주소 만들기</button>
+        </form>
+      )}
 
       <form action={createShareLink} className="card flex flex-wrap items-end gap-3">
         <label className="field flex-1">
