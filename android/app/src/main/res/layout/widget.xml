@@ -52,10 +52,13 @@
         android:orientation="horizontal"
         android:paddingBottom="2dp" />
 
-    <View
+    <!-- 구분선. RemoteViews 는 @RemoteView 가 붙은 뷰만 펼칠 수 있어서
+         plain View 를 쓰면 '위젯을 추가할 수 없습니다' 가 된다. ImageView 는 허용된다. -->
+    <ImageView
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:background="@color/line" />
+        android:background="@color/line"
+        android:contentDescription="@null" />
 
     <LinearLayout
         android:id="@+id/weeks"
