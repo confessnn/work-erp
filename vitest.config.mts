@@ -10,6 +10,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["src/**/*.test.ts"],
+    // tools/ 에 있는 순수 모듈(연구소 워커 설정 등)도 같이 검사한다
+    include: ["src/**/*.test.ts", "tools/**/*.test.mjs"],
   },
 });

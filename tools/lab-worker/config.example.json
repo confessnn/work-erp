@@ -1,0 +1,7 @@
+{
+  "supabaseUrl": "https://ggisybrvmxjkolzwmlux.supabase.co",
+  "publishableKey": "sb_publishable_H932l7X1fYWtv-xAyjADpg_2pXj6Cq1",
+  "cronSecret": "여기에 Vercel 환경변수 CRON_SECRET 값",
+  "userId": "여기에 내 계정 uuid",
+  "workDir": "~/연구소작업"
+}
