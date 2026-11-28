@@ -72,6 +72,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `api-credits` | 대시보드 카드 | Claude·OpenAI API 잔액 추정 |
 | `settings` | `/settings` (상단 ⚙) | 설정(관리자): 상단 메뉴 순서·숨김 `user_settings.nav_prefs`, 적용 `components/nav-items.ts`의 `applyNavPrefs` |
 | `backup` | `/settings` 백업 · 크론 `backup` | 기록을 JSON 하나로 모아 대표 드라이브 `work-erp/백업/<YYYY-MM>/`에 주차별로 쌓음(지우지 않음, 이름·주차 규칙 `backup.ts`). 담을 표·뺄 칸(토큰·`ics_url`·`thumb`·`share_url`)은 DB `private.backup_dump` 한 곳. 새 표를 만들면 거기에 추가. 결과는 `backup_status`, 실패·8일 밀림은 아침 7시 브리핑(`bid-digest`) 맨 위에 경고(`backupProblem`) |
+| `lab` | `/lab` (메뉴 '연구소') · 대시보드 위젯 | 연구원(= Claude Code 세션·예약 작업)에게 일을 맡기고 보드로 본다. 명단·자리 좌표 `roster.ts`, 보드 상태 `tasks.ts`, 그림 `public/lab/`. ERP 는 지시를 받아 두기만 하고 실제 작업은 맥에서 도는 워커(`tools/lab-worker/`)가 가져간다 — 워커는 `CRON_SECRET` 이 아니라 전용 비밀값(`private.app_secrets` 의 `lab_worker`)으로 잠근 DB 함수 `cron_lab_*` 로만 닿는다 |
 | `plan-usage` | (숨김) | 플랜 사용량 위젯. 사용자가 나중에 다시 켜기로 해서 일부러 남겨 둠 — 지우지 않는다 |
 
 - 크론(Vercel, UTC): `calendar-sync`·`bid-sync` 21:00, `bid-digest`·`api-credits` 22:00, `content` 23:30, `brain-export` 20:00(한국 05:00), `backup` 일요일 18:00(한국 월요일 03:00). 5분 간격 알림만 Supabase pg_cron.
@@ -80,7 +81,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 ## 토큰을 아끼는 작업 방법
 - 위 기능 지도로 폴더를 고른 뒤 그 폴더만 읽는다. 저장소 전체 검색·전체 파일 읽기는 피한다.
 - 테스트는 바뀐 폴더만 먼저: `npx vitest run src/features/<기능>`. 마지막에 `npx tsc --noEmit`·`npx eslint <바뀐 파일>`·전체 `npm test`.
-- `gh` CLI가 없다. PR 만들기·합치기는 브라우저(GitHub)로 하고, 합치기는 사용자가 "합쳐줘"라고 한 뒤에만.
+- `gh` CLI가 깔려 있다(로그인 완료). PR 만들기·합치기에 쓰고, 합치기는 사용자가 "합쳐줘"라고 한 뒤에만.
 - DB 변경은 새 마이그레이션 파일 + Supabase에 적용하고, PR 본문에 "적용함"을 적는다.
 - 큰 파일 수정은 `Edit`(바뀌는 부분만)으로. 같은 파일을 다시 통째로 읽지 않는다.
 
