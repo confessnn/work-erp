@@ -8,11 +8,11 @@ import { BOARD, firstLine, groupByState, openCount, STATE_LABEL, type LabTask, t
 import type { Researcher } from "../types";
 
 /**
- * 몇 초마다 서버에서 다시 읽어 올지 (연구원이 보드를 고치면 보고 있던 화면도 따라 바뀐다).
- * 보드를 보고 있을 때(연구소 화면)는 5초, 대시보드에서는 30초 — 대시보드는 한 번 읽을 때
- * 달력·할 일·기록까지 전부 다시 읽으므로 자주 할 일이 아니다.
+ * 보드를 보고 있는 동안 5초마다 다시 읽는다 (연구원이 상태를 바꾸면 화면도 따라 바뀐다).
+ * 대시보드에서는 아예 하지 않는다 — 거기서 한 번 다시 읽으면 달력·할 일·관계도까지 전부
+ * 다시 읽어서, 보고 있지도 않은 보드 때문에 폰이 계속 일하게 된다.
  */
-const REFRESH_MS = { board: 5000, widget: 30000 };
+const REFRESH_MS = 5000;
 
 const NEXT: Partial<Record<TaskState, TaskState>> = { queued: "running", running: "review", review: "done" };
 
@@ -30,11 +30,12 @@ export function LabRoom({ tasks, board: showBoard = true }: { tasks: LabTask[]; 
   const [busy, start] = useTransition();
   const box = useRef<HTMLTextAreaElement>(null);
 
-  // 보고 있는 동안만 조용히 다시 읽는다 (탭을 가려 두면 쉰다)
+  // 보드를 보고 있는 동안만 조용히 다시 읽는다 (탭을 가려 두면 쉰다)
   useEffect(() => {
+    if (!showBoard) return;
     const t = setInterval(() => {
       if (document.visibilityState === "visible") router.refresh();
-    }, showBoard ? REFRESH_MS.board : REFRESH_MS.widget);
+    }, REFRESH_MS);
     return () => clearInterval(t);
   }, [router, showBoard]);
 
