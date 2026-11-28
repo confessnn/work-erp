@@ -13,6 +13,15 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // public/ 의 그림은 Next 가 기본으로 "max-age=0, must-revalidate" 를 붙여서,
+        // 화면을 열 때마다 파일 수만큼 서버에 다시 물어본다(내용이 같아도 왕복은 든다).
+        // 연구소 얼굴 아이콘만 여섯 개라 휴대폰에서 그만큼 느려진다. 자주 바뀌지 않는 그림이니
+        // 일주일 캐시하고, 그 뒤에는 있는 걸 먼저 보여 주면서 뒤에서 새로 받는다.
+        // 그림을 바꾸면 다음 한 번은 옛것이 보일 수 있다 (그때는 파일 이름이나 ?v= 를 바꾼다).
+        source: "/:dir(lab|icons)/:file*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=2592000" }],
+      },
+      {
         // 홈 화면 위젯 앱(APK). 안드로이드가 '설치' 로 받도록 종류를 정확히 알려 준다
         source: "/downloads/:file*.apk",
         headers: [{ key: "Content-Type", value: "application/vnd.android.package-archive" }],
