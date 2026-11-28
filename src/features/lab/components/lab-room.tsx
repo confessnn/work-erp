@@ -81,8 +81,10 @@ export function LabRoom({ tasks, board: showBoard = true }: { tasks: LabTask[]; 
         넓은 화면: 연구실 그림. <img> 가 아니라 배경으로 깐 이유 — 폰에서는 이 칸이 display:none 이라
         배경이면 아예 내려받지 않는다 (<img> 는 숨겨 두어도 받아서 폰이 그만큼 느려진다).
         비율을 원본(1672x941)으로 고정해 두면 폭이 얼마가 되든 아래 자리 좌표가 맞는다.
+        print-color-adjust: exact 는 인쇄 때문이다 — 브라우저는 기본으로 배경 이미지를 빼고 찍어서,
+        이게 없으면 화면을 PDF 로 뽑았을 때 연구실이 빈칸으로 나온다 (캐릭터는 <img> 라 찍힌다).
       */}
-      <div className="relative hidden aspect-[1672/941] overflow-hidden rounded-2xl border border-line bg-[url('/lab/room.webp')] bg-cover bg-center sm:block">
+      <div className="relative hidden aspect-[1672/941] overflow-hidden rounded-2xl border border-line bg-[url('/lab/room.webp')] bg-cover bg-center [print-color-adjust:exact] [-webkit-print-color-adjust:exact] sm:block">
         {ROSTER.map((r) => {
           const pos = seatPercent(r.id);
           if (!pos) return null;
