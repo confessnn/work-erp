@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { buildArgs, clip, DAILY_LIMIT, folderName, PLAN, planFor, POLL_MS, resultText, usageLine } from "./plan.mjs";
+import {
+  APP_URL_DEFAULT,
+  buildArgs,
+  clip,
+  DAILY_LIMIT,
+  folderName,
+  PLAN,
+  planFor,
+  POLL_MS,
+  plainResult,
+  resultText,
+  safeFileName,
+  summaryEndpoint,
+  summaryPrompt,
+  SUMMARY_DAILY_LIMIT,
+  SUMMARY_PLAN,
+  usageLine,
+} from "./plan.mjs";
 
 describe("연구소 워커 설정", () => {
   it("연구원마다 모델이 설계대로 갈린다", () => {
@@ -18,6 +35,12 @@ describe("연구소 워커 설정", () => {
       .map(([id]) => id)
       .sort();
     expect(web).toEqual(["cost", "scout"]);
+  });
+
+  it("연구원은 모두 사용자가 만들어 둔 스킬을 쓸 수 있다", () => {
+    for (const [id, p] of Object.entries(PLAN)) {
+      expect(p.tools, id).toContain("Skill");
+    }
   });
 
   it("모르는 연구원은 가장 좁은 설정으로 돈다", () => {
@@ -84,5 +107,81 @@ describe("건별로 쓴 양", () => {
     const out = resultText(JSON.stringify({ result: "다 했어요", usage: { input_tokens: 2000, output_tokens: 100 } }));
     expect(out.startsWith("다 했어요")).toBe(true);
     expect(out).toContain("입력 2.0k");
+  });
+});
+
+describe("공고 요약 적체 풀기", () => {
+  it("설정에 주소가 없으면 기본 주소를 쓴다", () => {
+    expect(summaryEndpoint(undefined)).toBe(`${APP_URL_DEFAULT}/api/lab/summarize`);
+    expect(summaryEndpoint("")).toBe(`${APP_URL_DEFAULT}/api/lab/summarize`);
+  });
+
+  it("주소 뒤에 붙은 / 는 떼고 만든다", () => {
+    expect(summaryEndpoint("https://example.com///")).toBe("https://example.com/api/lab/summarize");
+  });
+
+  it("하루 상한이 있다 (요약 1건마다 서버 API 로 돈이 나가므로)", () => {
+    expect(SUMMARY_DAILY_LIMIT).toBeGreaterThan(0);
+    expect(SUMMARY_DAILY_LIMIT).toBeLessThanOrEqual(50);
+  });
+});
+
+describe("공고 요약은 가장 좁은 권한으로", () => {
+  it("읽기만 준다 (공고문은 누가 올렸는지 모르는 글이다)", () => {
+    expect(SUMMARY_PLAN.tools).toEqual(["Read"]);
+  });
+
+  it("Bash·쓰기·웹·스킬은 주지 않는다", () => {
+    for (const t of ["Bash", "Write", "Edit", "WebFetch", "WebSearch", "Skill"]) {
+      expect(SUMMARY_PLAN.tools).not.toContain(t);
+    }
+  });
+
+  it("지시문은 서버가 준 글을 그대로 쓴다", () => {
+    const prompt = summaryPrompt({
+      instructions: "서버가 준 지시문",
+      title: "○○시 원가계산 용역",
+      texts: [{ name: "공고문.hwp", body: "본문" }],
+      pdfs: [{ name: "과업지시서.pdf", url: "https://www.g2b.go.kr/a.pdf" }],
+    });
+    expect(prompt.startsWith("서버가 준 지시문")).toBe(true);
+    expect(prompt).toContain("○○시 원가계산 용역");
+    expect(prompt).toContain("공고문.hwp, 과업지시서.pdf");
+  });
+
+  it("첨부가 없어도 지시문을 만들다 터지지 않는다", () => {
+    expect(() => summaryPrompt({ instructions: "지시", title: "제목" })).not.toThrow();
+  });
+});
+
+describe("첨부 이름으로 파일을 만들 때", () => {
+  it("경로를 벗어나는 글자를 지운다", () => {
+    expect(safeFileName("../../etc/passwd")).not.toContain("/");
+    expect(safeFileName("../../etc/passwd").startsWith(".")).toBe(false);
+    expect(safeFileName("공고문.hwp")).toBe("공고문.hwp");
+  });
+
+  it("이름이 비면 기본 이름을 쓴다", () => {
+    expect(safeFileName("")).toBe("문서");
+    expect(safeFileName(null)).toBe("문서");
+  });
+});
+
+describe("요약 본문만 꺼내기", () => {
+  it("사용량 줄을 붙이지 않는다 (DB 에 그대로 저장되므로)", () => {
+    const r = plainResult(JSON.stringify({ result: "사업 개요:\n- 발주기관 ○○시", usage: { input_tokens: 9000, output_tokens: 500 } }));
+    expect(r.text).toBe("사업 개요:\n- 발주기관 ○○시");
+    expect(r.text).not.toContain("입력");
+    expect(r.error).toBe(null);
+  });
+
+  it("빈 결과는 실패로 본다", () => {
+    expect(plainResult(JSON.stringify({ result: "   " })).text).toBe(null);
+    expect(plainResult(JSON.stringify({ result: "   " })).error).toContain("비어 있");
+  });
+
+  it("실패와 깨진 출력에는 이유가 있다", () => {
+    expect(plainResult(JSON.stringify({ is_error: true, result: "거절" })).error).toBe("거절");
+    expect(plainResult("json 아님").error).toContain("읽지 못");
   });
 });

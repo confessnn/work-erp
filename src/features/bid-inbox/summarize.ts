@@ -9,7 +9,11 @@ const MODEL = "claude-opus-5-5";
 /** 한 요청에 보내는 PDF 합계 (API 한도 32MB, base64로 늘어나는 양을 고려) */
 const MAX_PDF_BYTES = 20 * 1024 * 1024;
 
-const SYSTEM = `당신은 원가계산 용역 입찰을 검토하는 담당자를 돕습니다. 첨부된 입찰 공고 문서를 읽고 담당자가 바로 읽을 수 있는 짧은 한국어 설명을 씁니다.
+/**
+ * 요약 지시문. 서버가 직접 요약할 때도, 워커가 요약할 때도 같은 글을 쓴다
+ * (형식이 아침 메일·공고 화면에 그대로 들어가므로 한 곳에서만 고친다).
+ */
+export const SUMMARY_SYSTEM = `당신은 원가계산 용역 입찰을 검토하는 담당자를 돕습니다. 첨부된 입찰 공고 문서를 읽고 담당자가 바로 읽을 수 있는 짧은 한국어 설명을 씁니다.
 
 아래 제목을 순서대로 쓰고, 각 제목 아래에 "- "로 시작하는 짧은 문장을 1~4개 씁니다. 마크다운 기호는 "- " 외에 쓰지 않습니다.
 
@@ -74,6 +78,66 @@ async function toContent(docs: BidFile[]) {
   return { content, read, unread };
 }
 
+/** 워커에게 넘길 요약 재료. 한글 파일은 글로 바꿔서, PDF 는 주소만 (워커가 Read 로 읽는다) */
+export type NoticeMaterial = {
+  files: BidFile[];
+  texts: { name: string; body: string }[];
+  pdfs: { name: string; url: string }[];
+  unread: string[];
+};
+
+/**
+ * 공고의 첨부를 받아 '요약 재료'까지만 만든다. 요약은 하지 않는다.
+ *
+ * 서버만 할 수 있는 일(나라장터 첨부 목록 조회·한글 파일 해석)과 아무 데서나 할 수 있는
+ * 일(요약)을 가르는 지점이다. 요약을 맥 워커가 하면 구독 한도로 돌아 API 요금이 들지 않는다.
+ */
+export async function noticeMaterial(bidNo: string, bidOrd: string): Promise<NoticeMaterial> {
+  if (isD2bBidNo(bidNo)) throw new Error("국방부 공고는 첨부를 자동으로 받지 못해요. 국방전자조달에서 공고문을 확인해 주세요.");
+
+  const files = await fetchNoticeFiles(bidNo, bidOrd);
+  const docs = pickDocs(files);
+  if (docs.length === 0) throw new Error("요약할 첨부 문서가 없습니다.");
+
+  const downloads = await Promise.allSettled(docs.map(download));
+  const texts: { name: string; body: string }[] = [];
+  const pdfs: { name: string; url: string }[] = [];
+  const unread: string[] = [];
+  const seen = new Set<string>();
+
+  for (const [i, doc] of docs.entries()) {
+    const got = downloads[i];
+    try {
+      if (got.status === "rejected") throw got.reason;
+      const bytes = got.value;
+      // 같은 문서가 이름만 달리 두 번 올라오는 공고가 있다
+      const hash = createHash("sha256").update(bytes).digest("hex");
+      if (seen.has(hash)) continue;
+      seen.add(hash);
+
+      const kind = docKind(bytes);
+      if (kind === "pdf") {
+        pdfs.push({ name: doc.name, url: doc.url });
+        continue;
+      }
+      if (kind === "unknown") throw new Error("지원하지 않는 형식");
+      const body = await hwpMarkdown(bytes, kind);
+      if (!body.trim()) throw new Error("본문을 읽을 수 없음 (배포용 문서일 수 있음)");
+      texts.push({ name: doc.name, body });
+    } catch (e) {
+      unread.push(`${doc.name} (${e instanceof Error ? e.message : "오류"})`);
+    }
+  }
+
+  if (texts.length === 0 && pdfs.length === 0) throw new Error(`첨부를 읽지 못했습니다: ${unread.join(", ")}`);
+  return { files, texts, pdfs, unread };
+}
+
+/** 요약 끝에 붙이는 '읽은 문서 / 읽지 못한 문서' 줄. 서버가 하든 워커가 하든 같은 꼴로 */
+export function summaryNotes(read: string[], unread: string[]): string {
+  return [`읽은 문서: ${read.join(", ")}`, ...(unread.length ? [`읽지 못한 문서: ${unread.join(", ")}`] : [])].join("\n");
+}
+
 /** 국방전자조달 공고번호인지 (영문 3자 + 숫자 4자) */
 export const isD2bBidNo = (bidNo: string) => /^[A-Z]{3}\d{4}$/.test(bidNo);
 
@@ -98,7 +162,7 @@ export async function summarizeNotice(bidNo: string, bidOrd: string, title: stri
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       output_config: { effort: "medium" },
-      system: SYSTEM,
+      system: SUMMARY_SYSTEM,
       messages: [{ role: "user", content: [...content, { type: "text", text: `공고명: ${title}\n위 문서를 설명해 주세요.` }] }],
     })
     .finalMessage();
@@ -108,6 +172,5 @@ export async function summarizeNotice(bidNo: string, bidOrd: string, title: stri
   if (!body) throw new Error("요약 결과가 비어 있습니다.");
   if (message.stop_reason === "max_tokens") throw new Error("요약이 너무 길어 중간에 끊겼습니다.");
 
-  const notes = [`읽은 문서: ${read.join(", ")}`, ...(unread.length ? [`읽지 못한 문서: ${unread.join(", ")}`] : [])];
-  return { summary: `${body}\n\n${notes.join("\n")}`, files };
+  return { summary: `${body}\n\n${summaryNotes(read, unread)}`, files };
 }
