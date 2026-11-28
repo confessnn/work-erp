@@ -69,7 +69,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `todos` | 대시보드 위젯 | 할 일 (`title`, `due_date`, `note`) |
 | `content` | `/content` | X·노션 콘텐츠 자동화 (크론 `content`) |
 | `share` | `/share-settings` | 가족 공유 링크·iCal 내보내기(금액 없음, `get_shared_schedule`) |
-| `api-credits` | 대시보드 카드 | Claude·OpenAI API 잔액 추정 |
+| `api-credits` | `/integrations` (연동) | Claude·OpenAI API 잔액 추정 |
 | `settings` | `/settings` (상단 ⚙) | 설정(관리자): 상단 메뉴 순서·숨김 `user_settings.nav_prefs`, 적용 `components/nav-items.ts`의 `applyNavPrefs` |
 | `backup` | `/settings` 백업 · 크론 `backup` | 기록을 JSON 하나로 모아 대표 드라이브 `work-erp/백업/<YYYY-MM>/`에 주차별로 쌓음(지우지 않음, 이름·주차 규칙 `backup.ts`). 담을 표·뺄 칸(토큰·`ics_url`·`thumb`·`share_url`)은 DB `private.backup_dump` 한 곳. 새 표를 만들면 거기에 추가. 결과는 `backup_status`, 실패·8일 밀림은 아침 7시 브리핑(`bid-digest`) 맨 위에 경고(`backupProblem`) |
 | `lab` | `/lab` (메뉴 '연구소') · 대시보드 위젯 | 연구원(= Claude Code 세션·예약 작업)에게 일을 맡기고 보드로 본다. 명단·자리 좌표 `roster.ts`, 보드 상태 `tasks.ts`, 그림 `public/lab/`. ERP 는 지시를 받아 두기만 하고 실제 작업은 맥에서 도는 워커(`tools/lab-worker/`)가 가져간다 — 워커는 `CRON_SECRET` 이 아니라 전용 비밀값(`private.app_secrets` 의 `lab_worker`)으로 잠근 DB 함수 `cron_lab_*` 로만 닿는다 |
