@@ -21,6 +21,8 @@ import { flushPendingGoogleDeletes } from "@/features/google-calendar/push";
 import { RecentRecords } from "@/features/records/components/recent-records";
 import { getBabyInfo } from "@/features/baby/queries";
 import { listBabyTodosForWidget } from "@/features/baby-care/queries";
+import { LabWidget } from "@/features/lab/components/lab-widget";
+import { listLabTasksForWidget } from "@/features/lab/queries";
 import { TodoWidget } from "@/features/todos/components/todo-widget";
 import {
   hasFamilyPartner,
@@ -56,6 +58,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     { supabase },
     babyTodos,
     babyInfo,
+    labTasks,
   ] = await Promise.all([
     listLectures(now),
     listFamilyEventsBetween(monthStart, monthNext),
@@ -66,6 +69,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     requireUser(),
     listBabyTodosForWidget(today),
     getBabyInfo(),
+    listLabTasksForWidget(),
   ]);
   // 구글 캘린더에서 지울 일정이 남아 있으면 화면을 보낸 뒤에 처리한다
   after(() => flushPendingGoogleDeletes(supabase).catch(() => {}));
@@ -88,6 +92,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         baby={babyTodos}
         babyName={babyInfo.name ?? "아기"}
       />
+
+      <LabWidget tasks={labTasks} />
 
       <Suspense fallback={<Placeholder className="h-32" />}>
         <RecentRecords />

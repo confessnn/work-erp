@@ -60,8 +60,38 @@ export const ROSTER: Researcher[] = [
   },
 ];
 
-/** 얼굴 아이콘 주소 */
+/** 얼굴 아이콘 주소 (목록·카드용) */
 export const iconOf = (id: string) => `/lab/${id}.png`;
+
+/** 연구실 그림에 앉은 모습 주소 */
+export const bodyOf = (id: string) => `/lab/body-${id}.png`;
+
+/** 연구실 그림(public/lab/room.webp) 크기. 자리 좌표는 이 크기를 기준으로 한 픽셀이다 */
+export const ROOM = { w: 1672, h: 941 };
+
+/**
+ * 각 연구원이 앉은 자리 (room.webp 기준 픽셀).
+ * 그림을 어떤 폭으로 줄여 보여 주든 비율로 환산하므로 화면 크기와 상관없이 자리가 맞는다.
+ */
+export const SEATS: Record<string, { x: number; y: number; w: number; h: number }> = {
+  scout: { x: 417, y: 465, w: 80, h: 150 },
+  chief: { x: 838, y: 462, w: 79, h: 153 },
+  cost: { x: 1254, y: 465, w: 79, h: 150 },
+  dev: { x: 291, y: 739, w: 79, h: 151 },
+  content: { x: 736, y: 737, w: 82, h: 152 },
+  spare: { x: 1179, y: 739, w: 79, h: 150 },
+};
+
+/** 자리를 그림 안 백분율로 (CSS 로 얹을 때 쓴다) */
+export function seatPercent(id: string) {
+  const s = SEATS[id];
+  if (!s) return null;
+  return {
+    left: `${(s.x / ROOM.w) * 100}%`,
+    top: `${(s.y / ROOM.h) * 100}%`,
+    width: `${(s.w / ROOM.w) * 100}%`,
+  };
+}
 
 /** 보여 주는 차례: 지금 일하는 사람이 위로 */
 export const STATE_ORDER: ResearcherState[] = ["운영중", "준비", "예정"];
