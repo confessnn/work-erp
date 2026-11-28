@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { GooglePanel } from "@/features/google-calendar/components/google-panel";
 import { DRIVE_SCOPE, hasScope, isGoogleConfigured } from "@/features/google-calendar/google-api";
 import { TelegramPanel, type TelegramState } from "@/features/telegram/components/telegram-panel";
@@ -81,6 +83,17 @@ export default async function IntegrationsPage({ searchParams }: PageProps<"/int
           <li>아이폰 설정 → 캘린더 → 캘린더 계정 → 계정 추가 → Google → 같은 구글 계정으로 로그인</li>
           <li>캘린더 앱 → 아래 &apos;캘린더&apos; → <b>강의 일정(ERP)</b>가 켜져 있는지 확인</li>
         </ol>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="section-title">API 잔액</h2>
+        <Suspense fallback={<div aria-hidden className="h-40 animate-pulse rounded-2xl bg-line/60" />}>
+          <ApiCreditsSection />
+        </Suspense>
+        <p className="text-xs text-muted">
+          잔액과 충전 시점은 입력값에서 사용액을 빼 계산한 추정치이고, 사용액은 UTC 날짜 기준입니다.
+          Claude 사용액은 보통 4시간, 길면 24시간 늦게 반영됩니다. 실제 잔액과 다르면 다시 입력하세요.
+        </p>
       </section>
     </>
   );

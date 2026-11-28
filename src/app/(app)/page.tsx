@@ -12,7 +12,6 @@ import {
   listFamilyEventsBetween,
 } from "@/features/family/queries";
 import { listMyReminderKeys } from "@/features/reminders/queries";
-import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
 import { LectureCalendar } from "@/features/lectures/components/lecture-calendar";
 import { listLectures } from "@/features/lectures/queries";
@@ -35,8 +34,8 @@ import { holidaysOfMonth } from "@/lib/holidays";
 
 /**
  * 대시보드. 위에서부터 할 일·관계도 / 연구소 / 이번 달 일정 / 강의료 차례.
- * 휴대폰에서 빨리 뜨도록 할 일·연구소·달력만 먼저 그리고, 관계도·강의료 통계·API 잔액은
- * 준비되는 대로 따로 채운다 (Suspense).
+ * 휴대폰에서 빨리 뜨도록 할 일·연구소·달력만 먼저 그리고, 관계도·강의료 통계는
+ * 준비되는 대로 따로 채운다 (Suspense). API 잔액은 연동 화면에 있다.
  */
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   // 초대받은 가족의 첫 화면은 가족 달력
@@ -126,18 +125,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         <FeeStats period={period} />
       </Suspense>
 
-      <div className="space-y-2">
-        <div className="grid md:grid-cols-2">
-          <Suspense fallback={<Placeholder className="h-40" />}>
-            <ApiCreditsSection />
-          </Suspense>
-        </div>
-        <p className="text-xs text-muted">
-          API 잔액과 충전 시점은 입력값에서 사용액을 빼 계산한 추정치이고,
-          사용액은 UTC 날짜 기준입니다. Claude 사용액은 보통 4시간, 길면 24시간
-          늦게 반영됩니다. 실제 잔액과 다르면 다시 입력하세요.
-        </p>
-      </div>
     </>
   );
 }
