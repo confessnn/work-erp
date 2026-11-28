@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildArgs, clip, DAILY_LIMIT, folderName, nextWait, PLAN, planFor, resultText } from "./plan.mjs";
+import { buildArgs, clip, DAILY_LIMIT, folderName, PLAN, planFor, POLL_MS, resultText, usageLine } from "./plan.mjs";
 
 describe("연구소 워커 설정", () => {
   it("연구원마다 모델이 설계대로 갈린다", () => {
@@ -56,23 +56,33 @@ describe("연구소 워커 설정", () => {
   });
 });
 
-describe("쉴 때 아끼기", () => {
-  it("방금 일했으면 바로 다시 보고, 조용하면 뜸해진다", () => {
-    expect(nextWait(0)).toBe(3000);
-    expect(nextWait(10)).toBe(10000);
-    expect(nextWait(100)).toBe(30000);
-  });
-
-  it("쉬는 간격은 뒤로 갈수록 길어지기만 한다", () => {
-    let prev = 0;
-    for (const n of [0, 4, 5, 24, 25, 99]) {
-      expect(nextWait(n)).toBeGreaterThanOrEqual(prev);
-      prev = nextWait(n);
-    }
+describe("쉬는 간격과 상한", () => {
+  it("쉴 때도 3초마다 본다 (늘려서 기다리게 하지 않는다)", () => {
+    expect(POLL_MS).toBe(3000);
   });
 
   it("하루 상한이 있다", () => {
     expect(DAILY_LIMIT).toBeGreaterThan(0);
     expect(DAILY_LIMIT).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("건별로 쓴 양", () => {
+  it("결과 끝에 입력·출력·걸린 시간을 붙인다", () => {
+    const line = usageLine({ usage: { input_tokens: 1200, cache_read_input_tokens: 300, output_tokens: 450 }, duration_ms: 23000 });
+    expect(line).toContain("입력 1.5k");
+    expect(line).toContain("출력 450");
+    expect(line).toContain("23초");
+  });
+
+  it("쓴 양을 모르면 아무것도 붙이지 않는다", () => {
+    expect(usageLine({})).toBe("");
+    expect(usageLine({ usage: { input_tokens: 0, output_tokens: 0 } })).toBe("");
+  });
+
+  it("본문 뒤에 이어 붙는다", () => {
+    const out = resultText(JSON.stringify({ result: "다 했어요", usage: { input_tokens: 2000, output_tokens: 100 } }));
+    expect(out.startsWith("다 했어요")).toBe(true);
+    expect(out).toContain("입력 2.0k");
   });
 });

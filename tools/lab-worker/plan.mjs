@@ -28,15 +28,12 @@ export const TIMEOUT_MS = 15 * 60 * 1000;
 export const DAILY_LIMIT = 40;
 
 /**
- * 할 일이 없을 때 얼마나 쉴지 (밀리초).
- * 방금 일을 했으면 바로 다음 것을 보고, 조용하면 점점 뜸하게 본다.
- * 하루 종일 조용해도 요청이 3천 번쯤으로 줄고, 쓰기 시작하면 다시 3초로 돌아온다.
+ * 할 일이 없을 때 쉬는 간격 (밀리초).
+ * 3초마다 보내도 하루 2만 8천 번 × 수백 바이트라 Supabase 쪽 비용은 무시할 수준이고,
+ * Claude 는 일이 있을 때만 돌므로 쉬는 동안 플랜 한도는 전혀 쓰지 않는다.
+ * 그래서 간격을 늘려 기다리게 만들 이유가 없다.
  */
-export function nextWait(idleRounds) {
-  if (idleRounds < 5) return 3000; // 방금까지 일하던 중
-  if (idleRounds < 25) return 10000; // 몇 분째 조용
-  return 30000; // 한참 조용
-}
+export const POLL_MS = 3000;
 
 /**
  * claude 명령에 넘길 인자.
@@ -68,12 +65,29 @@ export function clip(text, max = 4000) {
   return t.length > max ? `${t.slice(0, max)}\n…(생략)` : t;
 }
 
+/** 1234 -> "1.2k" */
+const short = (n) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+
+/**
+ * 이 일에 얼마나 썼는지 한 줄. 보드 카드에서 바로 보이라고 결과 끝에 붙인다
+ * (플랜 한도는 앱의 사용량 카드에서 전체를 보고, 여기서는 건별로 본다).
+ */
+export function usageLine(j) {
+  const u = j?.usage;
+  if (!u) return "";
+  const input = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+  const out = u.output_tokens ?? 0;
+  if (!input && !out) return "";
+  const secs = j.duration_ms ? ` · ${Math.round(j.duration_ms / 1000)}초` : "";
+  return `\n\n— 입력 ${short(input)} · 출력 ${short(out)}${secs}`;
+}
+
 /** claude --output-format json 의 출력에서 보드에 적을 한 덩어리를 꺼낸다 */
 export function resultText(stdout) {
   try {
     const j = JSON.parse(stdout);
     if (j.is_error) return clip(`실패: ${j.result ?? "알 수 없는 오류"}`);
-    return clip(j.result ?? "");
+    return clip(j.result ?? "") + usageLine(j);
   } catch {
     return clip(stdout);
   }

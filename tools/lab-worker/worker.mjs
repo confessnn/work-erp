@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildArgs, DAILY_LIMIT, folderName, nextWait, planFor, resultText, TIMEOUT_MS } from "./plan.mjs";
+import { buildArgs, DAILY_LIMIT, folderName, planFor, POLL_MS, resultText, TIMEOUT_MS } from "./plan.mjs";
 
 const CONFIG = path.join(os.homedir(), ".config", "lab-worker", "config.json");
 const STALE_MIN = 30;
@@ -128,7 +128,7 @@ async function main() {
   }
 
   let warned = false;
-  let idle = 0;
+  let cappedLogged = false;
   let day = new Date().toDateString();
   let doneToday = 0;
   for (;;) {
@@ -137,6 +137,7 @@ async function main() {
     if (today !== day) {
       day = today;
       doneToday = 0;
+      cappedLogged = false;
     }
     try {
       if (!(await loggedIn())) {
@@ -153,20 +154,19 @@ async function main() {
         warned = false;
       }
       if (doneToday >= DAILY_LIMIT) {
-        if (idle === 0) log(`오늘 ${DAILY_LIMIT}건을 처리해서 내일까지 쉽니다.`);
-        idle = 99;
+        if (!cappedLogged) {
+          log(`오늘 ${DAILY_LIMIT}건을 처리해서 내일까지 쉽니다.`);
+          cappedLogged = true;
+        }
       } else if (await tick(cfg)) {
         // 할 일이 있으면 쉬지 않고 이어서 한다
         doneToday++;
-        idle = 0;
         continue;
-      } else {
-        idle++;
       }
     } catch (e) {
       log("오류:", e.message);
     }
-    await new Promise((r) => setTimeout(r, nextWait(idle)));
+    await new Promise((r) => setTimeout(r, POLL_MS));
   }
 }
 
