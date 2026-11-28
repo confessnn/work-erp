@@ -125,7 +125,13 @@ async function labPost(cfg, body) {
     headers: { authorization: `Bearer ${cfg.cronSecret}`, "content-type": "application/json" },
     body: JSON.stringify({ user: cfg.userId, ...body }),
     signal: AbortSignal.timeout(SUMMARY_WAIT_MS),
+    // 리다이렉트를 따라가면 /login 의 HTML 을 받아 놓고 엉뚱한 데서 터진다.
+    // 로그인 화면으로 보내졌다는 건 경로가 공개가 아니라는 뜻이므로, 그대로 오류로 드러낸다.
+    redirect: "manual",
   });
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error(`요약 ${res.status}: 로그인 화면으로 보내졌습니다 (${res.headers.get("location") ?? "주소 없음"})`);
+  }
   const text = await res.text();
   if (!res.ok) throw new Error(`요약 ${res.status}: ${text.slice(0, 200)}`);
   return JSON.parse(text);

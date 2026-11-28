@@ -8,7 +8,15 @@ import { NextResponse, type NextRequest } from "next/server";
 // /api/widget: 홈 화면 위젯이 읽는 일정 피드. 위젯은 로그인할 수 없고 비밀 토큰으로만 연다
 // /join: 가족 초대 링크. 로그인 전에도 열려야 가입·로그인 안내를 보여 줄 수 있다
 // /api/telegram/webhook: 텔레그램 서버가 부른다. 비밀 헤더 확인은 그 경로에서 한다
-const PUBLIC_PATHS = ["/login", "/auth", "/share", "/api/cron", "/api/telegram/webhook", "/api/widget", "/about", "/privacy", "/manifest.webmanifest", "/calendar/manifest.webmanifest", "/join", "/sw.js"];
+// /api/lab: 맥에서 도는 연구소 워커가 부른다. 로그인 세션이 없으므로 여기서 막으면 /login 으로 307 된다.
+//   확인은 그 경로에서 워커 전용 비밀값(DB 함수 cron_lab_check)으로 한다.
+//   화면 /lab 은 공개가 아니다 — 아래 isPublicPath 가 경로 전체나 "/" 로 이어지는 것만 보기 때문이다
+const PUBLIC_PATHS = ["/login", "/auth", "/share", "/api/cron", "/api/lab", "/api/telegram/webhook", "/api/widget", "/about", "/privacy", "/manifest.webmanifest", "/calendar/manifest.webmanifest", "/join", "/sw.js"];
+
+/** 로그인 없이 열리는 경로인지. 경로가 그 자체이거나 그 아래(`/`로 이어지는 것)일 때만 공개다 */
+export function isPublicPath(path: string): boolean {
+  return PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+}
 
 /** 요청마다 Supabase 세션을 갱신하고, 로그인하지 않았으면 /login으로 보낸다. */
 export async function proxy(request: NextRequest) {
@@ -44,7 +52,7 @@ export async function proxy(request: NextRequest) {
 
   const { data } = await supabase.auth.getClaims();
   const loggedIn = Boolean(data?.claims?.sub);
-  const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
+  const isPublic = isPublicPath(path);
 
   if (!loggedIn && !isPublic) {
     const url = request.nextUrl.clone();
