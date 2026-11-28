@@ -31,6 +31,26 @@ function loadConfig() {
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
+/**
+ * Claude CLI 가 로그인돼 있는지. 로그인 전에 일을 집어 가면 전부 '실패'로 적혀 버리므로,
+ * 로그인될 때까지는 일을 건드리지 않고 기다린다.
+ */
+function loggedIn() {
+  return new Promise((resolve) => {
+    const c = spawn("claude", ["auth", "status"], { stdio: ["ignore", "pipe", "ignore"] });
+    let out = "";
+    c.stdout.on("data", (b) => (out += b));
+    c.on("error", () => resolve(false));
+    c.on("close", () => {
+      try {
+        resolve(JSON.parse(out).loggedIn === true);
+      } catch {
+        resolve(false);
+      }
+    });
+  });
+}
+
 /** Supabase RPC 호출 (로그인 세션 없이 CRON_SECRET 으로 잠긴 함수만 부른다) */
 async function rpc(cfg, fn, body) {
   const res = await fetch(`${cfg.supabaseUrl}/rest/v1/rpc/${fn}`, {
@@ -108,8 +128,22 @@ async function main() {
     log("되돌리기 실패:", e.message);
   }
 
+  let warned = false;
   for (;;) {
     try {
+      if (!(await loggedIn())) {
+        if (!warned) {
+          log("Claude CLI 로그인이 안 돼 있습니다. 터미널에서 `claude auth login` 을 한 번 하세요.");
+          log("로그인될 때까지 맡긴 일은 건드리지 않고 기다립니다.");
+          warned = true;
+        }
+        await new Promise((r) => setTimeout(r, 15000));
+        continue;
+      }
+      if (warned) {
+        log("로그인 확인됐습니다. 일을 가져갑니다.");
+        warned = false;
+      }
       // 할 일이 있으면 쉬지 않고 이어서 한다
       if (await tick(cfg)) continue;
     } catch (e) {

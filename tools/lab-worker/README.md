@@ -14,50 +14,42 @@ ERP의 **연구소**(`/lab`)에서 맡긴 일을 가져와 이 맥에서 Claude 
 
 ## 준비
 
-**1. Claude Code CLI 로그인** (한 번만)
+**남은 건 하나뿐이다 — Claude Code CLI 로그인.**
 
 ```bash
 claude auth login
 ```
 
-데스크톱 앱에 로그인돼 있어도 CLI 는 따로 로그인해야 한다. 로그인하면 구독 계정으로 돌아가므로 API 요금이 따로 나가지 않는다.
+데스크톱 앱에 로그인돼 있어도 CLI 는 따로 로그인해야 한다(앱과 자격 증명을 나눠 갖지 않는다).
+로그인하면 구독 계정으로 돌아가 API 요금이 따로 나가지 않는다. 로그인 전에는 워커가 일을
+집어 가지 않고 기다리므로, 먼저 켜 두어도 지시가 실패로 적히지 않는다.
 
-**2. 설정 파일**
+### 이미 돼 있는 것
 
-`CRON_SECRET` 이 들어가므로 저장소가 아니라 홈 폴더에 둔다.
-
-```bash
-mkdir -p ~/.config/lab-worker
-cp tools/lab-worker/config.example.json ~/.config/lab-worker/config.json
-```
-
-채울 것 두 가지:
-
-| 칸 | 어디서 |
+| 무엇 | 어디 |
 | --- | --- |
-| `cronSecret` | Vercel 환경변수 `CRON_SECRET` 과 같은 값 |
-| `userId` | 내 계정 uuid (Supabase → Authentication → Users) |
+| 설정 파일 (권한 600) | `~/.config/lab-worker/config.json` |
+| 작업 폴더 | `~/연구소작업/` (연구원마다 그 아래 자기 폴더) |
+| 워커 전용 비밀값 | 해시만 `private.app_secrets` 의 `name='lab_worker'` |
+| 자동 시작 파일 | `~/Library/LaunchAgents/com.work-erp.lab-worker.plist` (아직 올리지 않음) |
 
-`workDir` 는 연구원이 파일을 만드는 폴더다. 연구원마다 그 아래 자기 폴더(`~/연구소작업/cost/` 등)를 쓴다.
+비밀값은 **`CRON_SECRET` 과 다른 값**이다. 워커 쪽이 새더라도 연구소 함수만 열리고 크론
+함수(캘린더·백업·공고)는 그대로 잠겨 있게 하려고 따로 만들었다. 바꾸려면 새 임의 문자열(32자 이상)을
+만들어 설정 파일에 넣고, 그 sha256 을 `private.app_secrets` 의 `lab_worker` 행에 넣으면 된다.
 
-**3. 돌려 보기**
+### 돌리기
 
 ```bash
 node tools/lab-worker/worker.mjs
 ```
 
-ERP 연구소에서 아무 연구원에게 일을 맡기면 몇 초 안에 `진행 중` → `확인 대기` 로 바뀐다.
-
-**4. 맥을 켜면 저절로 돌게 (선택)**
-
-`com.work-erp.lab-worker.plist` 안의 `<내홈>` 두 곳을 실제 경로로 바꾼 뒤:
+맥을 켜면 저절로 돌게 하려면:
 
 ```bash
-cp tools/lab-worker/com.work-erp.lab-worker.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.work-erp.lab-worker.plist
 ```
 
-기록은 `~/Library/Logs/lab-worker.log`.
+멈추려면 `launchctl unload` 로 같은 파일을 내린다. 기록은 `~/Library/Logs/lab-worker.log`.
 
 ## 연구원마다 다른 설정
 

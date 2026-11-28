@@ -1,7 +1,7 @@
 {
   "supabaseUrl": "https://ggisybrvmxjkolzwmlux.supabase.co",
   "publishableKey": "sb_publishable_H932l7X1fYWtv-xAyjADpg_2pXj6Cq1",
-  "cronSecret": "여기에 Vercel 환경변수 CRON_SECRET 값",
-  "userId": "여기에 내 계정 uuid",
+  "cronSecret": "워커 전용 비밀값 (CRON_SECRET 아님). 32자 이상 임의 문자열을 만들어 쓰고, 그 sha256 을 private.app_secrets 의 name='lab_worker' 에 넣는다",
+  "userId": "내 계정 uuid (Supabase → Authentication → Users)",
   "workDir": "~/연구소작업"
 }
