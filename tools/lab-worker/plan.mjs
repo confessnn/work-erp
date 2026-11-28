@@ -112,7 +112,42 @@ export function folderName(researcher) {
  * 맡긴 일(보드)이 먼저다. 요약은 할 일이 없을 때만 하고, 하루 상한을 둔다
  * (요약 1건마다 서버의 ANTHROPIC_API_KEY 로 실제 돈이 나가므로).
  */
-export const SUMMARY_DAILY_LIMIT = 20;
+export const SUMMARY_DAILY_LIMIT = 10;
+
+/**
+ * 공고 요약 전용 설정.
+ *
+ * 공고문은 '누가 올렸는지 모르는 문서'다. 서버가 API 로 요약할 때는 도구가 하나도 없는
+ * 호출이었으니, 맥으로 옮기면서 가장 좁게 둔다 — 읽기만. 쓰기·웹·스킬은 주지 않는다
+ * (요약 결과는 stdout 으로 받으므로 파일을 쓸 필요가 없다).
+ */
+export const SUMMARY_PLAN = { model: "opus", effort: "medium", tools: ["Read"] };
+
+/**
+ * 요약 지시문. 지시문 본문(instructions)은 서버가 `summarize.ts` 에서 준 글을 그대로 쓴다 —
+ * 요약 형식이 아침 메일과 공고 화면에 들어가므로 한 곳에서만 고쳐야 한다.
+ */
+export function summaryPrompt(notice) {
+  const names = [...(notice.texts ?? []).map((t) => t.name), ...(notice.pdfs ?? []).map((f) => f.name)];
+  return [
+    notice.instructions,
+    "",
+    `공고명: ${notice.title}`,
+    "",
+    "이 폴더에 있는 파일을 모두 읽고 위 형식으로 설명해 주세요.",
+    `읽을 파일: ${names.join(", ")}`,
+    "PDF 가 10쪽을 넘으면 pages 를 나눠서 끝까지 읽어 주세요.",
+  ].join("\n");
+}
+
+/** 첨부 이름이 그대로 파일 이름이 되므로, 경로를 벗어나는 글자를 지운다 */
+export function safeFileName(name, fallback = "문서") {
+  const base = String(name ?? "")
+    .replace(/[/\\]/g, "_")
+    .replace(/^\.+/, "")
+    .trim();
+  return base.slice(0, 120) || fallback;
+}
 
 /** 설정에 appUrl 이 없을 때 쓸 ERP 주소 (공개 주소라 저장소에 둬도 된다) */
 export const APP_URL_DEFAULT = "https://work-erp-one.vercel.app";
@@ -120,4 +155,19 @@ export const APP_URL_DEFAULT = "https://work-erp-one.vercel.app";
 /** 요약 라우트 주소. 뒤에 붙은 / 는 떼고 만든다 */
 export function summaryEndpoint(appUrl) {
   return `${(appUrl || APP_URL_DEFAULT).replace(/\/+$/, "")}/api/lab/summarize`;
+}
+
+/**
+ * 요약처럼 '본문만' 필요한 경우. 사용량 줄을 붙이지 않는다
+ * (요약은 DB 에 그대로 저장돼 아침 메일·공고 화면에 나가므로 군더더기가 끼면 안 된다).
+ */
+export function plainResult(stdout) {
+  try {
+    const j = JSON.parse(stdout);
+    if (j.is_error) return { text: null, error: clip(String(j.result ?? "알 수 없는 오류"), 300) };
+    const text = String(j.result ?? "").trim();
+    return text ? { text, error: null } : { text: null, error: "요약 결과가 비어 있습니다" };
+  } catch {
+    return { text: null, error: "claude 출력을 읽지 못했습니다" };
+  }
 }
