@@ -63,7 +63,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `baby` | `/baby` (메뉴 '임채현') | 사진·동영상을 대표 계정 드라이브에 날짜별 저장. 아내도 보기·올리기(`drive.ts`의 `babyDriveContext`), 원본·재생 `app/(app)/baby/photo/[id]/route.ts`(동영상은 Range 4MB씩) |
 | `baby-care` | `/baby/care`·`/baby/pattern`·`/baby/growth`·`/baby/todos` (메뉴 '임채현') | 육아 기록 `baby_logs`(가족 공용, 요약 `care.ts`), 패턴 `pattern.ts`, 성장 백분위 `growth.ts`+`who-lms.ts`(WHO 표, 서버 전용), 아기 할 일 `baby_todos`(부부 공용 한 건, 할 일 위젯·아침 알림에도 표시). 링크 모음 `baby_links`(서버가 사이트를 읽고 `link-reader.ts`에서 Claude로 짧은 설명, 내부망 주소 차단). 아기 정보는 `set_family_baby_info`로 아내도 수정 |
 | `documents` · `google-drive` | `/documents` | 서류함·강의별 제출 서류(드라이브). 큰 파일은 브라우저→드라이브 직접(`drive-browser.ts`) |
-| `bid-inbox` · `bid-viewer` | `/bids*`, `/join/bids/[token]` | 나라장터·국방전자조달 등 공고 수신(`fetch-all.ts`), 판정, 입찰가 계산기, 아침 메일(`morning.ts`), 동생용 열람 |
+| `bid-inbox` · `bid-viewer` | `/bids*`, `/join/bids/[token]` | 나라장터·국방전자조달 등 공고 수신(`fetch-all.ts`), 판정(`judge.ts`), 입찰가 계산기, 아침 메일(`morning.ts`), 동생용 열람. 공고 요약(`summarize.ts`)은 1건에 230초까지 걸려 Vercel 300초 제한에 걸리므로, 아침 크론은 하루 한 건만 하고 나머지는 `/api/lab/summarize`(한 번에 한 건, 워커 전용 비밀값 `cron_lab_check` 로 확인)를 맥 워커가 되불러 푼다 |
 | `records` | `/records*` | 수업 기록·관계도 그래프 |
 | `brain` | `/brain`·`/brain/note/[id]`·`/brain/graph` (메뉴 '세컨드브레인') | 옵시디언 볼트(구글 드라이브 폴더) 보기. '동기화'로 .md 를 `brain_notes`에 사본 저장(`sync.ts`의 `planSync`), PARA·[[링크]]·태그 `vault.ts`, 본문 그리기 `markdown.ts`(HTML 안 만듦), 그래프 `graph.ts`. ERP 기록 → 볼트 'ERP 기록' 폴더 .md(`export.ts`, 금액 없음), 대시보드 할 일 → 'ERP 기록/할 일/<날짜>.md'(`todo-notes.ts`, 할 일 Server Action 끝에 `scheduleTodoExport()`). 빠른 메모 → 볼트 Inbox .md(`memo.ts`, `service.ts`의 `saveMemo`, 못 쓰는 볼트면 'ERP 기록/메모'). ERP가 만든 메모(`isErpMemo`)만 고치기·지우기(휴지통). 텔레그램 '메모 …' → `telegram-memo.ts`(DB 함수 `tg_brain_target`·`tg_save_brain_note`). 매일 한국 05:00 크론 `brain-export`가 기록·할 일을 자동 내보내기(`cron-export.ts`, DB 함수 `cron_brain_*`). 서버 작업은 `service.ts`. 읽기는 `drive.readonly`, 쓰기는 ERP가 만든 폴더만(`drive.file`) |
 | `todos` | 대시보드 위젯 | 할 일 (`title`, `due_date`, `note`) |
@@ -72,7 +72,7 @@ supabase/migrations/    DB 변경 이력 (SQL)
 | `api-credits` | `/integrations` (연동) | Claude·OpenAI API 잔액 추정 |
 | `settings` | `/settings` (상단 ⚙) | 설정(관리자): 상단 메뉴 순서·숨김 `user_settings.nav_prefs`, 적용 `components/nav-items.ts`의 `applyNavPrefs` |
 | `backup` | `/settings` 백업 · 크론 `backup` | 기록을 JSON 하나로 모아 대표 드라이브 `work-erp/백업/<YYYY-MM>/`에 주차별로 쌓음(지우지 않음, 이름·주차 규칙 `backup.ts`). 담을 표·뺄 칸(토큰·`ics_url`·`thumb`·`share_url`)은 DB `private.backup_dump` 한 곳. 새 표를 만들면 거기에 추가. 결과는 `backup_status`, 실패·8일 밀림은 아침 7시 브리핑(`bid-digest`) 맨 위에 경고(`backupProblem`) |
-| `lab` | `/lab` (메뉴 '연구소') · 대시보드 위젯 | 연구원(= Claude Code 세션·예약 작업)에게 일을 맡기고 보드로 본다. 명단·자리 좌표 `roster.ts`, 보드 상태 `tasks.ts`, 그림 `public/lab/`. ERP 는 지시를 받아 두기만 하고 실제 작업은 맥에서 도는 워커(`tools/lab-worker/`)가 가져간다 — 워커는 `CRON_SECRET` 이 아니라 전용 비밀값(`private.app_secrets` 의 `lab_worker`)으로 잠근 DB 함수 `cron_lab_*` 로만 닿는다 |
+| `lab` | `/lab` (메뉴 '연구소') · 대시보드 위젯 | 연구원(= Claude Code 세션·예약 작업)에게 일을 맡기고 보드로 본다. 명단·자리 좌표 `roster.ts`, 보드 상태 `tasks.ts`, 그림 `public/lab/`. ERP 는 지시를 받아 두기만 하고 실제 작업은 맥에서 도는 워커(`tools/lab-worker/`)가 가져간다 — 워커는 `CRON_SECRET` 이 아니라 전용 비밀값(`private.app_secrets` 의 `lab_worker`)으로 잠근 DB 함수 `cron_lab_*` 로만 닿는다. 연구원은 `Skill` 도구가 열려 있어 계정에 붙은 스킬을 그대로 쓴다. 맡긴 일이 없을 때는 워커가 `POST /api/lab/summarize` 를 되불러 공고 요약 적체를 푼다(아래 `bid-inbox` 참고) |
 | `plan-usage` | (숨김) | 플랜 사용량 위젯. 사용자가 나중에 다시 켜기로 해서 일부러 남겨 둠 — 지우지 않는다 |
 
 - 크론(Vercel, UTC): `calendar-sync`·`bid-sync` 21:00, `bid-digest`·`api-credits` 22:00, `content` 23:30, `brain-export` 20:00(한국 05:00), `backup` 일요일 18:00(한국 월요일 03:00). 5분 간격 알림만 Supabase pg_cron.

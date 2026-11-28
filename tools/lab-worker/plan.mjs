@@ -4,16 +4,19 @@
  * 연구원별 설정.
  * - model/effort: 처음에 세운 모델 분리 설계 그대로. 돈이 걸린 판단과 코드는 opus,
  *   수집·분류는 haiku, 양식 있는 문서 생산은 sonnet.
+ * - Skill: 사용자가 만들어 둔 스킬(원가 투찰가·견적서·회의록 등)을 연구원이 그대로 쓰게 한다.
+ *   스킬은 계정에 붙어 있어 연구원 폴더에서도 보인다(실측). 도구를 늘려도 입력 토큰은
+ *   거의 안 늘어난다 — 도구 1개와 6개 차이가 9토큰이었다.
  * - tools: 그 연구원이 쓸 수 있는 도구만 켠다. Bash 는 아무도 안 준다 (웹에서 들어온
  *   문장을 맥에서 실행하는 구조라, 처음에는 좁게 두고 필요해지면 넓힌다).
  */
 export const PLAN = {
-  chief: { model: "opus", effort: "high", tools: ["Read", "Glob", "Grep", "Write", "Edit"] },
-  scout: { model: "haiku", effort: "medium", tools: ["Read", "Glob", "Grep", "Write", "WebSearch", "WebFetch"] },
-  cost: { model: "opus", effort: "high", tools: ["Read", "Glob", "Grep", "Write", "Edit", "WebSearch", "WebFetch"] },
-  dev: { model: "opus", effort: "high", tools: ["Read", "Glob", "Grep", "Write", "Edit"] },
-  content: { model: "sonnet", effort: "medium", tools: ["Read", "Glob", "Grep", "Write", "Edit"] },
-  spare: { model: "sonnet", effort: "medium", tools: ["Read", "Glob", "Grep", "Write", "Edit"] },
+  chief: { model: "opus", effort: "high", tools: ["Read", "Glob", "Grep", "Write", "Edit", "Skill"] },
+  scout: { model: "haiku", effort: "medium", tools: ["Read", "Glob", "Grep", "Write", "WebSearch", "WebFetch", "Skill"] },
+  cost: { model: "opus", effort: "high", tools: ["Read", "Glob", "Grep", "Write", "Edit", "WebSearch", "WebFetch", "Skill"] },
+  dev: { model: "opus", effort: "high", tools: ["Read", "Glob", "Grep", "Write", "Edit", "Skill"] },
+  content: { model: "sonnet", effort: "medium", tools: ["Read", "Glob", "Grep", "Write", "Edit", "Skill"] },
+  spare: { model: "sonnet", effort: "medium", tools: ["Read", "Glob", "Grep", "Write", "Edit", "Skill"] },
 };
 
 /** 모르는 연구원이 와도 멈추지 않게 가장 좁은 설정으로 */
@@ -96,4 +99,25 @@ export function resultText(stdout) {
 /** 연구원 폴더 이름 (경로를 벗어나는 글자는 막는다) */
 export function folderName(researcher) {
   return /^[a-z0-9_-]{1,40}$/.test(researcher) ? researcher : "unknown";
+}
+
+/**
+ * 요약 적체 처리.
+ *
+ * 원가 공고 중 사람이 봐야 하는 것(판정 check·possible)은 많지 않은데(주 10건쯤),
+ * 요약이 거의 비어 있다. 아침 크론이 Vercel 300초 제한 때문에 하루 한 건밖에
+ * 못 하기 때문이다. 그래서 워커가 ERP 의 /api/lab/summarize 를 남은 수가 0이 될
+ * 때까지 되부른다 — 라우트는 한 번에 한 건만 하고, 시간 제한이 없는 워커가 반복을 맡는다.
+ *
+ * 맡긴 일(보드)이 먼저다. 요약은 할 일이 없을 때만 하고, 하루 상한을 둔다
+ * (요약 1건마다 서버의 ANTHROPIC_API_KEY 로 실제 돈이 나가므로).
+ */
+export const SUMMARY_DAILY_LIMIT = 20;
+
+/** 설정에 appUrl 이 없을 때 쓸 ERP 주소 (공개 주소라 저장소에 둬도 된다) */
+export const APP_URL_DEFAULT = "https://work-erp-one.vercel.app";
+
+/** 요약 라우트 주소. 뒤에 붙은 / 는 떼고 만든다 */
+export function summaryEndpoint(appUrl) {
+  return `${(appUrl || APP_URL_DEFAULT).replace(/\/+$/, "")}/api/lab/summarize`;
 }

@@ -7,10 +7,29 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildArgs, DAILY_LIMIT, folderName, planFor, POLL_MS, resultText, TIMEOUT_MS } from "./plan.mjs";
+import {
+  buildArgs,
+  DAILY_LIMIT,
+  folderName,
+  planFor,
+  POLL_MS,
+  resultText,
+  summaryEndpoint,
+  SUMMARY_DAILY_LIMIT,
+  TIMEOUT_MS,
+} from "./plan.mjs";
 
 const CONFIG = path.join(os.homedir(), ".config", "lab-worker", "config.json");
 const STALE_MIN = 30;
+
+/** 요약 한 건을 기다려 주는 시간. Vercel 이 300초에서 끊으니 그보다 조금 먼저 포기한다 */
+const SUMMARY_WAIT_MS = 290_000;
+
+/** 요약할 게 없을 때 다시 물어보기까지 */
+const SUMMARY_EMPTY_PAUSE_MS = 6 * 60 * 60 * 1000;
+
+/** 요약이 실패했을 때 다시 물어보기까지 */
+const SUMMARY_ERROR_PAUSE_MS = 10 * 60 * 1000;
 
 function loadConfig() {
   if (!fs.existsSync(CONFIG)) {
@@ -90,6 +109,23 @@ function runClaude(task, dir) {
   });
 }
 
+/**
+ * ERP 에 "요약 안 된 공고 한 건만 요약해 달라"고 부탁한다.
+ * 요약 자체는 서버가 한다 (나라장터 첨부 내려받기·한글 파일 읽기·ANTHROPIC_API_KEY 가 다 서버에 있다).
+ * 워커가 하는 일은 '시간 제한 없이 될 때까지 다시 부르기' 뿐이다.
+ */
+async function summarizeOne(cfg) {
+  const res = await fetch(summaryEndpoint(cfg.appUrl), {
+    method: "POST",
+    headers: { authorization: `Bearer ${cfg.cronSecret}`, "content-type": "application/json" },
+    body: JSON.stringify({ user: cfg.userId }),
+    signal: AbortSignal.timeout(SUMMARY_WAIT_MS),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`요약 ${res.status}: ${text.slice(0, 200)}`);
+  return JSON.parse(text);
+}
+
 async function tick(cfg) {
   const rows = await rpc(cfg, "cron_lab_next", { p_secret: cfg.cronSecret, p_user: cfg.userId });
   const task = Array.isArray(rows) ? rows[0] : rows;
@@ -131,12 +167,15 @@ async function main() {
   let cappedLogged = false;
   let day = new Date().toDateString();
   let doneToday = 0;
+  let summariesToday = 0;
+  let summaryPauseUntil = 0;
   for (;;) {
     // 날이 바뀌면 하루 상한을 다시 센다
     const today = new Date().toDateString();
     if (today !== day) {
       day = today;
       doneToday = 0;
+      summariesToday = 0;
       cappedLogged = false;
     }
     try {
@@ -162,6 +201,24 @@ async function main() {
         // 할 일이 있으면 쉬지 않고 이어서 한다
         doneToday++;
         continue;
+      } else if (Date.now() >= summaryPauseUntil && summariesToday < SUMMARY_DAILY_LIMIT) {
+        // 맡긴 일이 하나도 없을 때만 공고 요약 적체를 푼다 (보드가 늘 먼저다)
+        try {
+          const r = await summarizeOne(cfg);
+          if (r.done === 0 && !r.failed) {
+            summaryPauseUntil = Date.now() + SUMMARY_EMPTY_PAUSE_MS;
+          } else {
+            summariesToday++;
+            const name = String(r.title ?? "").slice(0, 40);
+            if (r.failed) log(`요약 실패 — ${name}: ${String(r.failed).slice(0, 80)}`);
+            else log(`요약함 — ${name} (남은 ${r.remaining}건)`);
+            if (r.remaining > 0) continue;
+            summaryPauseUntil = Date.now() + SUMMARY_EMPTY_PAUSE_MS;
+          }
+        } catch (e) {
+          log("요약 오류:", e.message);
+          summaryPauseUntil = Date.now() + SUMMARY_ERROR_PAUSE_MS;
+        }
       }
     } catch (e) {
       log("오류:", e.message);

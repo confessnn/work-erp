@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { buildArgs, clip, DAILY_LIMIT, folderName, PLAN, planFor, POLL_MS, resultText, usageLine } from "./plan.mjs";
+import {
+  APP_URL_DEFAULT,
+  buildArgs,
+  clip,
+  DAILY_LIMIT,
+  folderName,
+  PLAN,
+  planFor,
+  POLL_MS,
+  resultText,
+  summaryEndpoint,
+  SUMMARY_DAILY_LIMIT,
+  usageLine,
+} from "./plan.mjs";
 
 describe("연구소 워커 설정", () => {
   it("연구원마다 모델이 설계대로 갈린다", () => {
@@ -18,6 +31,12 @@ describe("연구소 워커 설정", () => {
       .map(([id]) => id)
       .sort();
     expect(web).toEqual(["cost", "scout"]);
+  });
+
+  it("연구원은 모두 사용자가 만들어 둔 스킬을 쓸 수 있다", () => {
+    for (const [id, p] of Object.entries(PLAN)) {
+      expect(p.tools, id).toContain("Skill");
+    }
   });
 
   it("모르는 연구원은 가장 좁은 설정으로 돈다", () => {
@@ -84,5 +103,21 @@ describe("건별로 쓴 양", () => {
     const out = resultText(JSON.stringify({ result: "다 했어요", usage: { input_tokens: 2000, output_tokens: 100 } }));
     expect(out.startsWith("다 했어요")).toBe(true);
     expect(out).toContain("입력 2.0k");
+  });
+});
+
+describe("공고 요약 적체 풀기", () => {
+  it("설정에 주소가 없으면 기본 주소를 쓴다", () => {
+    expect(summaryEndpoint(undefined)).toBe(`${APP_URL_DEFAULT}/api/lab/summarize`);
+    expect(summaryEndpoint("")).toBe(`${APP_URL_DEFAULT}/api/lab/summarize`);
+  });
+
+  it("주소 뒤에 붙은 / 는 떼고 만든다", () => {
+    expect(summaryEndpoint("https://example.com///")).toBe("https://example.com/api/lab/summarize");
+  });
+
+  it("하루 상한이 있다 (요약 1건마다 서버 API 로 돈이 나가므로)", () => {
+    expect(SUMMARY_DAILY_LIMIT).toBeGreaterThan(0);
+    expect(SUMMARY_DAILY_LIMIT).toBeLessThanOrEqual(50);
   });
 });
