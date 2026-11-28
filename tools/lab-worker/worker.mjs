@@ -244,6 +244,7 @@ async function main() {
   let doneToday = 0;
   let summariesToday = 0;
   let summaryPauseUntil = 0;
+  let summaryQuietLogged = false;
   for (;;) {
     // 날이 바뀌면 하루 상한을 다시 센다
     const today = new Date().toDateString();
@@ -281,8 +282,14 @@ async function main() {
         try {
           const r = await summarizeOne(cfg);
           if (!r.handled) {
+            // 한 번은 말해 둔다. 아무 말도 없으면 '대상이 없다'와 '안 돌고 있다'를 구분할 수 없다
+            if (!summaryQuietLogged) {
+              log(`요약할 원가 공고가 없습니다. ${SUMMARY_EMPTY_PAUSE_MS / 3600000}시간 뒤에 다시 봅니다.`);
+              summaryQuietLogged = true;
+            }
             summaryPauseUntil = Date.now() + SUMMARY_EMPTY_PAUSE_MS;
           } else {
+            summaryQuietLogged = false;
             summariesToday++;
             if (r.remaining > 0) continue;
             summaryPauseUntil = Date.now() + SUMMARY_EMPTY_PAUSE_MS;
