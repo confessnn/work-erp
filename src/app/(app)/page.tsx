@@ -15,12 +15,12 @@ import { listMyReminderKeys } from "@/features/reminders/queries";
 import { ApiCreditsSection } from "@/features/api-credits/components/api-credits-section";
 import { summarize, summarizeByMonth } from "@/features/dashboard/summary";
 import { LectureCalendar } from "@/features/lectures/components/lecture-calendar";
-import { LectureTable } from "@/features/lectures/components/lecture-table";
-import { listLectures, listUpcoming } from "@/features/lectures/queries";
+import { listLectures } from "@/features/lectures/queries";
 import { flushPendingGoogleDeletes } from "@/features/google-calendar/push";
-import { RecentRecords } from "@/features/records/components/recent-records";
 import { getBabyInfo } from "@/features/baby/queries";
 import { listBabyTodosForWidget } from "@/features/baby-care/queries";
+import { BrainGraphView } from "@/features/brain/components/brain-graph-view";
+import { listNoteMeta } from "@/features/brain/queries";
 import { LabWidget } from "@/features/lab/components/lab-widget";
 import { listLabTasksForWidget } from "@/features/lab/queries";
 import { TodoWidget } from "@/features/todos/components/todo-widget";
@@ -34,8 +34,9 @@ import { hoursLabel, nowInSeoul, todayInSeoul, won } from "@/lib/format";
 import { holidaysOfMonth } from "@/lib/holidays";
 
 /**
- * 대시보드. 휴대폰에서 빨리 뜨도록 할 일·이번 달 달력만 먼저 그리고,
- * 최근 기록·다가오는 일정·API 크레딧·강의료 통계는 준비되는 대로 따로 채운다 (Suspense).
+ * 대시보드. 위에서부터 할 일·관계도 / 연구소 / 이번 달 일정 / 강의료 차례.
+ * 휴대폰에서 빨리 뜨도록 할 일·연구소·달력만 먼저 그리고, 관계도·강의료 통계·API 잔액은
+ * 준비되는 대로 따로 채운다 (Suspense).
  */
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   // 초대받은 가족의 첫 화면은 가족 달력
@@ -83,21 +84,22 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </Link>
       </div>
 
-      <TodoWidget
-        key={today}
-        initial={todos}
-        today={today}
-        shared={sharedTodos}
-        canShare={canShare}
-        baby={babyTodos}
-        babyName={babyInfo.name ?? "아기"}
-      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TodoWidget
+          key={today}
+          initial={todos}
+          today={today}
+          shared={sharedTodos}
+          canShare={canShare}
+          baby={babyTodos}
+          babyName={babyInfo.name ?? "아기"}
+        />
+        <Suspense fallback={<Placeholder className="h-64" />}>
+          <BrainGraph />
+        </Suspense>
+      </div>
 
       <LabWidget tasks={labTasks} />
-
-      <Suspense fallback={<Placeholder className="h-32" />}>
-        <RecentRecords />
-      </Suspense>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -120,6 +122,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         />
       </section>
 
+      <Suspense fallback={<Placeholder className="h-48" />}>
+        <FeeStats period={period} />
+      </Suspense>
+
       <div className="space-y-2">
         <div className="grid md:grid-cols-2">
           <Suspense fallback={<Placeholder className="h-40" />}>
@@ -132,17 +138,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           늦게 반영됩니다. 실제 잔액과 다르면 다시 입력하세요.
         </p>
       </div>
-
-      <section className="space-y-3">
-        <h2 className="section-title">다가오는 일정</h2>
-        <Suspense fallback={<Placeholder className="h-32" />}>
-          <Upcoming />
-        </Suspense>
-      </section>
-
-      <Suspense fallback={<Placeholder className="h-48" />}>
-        <FeeStats period={period} />
-      </Suspense>
     </>
   );
 }
@@ -157,8 +152,32 @@ function Placeholder({ className = "" }: { className?: string }) {
   );
 }
 
-async function Upcoming() {
-  return <LectureTable lectures={await listUpcoming()} />;
+/**
+ * 세컨드브레인 관계도: [[링크]]로 이어진 노트를 점과 선으로.
+ * 첫 화면의 곁가지라, 노트를 못 읽어도 대시보드 전체가 죽지 않게 조용히 넘어간다.
+ */
+async function BrainGraph() {
+  let notes;
+  try {
+    notes = await listNoteMeta();
+  } catch {
+    notes = null;
+  }
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="section-title">세컨드브레인 관계도</h2>
+        <Link href="/brain/graph" className="text-sm text-muted hover:underline">
+          크게 보기 ›
+        </Link>
+      </div>
+      {notes ? (
+        <BrainGraphView notes={notes} />
+      ) : (
+        <p className="card text-center text-sm text-muted">노트를 읽지 못했어요. 세컨드브레인에서 확인해 주세요.</p>
+      )}
+    </section>
+  );
 }
 
 /** 강의료 통계 (고른 기간) */
