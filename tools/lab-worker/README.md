@@ -64,6 +64,17 @@ launchctl load ~/Library/LaunchAgents/com.work-erp.lab-worker.plist
 | 콘텐츠 content | sonnet | medium | 읽기·쓰기·고치기 |
 | 예비 spare | sonnet | medium | 읽기·쓰기·고치기 |
 
+## 비용
+
+추가 과금은 꺼져 있다(`extraUsage: disabled`). 한도를 넘으면 요금이 붙는 게 아니라 멈춘다.
+쓰는 것은 Max 플랜의 한도이고, 쓰는 때는 **일을 맡겼을 때뿐**이다.
+
+- **쉬는 동안 Claude 는 0** — Supabase 에 "할 일 있어?" 묻는 작은 요청만 보낸다.
+  조용하면 간격이 3초 → 10초 → 30초로 늘어나, 하루 종일 조용하면 3천 번 남짓이다.
+- **한 건에 15분 제한**, **하루 40건 제한**(`plan.mjs` 의 `DAILY_LIMIT`). 한꺼번에 한도를
+  쓰지 않게 막아 둔 것이고, 숫자는 거기서 바꾼다.
+- 수집·분류는 haiku, 양식 있는 문서는 sonnet 으로 내려 둔 것도 같은 이유다.
+
 ## 안전하게 둔 것
 
 - **Bash 는 아무에게도 주지 않는다.** 웹에서 들어온 문장을 맥에서 돌리는 구조라 처음에는 좁게 둔다. 필요해지면 `plan.mjs` 에서 연구원 하나씩 넓힌다.

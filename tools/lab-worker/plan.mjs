@@ -24,6 +24,20 @@ export const planFor = (researcher) => PLAN[researcher] ?? FALLBACK;
 /** 한 번에 쓸 수 있는 시간 (밀리초). 넘으면 끊고 '시간이 넘었다'를 결과로 적는다 */
 export const TIMEOUT_MS = 15 * 60 * 1000;
 
+/** 하루에 처리할 수 있는 일 수. 넘으면 다음 날까지 쉰다 (플랜 한도를 한꺼번에 쓰지 않게) */
+export const DAILY_LIMIT = 40;
+
+/**
+ * 할 일이 없을 때 얼마나 쉴지 (밀리초).
+ * 방금 일을 했으면 바로 다음 것을 보고, 조용하면 점점 뜸하게 본다.
+ * 하루 종일 조용해도 요청이 3천 번쯤으로 줄고, 쓰기 시작하면 다시 3초로 돌아온다.
+ */
+export function nextWait(idleRounds) {
+  if (idleRounds < 5) return 3000; // 방금까지 일하던 중
+  if (idleRounds < 25) return 10000; // 몇 분째 조용
+  return 30000; // 한참 조용
+}
+
 /**
  * claude 명령에 넘길 인자.
  * -p 로 비대화형, 결과는 json 으로 받아 result 만 꺼낸다.

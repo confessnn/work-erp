@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildArgs, clip, folderName, PLAN, planFor, resultText } from "./plan.mjs";
+import { buildArgs, clip, DAILY_LIMIT, folderName, nextWait, PLAN, planFor, resultText } from "./plan.mjs";
 
 describe("연구소 워커 설정", () => {
   it("연구원마다 모델이 설계대로 갈린다", () => {
@@ -53,5 +53,26 @@ describe("연구소 워커 설정", () => {
   it("폴더 이름에 경로 글자가 끼지 못한다", () => {
     expect(folderName("cost")).toBe("cost");
     expect(folderName("../../etc")).toBe("unknown");
+  });
+});
+
+describe("쉴 때 아끼기", () => {
+  it("방금 일했으면 바로 다시 보고, 조용하면 뜸해진다", () => {
+    expect(nextWait(0)).toBe(3000);
+    expect(nextWait(10)).toBe(10000);
+    expect(nextWait(100)).toBe(30000);
+  });
+
+  it("쉬는 간격은 뒤로 갈수록 길어지기만 한다", () => {
+    let prev = 0;
+    for (const n of [0, 4, 5, 24, 25, 99]) {
+      expect(nextWait(n)).toBeGreaterThanOrEqual(prev);
+      prev = nextWait(n);
+    }
+  });
+
+  it("하루 상한이 있다", () => {
+    expect(DAILY_LIMIT).toBeGreaterThan(0);
+    expect(DAILY_LIMIT).toBeLessThanOrEqual(100);
   });
 });
